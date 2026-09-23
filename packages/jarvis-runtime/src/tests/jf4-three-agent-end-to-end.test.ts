@@ -164,7 +164,18 @@ function process_(
   },
 ) {
   const definition = syntheticPromptDefinition(prompt.family, prompt.scope);
-  const gatewayInvoker = scriptedGatewayInvoker(structuredReply({ citations: [] }));
+  const citationKnowledgeId =
+    holder.state.partyType === 'CLIENT'
+      ? 'kb.private.riya'
+      : holder.state.partyType === 'VENDOR'
+        ? 'kb.private.anisha'
+        : undefined;
+  const gatewayInvoker = scriptedGatewayInvoker(
+    structuredReply({
+      citations:
+        citationKnowledgeId === undefined ? [] : [{ knowledgeId: citationKnowledgeId, version: 1 }],
+    }),
+  );
   const coreTransport = scriptedCoreTransport('ACCEPTED');
   const config: JarvisRuntimeConfig = syntheticRuntimeConfig({
     authoritativeState: mutableAuthoritativeState(() => holder.state),

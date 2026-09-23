@@ -53,6 +53,14 @@ export interface KnowledgeEmbeddingPort {
   embed(texts: readonly string[]): Promise<readonly (readonly number[])[]>;
 }
 
+/** Content-addressed reuse only. A cache never decides whether content may be embedded. */
+export interface KnowledgeEmbeddingCachePort {
+  read(
+    modelRef: string,
+    contentDigests: readonly string[],
+  ): Promise<ReadonlyMap<string, readonly number[]>>;
+}
+
 export interface EmbeddedKnowledgeChunk {
   readonly chunk: GovernedKnowledgeChunk;
   readonly embedding: readonly number[];
@@ -100,6 +108,8 @@ export interface FusedKnowledgeCandidate {
 }
 
 export interface KnowledgeRerankerPort {
+  /** Where candidate content is processed. LOCAL_ONLY content may never reach HOSTED reranking. */
+  readonly executionClass: EmbeddingExecutionClass;
   rerank(
     queryText: string,
     candidates: readonly FusedKnowledgeCandidate[],
@@ -126,6 +136,7 @@ export const HYBRID_RETRIEVAL_REASONS = [
   'hybrid-embedding-failed',
   'hybrid-candidate-store-failed',
   'hybrid-reranker-failed',
+  'hybrid-reranker-data-class-denied',
   'hybrid-no-candidates',
   'hybrid-governance-refused',
   'hybrid-content-limit',

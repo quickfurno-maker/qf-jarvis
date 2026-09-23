@@ -172,6 +172,9 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  IF TG_OP = 'DELETE' AND current_setting('qf_jarvis_knowledge.prune', true) = 'on' THEN
+    RETURN OLD;
+  END IF;
   RAISE EXCEPTION 'knowledge index immutable row';
 END
 $$;
@@ -432,3 +435,88 @@ $$;
 
 REVOKE ALL ON ALL TABLES IN SCHEMA qf_jarvis_knowledge FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA qf_jarvis_knowledge FROM PUBLIC;
+
+
+CREATE OR REPLACE FUNCTION qf_jarvis_knowledge.prune_inactive_release(target_revision text)
+RETURNS TABLE (
+  pruned_revision text,
+  release_documents_deleted integer,
+  chunks_deleted integer,
+  documents_deleted integer
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = qf_jarvis_knowledge, extensions, public, pg_catalog
+AS $$
+DECLARE
+  release_state_value text;
+  target_document_keys text[];
+  refs_deleted integer := 0;
+  chunks_removed integer := 0;
+  docs_removed integer := 0;
+BEGIN
+  IF NOT pg_has_role(session_user, 'qf_jarvis_knowledge_maintainer', 'MEMBER') THEN
+    RAISE EXCEPTION 'knowledge maintenance role required';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM qf_jarvis_knowledge.active_release
+    WHERE singleton = true AND revision = target_revision
+  ) THEN
+    RAISE EXCEPTION 'active knowledge release cannot be pruned';
+  END IF;
+
+  SELECT release_state INTO release_state_value
+  FROM qf_jarvis_knowledge.knowledge_release
+  WHERE revision = target_revision
+  FOR UPDATE;
+
+  IF release_state_value IS NULL OR release_state_value <> 'SEALED' THEN
+    RAISE EXCEPTION 'only inactive SEALED releases may be pruned';
+  END IF;
+
+  SELECT coalesce(array_agg(knowledge_id || '@' || version::text ORDER BY knowledge_id, version), ARRAY[]::text[])
+  INTO target_document_keys
+  FROM qf_jarvis_knowledge.release_document
+  WHERE revision = target_revision;
+
+  PERFORM set_config('qf_jarvis_knowledge.prune', 'on', true);
+
+  DELETE FROM qf_jarvis_knowledge.release_document
+  WHERE revision = target_revision;
+  GET DIAGNOSTICS refs_deleted = ROW_COUNT;
+
+  DELETE FROM qf_jarvis_knowledge.knowledge_release
+  WHERE revision = target_revision;
+
+  DELETE FROM qf_jarvis_knowledge.chunk c
+  WHERE (c.knowledge_id || '@' || c.version::text) = ANY(target_document_keys)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM qf_jarvis_knowledge.release_document rd
+      WHERE rd.knowledge_id = c.knowledge_id AND rd.version = c.version
+    );
+  GET DIAGNOSTICS chunks_removed = ROW_COUNT;
+
+  DELETE FROM qf_jarvis_knowledge.document_version d
+  WHERE (d.knowledge_id || '@' || d.version::text) = ANY(target_document_keys)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM qf_jarvis_knowledge.release_document rd
+      WHERE rd.knowledge_id = d.knowledge_id AND rd.version = d.version
+    );
+  GET DIAGNOSTICS docs_removed = ROW_COUNT;
+
+  RETURN QUERY SELECT target_revision, refs_deleted, chunks_removed, docs_removed;
+END
+$$;
+
+REVOKE ALL ON FUNCTION qf_jarvis_knowledge.prune_inactive_release(text) FROM PUBLIC;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'qf_jarvis_knowledge_maintainer') THEN
+    GRANT EXECUTE ON FUNCTION qf_jarvis_knowledge.prune_inactive_release(text)
+      TO qf_jarvis_knowledge_maintainer;
+  END IF;
+END
+$$;

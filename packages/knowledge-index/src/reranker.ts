@@ -18,6 +18,7 @@ function overlap(query: ReadonlySet<string>, text: string): number {
 
 export function createDeterministicKnowledgeReranker(): KnowledgeRerankerPort {
   return Object.freeze({
+    executionClass: 'LOCAL' as const,
     rerank(
       queryText: string,
       candidates: readonly FusedKnowledgeCandidate[],

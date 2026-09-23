@@ -164,7 +164,11 @@ function sharedGroundedReplyProfile(
       return content;
     },
     projectStructuredResult(value: unknown) {
-      return DEFAULT_STRUCTURED_OUTPUT_PROFILE.projectStructuredResult(value);
+      const projected = DEFAULT_STRUCTURED_OUTPUT_PROFILE.projectStructuredResult(value);
+      if (projected?.reply.kind === 'REPLY' && projected.reply.citations.length === 0) {
+        return undefined;
+      }
+      return projected;
     },
   });
 }

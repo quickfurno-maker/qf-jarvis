@@ -15,6 +15,7 @@ import {
   buildStreamingKnowledgeRelease,
   createPostgresHybridCandidateStore,
   createPostgresKnowledgeIndexWriter,
+  pruneInactiveKnowledgeReleases,
 } from '../index.js';
 
 const DATABASE_URL = process.env['DATABASE_URL'];
@@ -108,8 +109,11 @@ beforeEach(async () => {
       "IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='qf_jarvis_runtime') THEN " +
       'CREATE ROLE qf_jarvis_runtime LOGIN; END IF; ' +
       "IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='qf_jarvis_knowledge_ingestor') THEN " +
-      'CREATE ROLE qf_jarvis_knowledge_ingestor LOGIN; END IF; END $$;',
+      'CREATE ROLE qf_jarvis_knowledge_ingestor LOGIN; END IF; ' +
+      "IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='qf_jarvis_knowledge_maintainer') THEN " +
+      'CREATE ROLE qf_jarvis_knowledge_maintainer NOLOGIN; END IF; END $$;',
   );
+  await pool.query('GRANT qf_jarvis_knowledge_maintainer TO CURRENT_USER');
   const migrated = await applyKnowledgeIndexMigration(pool);
   expect(migrated.version).toBe(1);
 }, 60_000);
@@ -182,19 +186,105 @@ describe('postgres hybrid knowledge index', () => {
     expect(newNowStale).toEqual({ ok: false, reason: 'hybrid-candidate-store-failed' });
   }, 60_000);
 
-  it('keeps subject-linked records outside semantic candidate search', async () => {
+  it('refuses subject-linked records before semantic embedding or persistence', () => {
     const subject = source('doc.subject', 1, 'Installation scheduling PRIVATE SUBJECT marker.');
-    const batch = prepareKnowledgeBatch([{ ...subject, subjectRef: 'subject.private.1' }]);
-    const embedded = await embedPreparedKnowledgeBatch(batch, embedding);
-    await createPostgresKnowledgeIndexWriter(pool).stageAndPublish(
-      'knowledge.release.subject',
-      embedded,
+    expect(() => prepareKnowledgeBatch([{ ...subject, subjectRef: 'subject.private.1' }])).toThrow(
+      'subject-linked-semantic-indexing-forbidden',
     );
-
-    const result = await retrieval('knowledge.release.subject', 'installation scheduling');
-    expect(result).toEqual({ ok: false, reason: 'hybrid-no-candidates' });
-  }, 60_000);
+  });
 });
+
+it('reuses persisted vectors across release batches and later releases', async () => {
+  const writer = createPostgresKnowledgeIndexWriter(pool);
+  const base = createDeterministicTestEmbeddingPort('LOCAL');
+  let embeddedTexts = 0;
+  const counting = Object.freeze({
+    ...base,
+    async embed(texts: readonly string[]) {
+      embeddedTexts += texts.length;
+      return base.embed(texts);
+    },
+  });
+
+  await buildStreamingKnowledgeRelease({
+    revision: 'knowledge.release.cache.one',
+    sources: [source('doc.cache.one', 1, 'Stable installation cache marker.')],
+    embedding: counting,
+    writer,
+    activateAfterSeal: true,
+  });
+  expect(embeddedTexts).toBeGreaterThan(0);
+  embeddedTexts = 0;
+
+  await buildStreamingKnowledgeRelease({
+    revision: 'knowledge.release.cache.two',
+    sources: [
+      source('doc.cache.two', 1, 'Stable installation cache marker.'),
+      source('doc.cache.three', 1, 'New installation cache marker.'),
+    ],
+    embedding: counting,
+    writer,
+    activateAfterSeal: false,
+  });
+
+  expect(embeddedTexts).toBe(1);
+}, 60_000);
+
+it('prunes only old inactive releases through the maintainer-only boundary', async () => {
+  await publish('knowledge.release.prune.1', [
+    source('doc.prune.1', 1, 'Installation prune marker one.'),
+  ]);
+  await publish('knowledge.release.prune.2', [
+    source('doc.prune.2', 1, 'Installation prune marker two.'),
+  ]);
+  await publish('knowledge.release.prune.3', [
+    source('doc.prune.3', 1, 'Installation prune marker three.'),
+  ]);
+  await publish('knowledge.release.prune.4', [
+    source('doc.prune.4', 1, 'Installation prune marker four.'),
+  ]);
+
+  // A different release may be mid-stage while maintenance retires old SEALED releases. Its
+  // unreferenced chunks are not garbage: publication intentionally stages before adding release refs.
+  const stagingWriter = createPostgresKnowledgeIndexWriter(pool);
+  await stagingWriter.beginRelease('knowledge.release.prune.staging', embedding.modelRef);
+  await stagingWriter.stage(
+    await embedPreparedKnowledgeBatch(
+      prepareKnowledgeBatch([
+        source('doc.prune.staging', 1, 'Installation staged release must survive maintenance.'),
+      ]),
+      embedding,
+    ),
+  );
+
+  const pruned = await pruneInactiveKnowledgeReleases(pool, 1);
+  expect(pruned.prunedRevisions).toEqual([
+    'knowledge.release.prune.2',
+    'knowledge.release.prune.1',
+  ]);
+  expect(pruned.releaseDocumentsDeleted).toBe(2);
+  expect(pruned.chunksDeleted).toBeGreaterThanOrEqual(2);
+  expect(pruned.documentsDeleted).toBe(2);
+
+  const remaining = await pool.query<{ revision: string }>(
+    'SELECT revision FROM qf_jarvis_knowledge.knowledge_release ORDER BY revision',
+  );
+  expect(remaining.rows.map((row) => row.revision)).toEqual([
+    'knowledge.release.prune.3',
+    'knowledge.release.prune.4',
+    'knowledge.release.prune.staging',
+  ]);
+  const stagedSurvived = await pool.query<{ count: string }>(
+    "SELECT count(*)::text AS count FROM qf_jarvis_knowledge.chunk WHERE knowledge_id='doc.prune.staging'",
+  );
+  expect(stagedSurvived.rows[0]?.count).toBe('1');
+
+  await expect(
+    pool.query(
+      "SELECT * FROM qf_jarvis_knowledge.prune_inactive_release('knowledge.release.prune.4')",
+    ),
+  ).rejects.toThrow();
+}, 60_000);
 
 it('streams large releases in bounded stages and does not activate until explicitly requested', async () => {
   await publish('knowledge.release.base', [

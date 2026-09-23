@@ -69,6 +69,7 @@
     // package's OWN public parser rather than casting a hand-written object into its contract. One
     // edge, used only by the certification composition.
     { "path": "../../packages/core-service-availability-read/tsconfig.build.json" },
+    { "path": "../../packages/worker-observation-contract/tsconfig.build.json" },
     // JF-7 production WhatsApp worker consumes the exact same durable spool implementation the
     // QuickFurno ingress writes. Only the explicit durable-turn-spool subpath is importable.
     { "path": "../quickfurno-gateway/tsconfig.build.json" }

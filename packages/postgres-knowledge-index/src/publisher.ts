@@ -3,7 +3,7 @@ import { DEFAULT_CHUNKING_PROFILE, prepareKnowledgeBatch } from '@qf-jarvis/know
 import type { EmbeddingBatchOptions, KnowledgeEmbeddingPort } from '@qf-jarvis/knowledge-index';
 import {
   DEFAULT_EMBEDDING_BATCH_OPTIONS,
-  embedPreparedKnowledgeBatch,
+  embedPreparedKnowledgeBatchWithCache,
 } from '@qf-jarvis/knowledge-index';
 
 import type { KnowledgeDocumentRef, PostgresKnowledgeIndexWriter } from './writer.js';
@@ -120,7 +120,12 @@ export async function buildStreamingKnowledgeRelease(
     pendingChars = 0;
 
     const prepared = prepareKnowledgeBatch(current, chunking);
-    const embedded = await embedPreparedKnowledgeBatch(prepared, options.embedding, embeddingBatch);
+    const embedded = await embedPreparedKnowledgeBatchWithCache(
+      prepared,
+      options.embedding,
+      options.writer.embeddingCache,
+      embeddingBatch,
+    );
     const staged = await options.writer.stage(embedded);
     await options.writer.addReleaseDocuments(options.revision, refsFor(current));
     stageBatches += 1;

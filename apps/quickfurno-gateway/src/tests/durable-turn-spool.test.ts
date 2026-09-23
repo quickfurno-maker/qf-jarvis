@@ -132,3 +132,23 @@ describe('durable WhatsApp turn spool', () => {
     expect((await spool.claimNext())?.inboundMessageId).toBe(turn().inboundMessageId);
   });
 });
+
+it('reports only aggregate spool counts and oldest pending age', async () => {
+  const root = await spoolRoot();
+  const spool = await createFileDurableTurnSpool(root);
+  await spool.accept(turn(), '2026-09-18T12:00:01.000Z');
+  const pending = join(root, 'pending', '33333333-3333-4333-8333-333333333333.json');
+  const old = new Date('2026-09-18T11:59:00.000Z');
+  await utimes(pending, old, old);
+
+  const snapshot = await spool.snapshot(Date.parse('2026-09-18T12:00:00.000Z'));
+  expect(snapshot).toEqual({
+    pending: 1,
+    processing: 0,
+    completed: 0,
+    failed: 0,
+    oldestPendingAgeMs: 60_000,
+  });
+  expect(JSON.stringify(snapshot)).not.toContain(turn().conversationId);
+  expect(JSON.stringify(snapshot)).not.toContain(turn().inboundMessageId);
+});

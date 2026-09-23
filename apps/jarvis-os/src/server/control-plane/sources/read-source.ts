@@ -184,23 +184,7 @@ export const SECTIONS_CLOSED_TO_ADAPTERS: readonly ControlPlaneSectionName[] = O
 ]);
 
 /**
- * The sources this build has ADOPTED. Deliberately empty.
- *
- * Nothing in merged `main` can be read from inside Jarvis OS without crossing a boundary this
- * phase is not permitted to cross:
- *
- * - QuickFurno Core has no adopted read protocol. Inventing an endpoint, a token or a Supabase
- *   query would fabricate connectivity, and Core owns business truth regardless.
- * - QuickFurno Core Automation has no adopted read protocol, and the test-only execution bridge belongs to QFJ-P09.02.
- * - The durable runtimes (`postgres-conversation-state`, `postgres-approval-queue`) are reachable
- *   only with managed-database credentials. Granting Jarvis OS a connection string to make panels
- *   look populated would hand a read-only surface the reach it was designed not to have.
- * - The processing runtimes (`agent-runtime`, `jarvis-runtime`) transform envelopes; they hold no
- *   observable state. `createConversationOperationsSnapshot` is a SHAPE over records supplied to
- *   it, not a source of them.
- *
- * So this release adopts none, and the control plane keeps saying exactly what it said before. A
- * source becomes adoptable when its canonical QFJ owner exposes a governed read protocol; adopting
- * it then means adding a reviewed descriptor here, and the request boundary already awaits it.
+ * Concrete source adoption lives in `adopted.ts`, not in this contract module. Keeping the
+ * registry separate prevents an observation protocol from becoming part of the source interface
+ * itself and lets an unconfigured build remain completely I/O-free.
  */
-export const ADOPTED_READ_SOURCES: readonly ReadSourceDescriptor[] = Object.freeze([]);

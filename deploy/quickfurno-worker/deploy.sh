@@ -8,10 +8,14 @@ REPO_DIR="${REPO_DIR:-/srv/qf-jarvis/repo}"
 
 CONFIG='/srv/qf-jarvis/secrets/qf-jarvis-whatsapp-worker.json'
 GROQ='/srv/qf-jarvis/secrets/groq-production.key'
+SIGNING='/srv/qf-jarvis/secrets/quickfurno-signing.key'
+EMBEDDING='/srv/qf-jarvis/secrets/embedding-production.key'
+RIYA_DECISION='/srv/qf-jarvis/secrets/riya-persistence-owner-decision.json'
 SEAL='/srv/qf-jarvis/seals/jf5c-production-seal.json'
 CA='/srv/qf-jarvis/secrets/postgres-ca.pem'
 SPOOL='/srv/qf-jarvis/state/quickfurno-gateway-turns'
 CONTROL='/srv/qf-jarvis/state/quickfurno-worker-control'
+OBSERVABILITY='/srv/qf-jarvis/state/observability'
 DISABLE="$CONTROL/DISABLE_MODEL"
 
 die() { echo "FATAL: $1" >&2; exit 1; }
@@ -22,15 +26,16 @@ die() { echo "FATAL: $1" >&2; exit 1; }
 # Deployment is intentionally impossible in an armed state. Activation is a different operator step.
 [[ -f "$DISABLE" ]] || die "$DISABLE is missing. Run disable.sh before deploy."
 
-for file in "$CONFIG" "$GROQ" "$SEAL" "$CA"; do
+for file in "$CONFIG" "$GROQ" "$SIGNING" "$EMBEDDING" "$RIYA_DECISION" "$SEAL" "$CA"; do
   [[ -f "$file" && ! -L "$file" ]] || die "$file must be a regular non-symlink file."
 done
 [[ -d "$SPOOL" && ! -L "$SPOOL" ]] || die "$SPOOL must be the gateway's real spool directory."
 [[ -d "$CONTROL" && ! -L "$CONTROL" ]] || die "$CONTROL must be a real directory."
+[[ -d "$OBSERVABILITY" && ! -L "$OBSERVABILITY" ]] || die "$OBSERVABILITY must be a real directory."
 
 # Secret-bearing config/key are readable only by the worker uid. The seal and CA are also installed
 # privately to keep one simple mount/ownership policy.
-for file in "$CONFIG" "$GROQ" "$SEAL" "$CA"; do
+for file in "$CONFIG" "$GROQ" "$SIGNING" "$EMBEDDING" "$RIYA_DECISION" "$SEAL" "$CA"; do
   mode="$(stat -c '%a' "$file")"
   owner="$(stat -c '%u:%g' "$file")"
   [[ "$mode" == "400" || "$mode" == "600" ]] ||
@@ -47,6 +52,13 @@ spool_mode="$(stat -c '%a' "$SPOOL")"
 group_digit="${spool_mode: -2:1}"
 [[ "$group_digit" == "7" || "$group_digit" == "6" ]] ||
   die "$SPOOL mode $spool_mode does not grant the shared group read/write."
+
+obs_group="$(stat -c '%g' "$OBSERVABILITY")"
+[[ "$obs_group" == "10002" ]] || die "$OBSERVABILITY gid is $obs_group; expected 10002."
+obs_mode="$(stat -c '%a' "$OBSERVABILITY")"
+obs_group_digit="${obs_mode: -2:1}"
+[[ "$obs_group_digit" == "7" || "$obs_group_digit" == "6" ]] ||
+  die "$OBSERVABILITY mode $obs_mode does not grant the shared group read/write."
 
 BUILD_CTX="$(mktemp -d)"
 trap 'rm -rf "$BUILD_CTX"' EXIT
@@ -91,6 +103,8 @@ prove "published host ports" ""   "$(docker inspect qf-jarvis-whatsapp-worker --
 prove "traefik disabled" "false"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{ index .Config.Labels "traefik.enable" }}')"
 prove "gateway spool source" "$SPOOL"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/lib/qfj-turns"}}{{.Source}}{{end}}{{end}}')"
 prove "spool writable" "true"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/lib/qfj-turns"}}{{.RW}}{{end}}{{end}}')"
+prove "observation source" "$OBSERVABILITY"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/run/qfj-observability"}}{{.Source}}{{end}}{{end}}')"
+prove "observation writable" "true"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/run/qfj-observability"}}{{.RW}}{{end}}{{end}}')"
 prove "kill switch visible" "true"   "$(docker exec qf-jarvis-whatsapp-worker node -e "const fs=require('node:fs');console.log(fs.existsSync('/var/run/qfj-control/DISABLE_MODEL'))")"
 
 [[ "$fail" -eq 0 ]] || die "disabled deployment proof failed."

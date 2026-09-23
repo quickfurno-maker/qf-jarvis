@@ -183,6 +183,15 @@ export function createHybridKnowledgeRetriever(options: HybridKnowledgeRetriever
         ]);
       }
 
+      if (request.dataClass === 'LOCAL_ONLY' && reranker.executionClass !== 'LOCAL') {
+        return failed(request, 'hybrid-reranker-data-class-denied', [
+          lexical.length,
+          vector.length,
+          fused.length,
+          0,
+        ]);
+      }
+
       let reranked: readonly FusedKnowledgeCandidate[];
       try {
         reranked = await reranker.rerank(request.queryText, preAuthorized);

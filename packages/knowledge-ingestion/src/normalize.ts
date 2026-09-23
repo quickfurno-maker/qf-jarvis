@@ -146,6 +146,12 @@ function validateEnvelope(input: KnowledgeSourceDocumentInput): KnowledgeGoverna
 export function normalizeSourceDocument(
   input: KnowledgeSourceDocumentInput,
 ): NormalizedKnowledgeDocument {
+  // Semantic indexing is business-knowledge-only. Subject-linked records may be valid governed
+  // knowledge elsewhere, but this pipeline must refuse them BEFORE normalization, chunking,
+  // embedding, or persistence so personal data cannot leak merely because retrieval later filters it.
+  if (input.subjectRef !== undefined) {
+    throw new KnowledgeIngestionError('subject-linked-semantic-indexing-forbidden');
+  }
   const governance = validateEnvelope(input);
   const content =
     input.payload.kind === 'TEXT'

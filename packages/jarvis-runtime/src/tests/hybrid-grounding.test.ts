@@ -4,10 +4,6 @@ import { ANISHA_VENDOR_JOURNEY_PROMPT_V1 } from '@qf-jarvis/anisha-prompts';
 import type { HybridKnowledgeHit, HybridKnowledgeSearchRequest } from '@qf-jarvis/knowledge-index';
 import { scriptedGatewayInvoker, structuredReply } from '@qf-jarvis/model-reply-adapter/testing';
 import { createPromptRegistry } from '@qf-jarvis/prompt-registry';
-import {
-  RIYA_CLIENT_SALES_GROUNDED_EVOLUTION_PROMPT_V1,
-  RIYA_CLIENT_SALES_GROUNDED_REPLY_PROMPT_V1,
-} from '@qf-jarvis/riya-prompts';
 import { describe, expect, it } from 'vitest';
 
 import { createJarvisRuntime } from '../composition/create-jarvis-runtime.js';
@@ -197,23 +193,6 @@ function promptBindings(clientPrompt: ReturnType<typeof syntheticPromptDefinitio
   } as const;
 }
 
-function groundedRiyaBindings() {
-  return {
-    riyaGroundedConversationEvolutionPromptBinding: {
-      promptFamily: RIYA_CLIENT_SALES_GROUNDED_EVOLUTION_PROMPT_V1.promptId,
-      promptVersion: RIYA_CLIENT_SALES_GROUNDED_EVOLUTION_PROMPT_V1.promptVersion,
-      evaluationRef: 'eval.hybrid.riya.grounded.evolution',
-      evaluationPromptDigest: RIYA_CLIENT_SALES_GROUNDED_EVOLUTION_PROMPT_V1.contentDigest,
-    },
-    riyaGroundedReplyPromptBinding: {
-      promptFamily: RIYA_CLIENT_SALES_GROUNDED_REPLY_PROMPT_V1.promptId,
-      promptVersion: RIYA_CLIENT_SALES_GROUNDED_REPLY_PROMPT_V1.promptVersion,
-      evaluationRef: 'eval.hybrid.riya.grounded.reply',
-      evaluationPromptDigest: RIYA_CLIENT_SALES_GROUNDED_REPLY_PROMPT_V1.contentDigest,
-    },
-  } as const;
-}
-
 describe('hybrid grounding reaches the generic model request without leaking governance metadata', () => {
   for (const actor of ['RIYA', 'ANISHA', 'AAROHI'] as const) {
     it(actor + ' sends message + minimized groundedKnowledge in one model call', async () => {
@@ -244,8 +223,6 @@ describe('hybrid grounding reaches the generic model request without leaking gov
           clientPrompt,
           ANISHA_VENDOR_JOURNEY_PROMPT_V1,
           AAROHI_ACQUISITION_PROMPT_V1,
-          RIYA_CLIENT_SALES_GROUNDED_EVOLUTION_PROMPT_V1,
-          RIYA_CLIENT_SALES_GROUNDED_REPLY_PROMPT_V1,
         ]),
         gatewayInvoker,
       });
@@ -266,7 +243,6 @@ describe('hybrid grounding reaches the generic model request without leaking gov
       const config: JarvisRuntimeConfig = {
         ...rest,
         promptBindings: promptBindings(clientPrompt),
-        ...(actor === 'RIYA' ? groundedRiyaBindings() : {}),
         agentHybridKnowledge: {
           knowledgeRevision: KNOWLEDGE_REVISION,
           retrieval: hybrid.port,
@@ -307,4 +283,57 @@ describe('hybrid grounding reaches the generic model request without leaking gov
       expect(JSON.stringify(modelRequests[0]?.metadata)).not.toContain(CONTENT);
     });
   }
+});
+
+describe('grounded citation requirement', () => {
+  it('refuses a grounded reply that cites none of the knowledge supplied to the model', async () => {
+    const actor = 'ANISHA' as const;
+    const hybrid = recordingHybridPort();
+    const clientPrompt = syntheticPromptDefinition();
+    const inner = scriptedGatewayInvoker(
+      structuredReply({ replyBody: 'Unsupported grounded reply.', citations: [] }),
+    );
+    const state = clearControlState({
+      tenantId: TENANT,
+      conversationId: CONVERSATION,
+      partyType: PARTY[actor],
+    });
+    const base = syntheticRuntimeConfig({
+      authoritativeState: mutableAuthoritativeState(() => state),
+      promptRegistry: createPromptRegistry([
+        clientPrompt,
+        ANISHA_VENDOR_JOURNEY_PROMPT_V1,
+        AAROHI_ACQUISITION_PROMPT_V1,
+      ]),
+      gatewayInvoker: inner,
+    });
+    const {
+      promptFamily: _family,
+      promptVersion: _version,
+      evaluationRef: _evaluationRef,
+      evaluationPromptDigest: _evaluationDigest,
+      ...rest
+    } = base;
+    const config: JarvisRuntimeConfig = {
+      ...rest,
+      promptBindings: promptBindings(clientPrompt),
+      agentHybridKnowledge: {
+        knowledgeRevision: KNOWLEDGE_REVISION,
+        retrieval: hybrid.port,
+        agents: {
+          ANISHA: {
+            topicFilters: ['installation'],
+            candidatePool: 64,
+            maxResults: 8,
+            maxContentChars: 4096,
+          },
+        },
+      },
+    };
+
+    const result = await createJarvisRuntime(config).processInbound(envelope(actor));
+    expect(result.outcome).toBe('REFUSED');
+    expect(result.modelDrafted).toBe(false);
+    expect(hybrid.seen).toHaveLength(1);
+  });
 });

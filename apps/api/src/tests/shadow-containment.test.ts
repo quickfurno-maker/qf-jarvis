@@ -322,6 +322,7 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/quickfurno-whatsapp/quickfurno-http.ts',
     'src/quickfurno-whatsapp/specialist-runtime.ts',
     'src/quickfurno-whatsapp/turn-processor.ts',
+    'src/quickfurno-whatsapp/production-observation.ts',
     // JF-7 production worker: these named files are the reviewed private WhatsApp serving boundary.
     // Naming WhatsApp buys no provider-send authority: the worker emits only a signed proposal and
     // QuickFurno re-authorizes it at /whatsapp-reply.
@@ -333,6 +334,7 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/quickfurno-whatsapp/production-worker-config.ts',
     'src/quickfurno-whatsapp/production-worker.ts',
     'src/tests/quickfurno-whatsapp-authority-state-port.test.ts',
+    'src/tests/quickfurno-whatsapp-production-observation.test.ts',
     'src/tests/quickfurno-whatsapp-deployment-containment.test.ts',
     'src/tests/quickfurno-whatsapp-production-seal-binding.test.ts',
     'src/tests/quickfurno-whatsapp-production-worker.test.ts',
@@ -763,6 +765,8 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // service with no ingress: no HTTP server, route, public endpoint, browser reachability,
       // database, migration, provider or live send, and nothing imports it.
       'riya-web-conversation-service',
+      // ADR-0159: pure content-free wire contract for read-only worker observations.
+      'worker-observation-contract',
     ]);
     // JOS-01A (docs/architecture/jarvis-os.md): the Jarvis OS operator control plane. Still an
     // EXACT set match -- this records authorised additions, it does not relax the assertion.

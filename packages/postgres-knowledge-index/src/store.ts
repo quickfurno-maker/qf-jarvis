@@ -204,6 +204,32 @@ function commonParameters(
   ];
 }
 
+export async function assertPostgresKnowledgeReleaseReady(
+  pool: Pool,
+  revision: string,
+  embeddingModelRef: string,
+): Promise<void> {
+  if (!REVISION.test(revision) || revision === '*' || revision.toLocaleLowerCase() === 'latest') {
+    throw new PostgresKnowledgeIndexError('knowledge-revision-mismatch');
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    await assertRevisionAndModel(client, revision, embeddingModelRef);
+    await client.query('COMMIT');
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // Preserve the bounded original error.
+    }
+    if (error instanceof PostgresKnowledgeIndexError) throw error;
+    throw new PostgresKnowledgeIndexError('candidate-store-failed');
+  } finally {
+    client.release();
+  }
+}
+
 async function assertRevisionAndModel(
   client: PoolClient,
   revision: string,

@@ -11,6 +11,7 @@ export type {
   HybridKnowledgeSearchRequest,
   HybridKnowledgeSearchRequestInput,
   KnowledgeEmbeddingPort,
+  KnowledgeEmbeddingCachePort,
   EmbeddedKnowledgeChunk,
   EmbeddedKnowledgeBatch,
   RankedChunkCandidate,
@@ -29,6 +30,7 @@ export { createHybridKnowledgeSearchRequest } from './request.js';
 export {
   DEFAULT_EMBEDDING_BATCH_OPTIONS,
   embedPreparedKnowledgeBatch,
+  embedPreparedKnowledgeBatchWithCache,
   embedHybridQuery,
 } from './embedding.js';
 export type { EmbeddingBatchOptions } from './embedding.js';

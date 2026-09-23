@@ -24,6 +24,12 @@ import {
   JARVIS_V1_PRODUCTION_MAX_INPUT_TOKENS,
   JARVIS_V1_PRODUCTION_PROMPT_BY_AGENT,
 } from '@qf-jarvis/jarvis-v1-production-profile';
+import { createHybridKnowledgeRetriever } from '@qf-jarvis/knowledge-index';
+import { createOpenAICompatibleEmbeddingPort } from '@qf-jarvis/openai-compatible-embedding-adapter';
+import {
+  assertPostgresKnowledgeReleaseReady,
+  createPostgresHybridCandidateStore,
+} from '@qf-jarvis/postgres-knowledge-index';
 import { createPromptRegistry } from '@qf-jarvis/prompt-registry';
 import { createFileDurableTurnSpool } from '@qf-jarvis/quickfurno-gateway/durable-turn-spool';
 import { createJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
@@ -50,6 +56,7 @@ import {
 } from './turn-processor.js';
 import { bindJf5cSealForProduction } from './production-seal-binding.js';
 import type { QuickFurnoWhatsAppProductionWorkerConfig } from './production-worker-config.js';
+import { createQuickFurnoWorkerObservationWriter } from './production-observation.js';
 
 export interface QuickFurnoWhatsAppProductionWorker {
   readonly revision: string;
@@ -151,8 +158,55 @@ export async function createQuickFurnoWhatsAppProductionWorker(
   }
 
   const pool: DatabasePool = createDatabasePool(config.database);
+  const observation = createQuickFurnoWorkerObservationWriter({
+    filePath: config.operationalSnapshotFile,
+    revision: config.revision,
+    runtimeId: config.runtimeId,
+    knowledgeRevision: config.knowledge.revision,
+    embeddingModelRef: config.knowledge.embedding.modelRef,
+  });
+  const baseGatewayInvoker = createLiveModelGatewayInvoker(production.composition.gateway);
+  const observedGatewayInvoker = Object.freeze({
+    async invoke(request: Parameters<typeof baseGatewayInvoker.invoke>[0]) {
+      const result = await baseGatewayInvoker.invoke(request);
+      if (result.ok) observation.recordModelLatency(result.response.latencyMs, systemInstant());
+      return result;
+    },
+  });
+
   let closed = false;
   try {
+    const embedding = createOpenAICompatibleEmbeddingPort({
+      endpoint: config.knowledge.embedding.endpoint,
+      modelRef: config.knowledge.embedding.modelRef,
+      executionClass: config.knowledge.embedding.executionClass,
+      ...(config.knowledge.embedding.bearerToken === undefined
+        ? {}
+        : { bearerToken: config.knowledge.embedding.bearerToken }),
+      timeoutMs: config.knowledge.embedding.timeoutMs,
+      maxBatchItems: config.knowledge.embedding.maxBatchItems,
+      maxInputChars: config.knowledge.embedding.maxInputChars,
+    });
+    await assertPostgresKnowledgeReleaseReady(
+      pool,
+      config.knowledge.revision,
+      config.knowledge.embedding.modelRef,
+    );
+    const knowledgeStore = createPostgresHybridCandidateStore(pool, config.knowledge.revision);
+    const baseHybridKnowledge = createHybridKnowledgeRetriever({
+      embedding,
+      store: knowledgeStore,
+    });
+    const hybridKnowledge = Object.freeze({
+      knowledgeRevision: baseHybridKnowledge.knowledgeRevision,
+      async retrieve(request: Parameters<typeof baseHybridKnowledge.retrieve>[0]) {
+        const started = Date.now();
+        const result = await baseHybridKnowledge.retrieve(request);
+        observation.recordKnowledgeRetrieval(result.reason, Date.now() - started, systemInstant());
+        return result;
+      },
+    });
+
     const promptRegistry = createPromptRegistry([
       ...RIYA_PRODUCTION_PROMPTS,
       JARVIS_V1_PRODUCTION_PROMPT_BY_AGENT.ANISHA,
@@ -182,7 +236,12 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       riyaConversationEvolutionPromptBinding: binding.riyaConversationEvolutionPromptBinding,
       promptRegistry,
       capabilityProfileRef: binding.capabilityProfileRef,
-      gatewayInvoker: createLiveModelGatewayInvoker(production.composition.gateway),
+      gatewayInvoker: observedGatewayInvoker,
+      agentHybridKnowledge: {
+        knowledgeRevision: config.knowledge.revision,
+        retrieval: hybridKnowledge,
+        agents: config.knowledge.agents,
+      },
       requireEvaluationRef: true,
       provenanceRefs: {
         runtimeRef: 'qfj.jarvis-runtime.quickfurno-authority-v2',
@@ -224,20 +283,58 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       replyWriter: createQuickFurnoWhatsAppReplyWriter(httpConfig),
     });
 
+    let lastObservationMs = 0;
+    const writeObservation = async (
+      state: 'HEALTHY' | 'DEGRADED' | 'DISABLED',
+      force: boolean,
+    ): Promise<void> => {
+      const nowMs = Date.now();
+      if (!force && nowMs - lastObservationMs < 10_000) return;
+      const spoolState = await spool.snapshot(nowMs);
+      await observation.write(state, spoolState, new Date(nowMs).toISOString());
+      lastObservationMs = nowMs;
+    };
+    const writeObservationBestEffort = async (
+      state: 'HEALTHY' | 'DEGRADED' | 'DISABLED',
+      force: boolean,
+    ): Promise<void> => {
+      try {
+        await writeObservation(state, force);
+      } catch {
+        // Observability is deliberately powerless: after startup it cannot block customer turns.
+        // Jarvis OS will reject the stale/missing file and mark only its owned sections unavailable.
+      }
+    };
+    const processObservedOne = async (): Promise<QuickFurnoWhatsAppProcessorOutcome> => {
+      const outcome = await processor.processOne();
+      observation.recordOutcome(outcome);
+      const state = killSwitch.active()
+        ? 'DISABLED'
+        : outcome === 'failed-indeterminate'
+          ? 'DEGRADED'
+          : 'HEALTHY';
+      await writeObservationBestEffort(state, outcome !== 'idle');
+      return outcome;
+    };
+
+    // Required once: a bad path/permission is a deployment defect and refuses startup before claims.
+    await writeObservation(killSwitch.active() ? 'DISABLED' : 'HEALTHY', true);
+
     return Object.freeze({
       revision: config.revision,
       providerMode: 'GROQ_ONLY' as const,
       verifiedApprovalCount: 3 as const,
-      processOne: () => processor.processOne(),
+      processOne: processObservedOne,
       async run(signal: AbortSignal): Promise<void> {
         while (!signal.aborted) {
           // Do not claim a new turn while disabled. The gateway repeats this check at invocation time,
           // so a switch created after claim but before model execution still blocks the call.
           if (killSwitch.active()) {
+            await writeObservationBestEffort('DISABLED', false);
             await abortableDelay(config.idlePollMs, signal);
             continue;
           }
-          const outcome = await processor.processOne();
+          const outcome = await processObservedOne();
           if (outcome === 'idle' || outcome === 'released-pre-agent') {
             await abortableDelay(config.idlePollMs, signal);
           }

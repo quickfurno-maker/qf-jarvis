@@ -20,6 +20,14 @@ export type TurnAcceptResult =
   | { readonly outcome: 'replay'; readonly record: DurableTurnRecordV1 }
   | { readonly outcome: 'conflict' };
 
+export interface DurableTurnSpoolStats {
+  readonly pending: number;
+  readonly processing: number;
+  readonly completed: number;
+  readonly failed: number;
+  readonly oldestPendingAgeMs: number | null;
+}
+
 export interface DurableTurnSpool {
   accept(turn: WhatsAppTurnV1, acceptedAt: string): Promise<TurnAcceptResult>;
   claimNext(): Promise<DurableTurnRecordV1 | null>;
@@ -27,6 +35,7 @@ export interface DurableTurnSpool {
   fail(inboundMessageId: string): Promise<void>;
   release(inboundMessageId: string): Promise<void>;
   recoverStale(maxAgeMs: number, nowMs: number): Promise<number>;
+  snapshot(nowMs: number): Promise<DurableTurnSpoolStats>;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -234,6 +243,33 @@ export async function createFileDurableTurnSpool(root: string): Promise<DurableT
         }
       }
       return recovered;
+    },
+    async snapshot(nowMs: number): Promise<DurableTurnSpoolStats> {
+      if (!Number.isFinite(nowMs) || nowMs < 0) throw new Error('turn_spool_invalid_snapshot_time');
+      const pendingFiles = (await readdir(pending)).filter((name) => name.endsWith('.json'));
+      const [processingFiles, completedFiles, failedFiles] = await Promise.all([
+        readdir(processing),
+        readdir(completed),
+        readdir(failed),
+      ]);
+      let oldestPendingAgeMs: number | null = null;
+      for (const name of pendingFiles) {
+        try {
+          const info = await stat(join(pending, name));
+          const age = Math.max(0, Math.floor(nowMs - info.mtimeMs));
+          oldestPendingAgeMs =
+            oldestPendingAgeMs === null ? age : Math.max(oldestPendingAgeMs, age);
+        } catch (error: unknown) {
+          if ((error as { code?: unknown }).code !== 'ENOENT') throw error;
+        }
+      }
+      return Object.freeze({
+        pending: pendingFiles.length,
+        processing: processingFiles.filter((name) => name.endsWith('.json')).length,
+        completed: completedFiles.filter((name) => name.endsWith('.json')).length,
+        failed: failedFiles.filter((name) => name.endsWith('.json')).length,
+        oldestPendingAgeMs,
+      });
     },
   });
 }

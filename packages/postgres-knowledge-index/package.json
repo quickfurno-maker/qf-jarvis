@@ -14,7 +14,8 @@
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "typecheck": "tsc --build tsconfig.build.json",
-    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json",
+    "benchmark:rag": "node ./dist/benchmark-cli.js"
   },
   "dependencies": {
     "@qf-jarvis/governed-knowledge": "workspace:*",

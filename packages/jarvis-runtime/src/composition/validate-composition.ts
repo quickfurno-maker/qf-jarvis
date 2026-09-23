@@ -205,15 +205,10 @@ function agentHybridKnowledgeConfigured(c: Partial<JarvisRuntimeConfig>): boolea
   const agents = policy.agents;
   if (typeof agents !== 'object' || agents === null || Array.isArray(agents)) return false;
 
-  // Riya's dedicated evolution/reply methods use their own grounded schemas and therefore their own
-  // evaluated bindings. A shared hybrid policy that enables Riya is incomplete without both.
-  if (
-    'RIYA' in agents &&
-    (!evaluatedBinding(c.riyaGroundedConversationEvolutionPromptBinding) ||
-      !evaluatedBinding(c.riyaGroundedReplyPromptBinding))
-  ) {
-    return false;
-  }
+  // Shared three-agent hybrid turns use the per-scope evaluated prompt binding below. Riya's
+  // separate dedicated grounded evolution/reply APIs keep their own fail-closed binding checks at
+  // invocation time; enabling RIYA here must not make an otherwise-valid shared WhatsApp runtime
+  // unconstructable merely because those separate APIs are not enabled in this deployment.
 
   for (const [actor, entry] of Object.entries(agents as Record<string, unknown>)) {
     if (!isGroundedAgentActor(actor)) return false;

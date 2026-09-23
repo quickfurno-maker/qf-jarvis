@@ -162,16 +162,26 @@ describe('hybrid knowledge index', () => {
     expect(result).toEqual({ ok: false, reason: 'hybrid-query-embedding-denied' });
   });
 
-  it('fails closed for subject-linked knowledge when no privacy gate is present', async () => {
+  it('refuses LOCAL_ONLY candidates before a hosted reranker can observe content', async () => {
     const chunks = prepareKnowledgeBatch([
-      source('doc.subject', 'Subject-linked material.', { subjectRef: 'subject.1' }),
+      source('doc.local', 'Local-only approved material.', { classification: 'LOCAL_ONLY' }),
     ]).chunks;
+    let called = false;
     const retriever = createHybridKnowledgeRetriever({
-      embedding: createDeterministicTestEmbeddingPort(),
+      embedding: createDeterministicTestEmbeddingPort('LOCAL'),
       store: storeFor(chunks),
+      reranker: {
+        executionClass: 'HOSTED',
+        rerank(candidatesQuery, candidates) {
+          void candidatesQuery;
+          called = true;
+          return Promise.resolve(candidates);
+        },
+      },
     });
-    const result = await retriever.retrieve(request());
-    expect(result).toEqual({ ok: false, reason: 'hybrid-governance-refused' });
+    const result = await retriever.retrieve(request({ dataClass: 'LOCAL_ONLY' }));
+    expect(result).toEqual({ ok: false, reason: 'hybrid-reranker-data-class-denied' });
+    expect(called).toBe(false);
   });
 });
 

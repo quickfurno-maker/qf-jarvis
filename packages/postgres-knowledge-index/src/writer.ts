@@ -2,13 +2,18 @@ import { createHash } from 'node:crypto';
 
 import type { Pool, PoolClient } from 'pg';
 
-import type { EmbeddedKnowledgeBatch, EmbeddedKnowledgeChunk } from '@qf-jarvis/knowledge-index';
+import type {
+  EmbeddedKnowledgeBatch,
+  EmbeddedKnowledgeChunk,
+  KnowledgeEmbeddingCachePort,
+} from '@qf-jarvis/knowledge-index';
 import { KNOWLEDGE_EMBEDDING_DIMENSION_V1 } from '@qf-jarvis/knowledge-index';
 import type {
   KnowledgeGovernanceEnvelope,
   NormalizedKnowledgeDocument,
 } from '@qf-jarvis/knowledge-ingestion';
 
+import { createPostgresKnowledgeEmbeddingCache } from './embedding-cache.js';
 import { PostgresKnowledgeIndexError } from './errors.js';
 
 const INSERT_BATCH = 128;
@@ -37,6 +42,8 @@ export interface KnowledgeReleaseSealResult {
 }
 
 export interface PostgresKnowledgeIndexWriter {
+  /** Persistent content-addressed reuse over already-staged vectors. */
+  readonly embeddingCache: KnowledgeEmbeddingCachePort;
   stage(batch: EmbeddedKnowledgeBatch): Promise<KnowledgeIndexStageResult>;
   beginRelease(revision: string, embeddingModelRef: string): Promise<void>;
   addReleaseDocuments(revision: string, refs: readonly KnowledgeDocumentRef[]): Promise<void>;
@@ -615,6 +622,7 @@ export function createPostgresKnowledgeIndexWriter(pool: Pool): PostgresKnowledg
   };
 
   return Object.freeze({
+    embeddingCache: createPostgresKnowledgeEmbeddingCache(pool),
     stage,
     beginRelease,
     addReleaseDocuments,

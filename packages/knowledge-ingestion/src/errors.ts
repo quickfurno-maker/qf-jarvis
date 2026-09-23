@@ -3,6 +3,7 @@ export const KNOWLEDGE_INGESTION_ERROR_CODES = [
   'source-too-large',
   'structured-field-invalid',
   'conflicting-source-version',
+  'subject-linked-semantic-indexing-forbidden',
   'chunking-profile-invalid',
   'chunk-limit-exceeded',
   'ingestion-invariant',

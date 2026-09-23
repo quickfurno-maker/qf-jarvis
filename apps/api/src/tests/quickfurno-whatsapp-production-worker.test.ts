@@ -6,6 +6,29 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { loadQuickFurnoWhatsAppProductionWorkerConfig } from '../quickfurno-whatsapp/production-worker-config.js';
 
+const SYNTHETIC_CA_PEM = [
+  '-----BEGIN CERTIFICATE-----',
+  'MIIDMTCCAhmgAwIBAgIUJ9cLatTARkdFQCjPOyzGZUTOIUUwDQYJKoZIhvcNAQEL',
+  'BQAwKDEmMCQGA1UEAwwdUUYgSmFydmlzIFN5bnRoZXRpYyBUZXN0IENBIDEwHhcN',
+  'MjYwNzEyMTMyMzM4WhcNMzYwNzA5MTMyMzM4WjAoMSYwJAYDVQQDDB1RRiBKYXJ2',
+  'aXMgU3ludGhldGljIFRlc3QgQ0EgMTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCC',
+  'AQoCggEBALm4GDo3Sa9D8tH+NJrBoYTgSQDhSDoZ54ToMDZN9YjBrwETt3HCI+Br',
+  'MR9GhfHXQNdeuoNAsgPoYI8w/SqNapIwMnTSRt+m+3GqHOvRomH3Av6W/ikgAoMu',
+  '5DBkhEZg0fRScLzs9jpYorgK7t5BHf7O6QhufLb9hE4OR8MjnmLX3iWM/MHUey35',
+  'S6X2vPdyKK/tOmuMXOTlfxCkoG2/r8Hsnm/cSsdMVtu7wrVOQrYieyGu9OdU9EuH',
+  'nXddrGwv2Qe6tdaV+juUCrQouJ5lAh3YzMRo2JGGgweovochI/nIB7dJzY9HcsXE',
+  'AjR2L/aINyQZIDl5Ox3rK1ISh7WGbMkCAwEAAaNTMFEwHQYDVR0OBBYEFMdJTdWr',
+  'GQz19uI+1sMhvJIbKYBwMB8GA1UdIwQYMBaAFMdJTdWrGQz19uI+1sMhvJIbKYBw',
+  'MA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAK8Snt0sZ5RKFz8X',
+  'p+tLO5szWETi1gPCiZgIUunefYQWLGzk7oDiFSn1vKhsc85Vy03OihMRj7qdU6oT',
+  'ysydLXLXKZaz3hvLsVK+fv9BqXt4liqLpKxSJ7tXFQjp/b1Q7HdsHyzLWMDJnzS1',
+  '+3BXU5SEgssS2SlU9M4x28doEV3lgwa61w7nhUvHrGxutZhOi/9dnM5G9mODWqzX',
+  'X25zHRH6kU0OpzrjRrFspT/rrz1cK551nC470oU8YN98/y8n9T8bl+APwoNajdjm',
+  'M0I+UZjvf2HtaLNO6F2iDbinWe/FhOcJ8DKVHLyDBEler91FtIYyots4+rcjHlPe',
+  'eCGJzJ0=',
+  '-----END CERTIFICATE-----',
+].join('\n');
+
 const roots: string[] = [];
 function tempRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'qfj-worker-'));
@@ -26,31 +49,67 @@ function source(relative: string): string {
 function validConfig(root: string) {
   const sealFile = join(root, 'seal.json');
   const keyFile = join(root, 'groq.key');
+  const decisionFile = join(root, 'riya-persistence-decision.json');
+  const caFile = join(root, 'postgres-ca.pem');
+  const signingFile = join(root, 'quickfurno-signing.key');
+  const embeddingFile = join(root, 'embedding.key');
   const spool = join(root, 'spool');
   const kill = join(root, 'disabled');
+  const operationalSnapshotFile = join(root, 'worker-observation.json');
   writeFileSync(sealFile, '{}');
   writeFileSync(keyFile, 'synthetic-not-read-by-config-loader');
+  writeFileSync(
+    decisionFile,
+    JSON.stringify({
+      protocol: 'qfj.riya-managed-persistence-owner-decision.v1',
+      status: 'APPROVED',
+      jarvisRevision: 'a'.repeat(40),
+      decisionRef: 'decision.synthetic.test',
+      continuityPolicyRef: 'policy.synthetic.continuity',
+      logicalTurnPolicyRef: 'policy.synthetic.logical-turn',
+      approvedAt: '2026-09-23T00:00:00.000Z',
+    }),
+  );
+  writeFileSync(caFile, SYNTHETIC_CA_PEM);
+  writeFileSync(signingFile, 'synthetic-signing-key-not-used-by-loader-test');
+  writeFileSync(embeddingFile, 'synthetic-embedding-token-not-used-by-loader-test');
   return {
     revision: 'a'.repeat(40),
+    deploymentMode: 'SINGLE_OWNER',
     sealFile,
+    riyaPersistenceDecisionFile: decisionFile,
     groqCredentialReference: 'groq.qfj.production.v1',
     groqCredentialFile: keyFile,
     database: {
-      connectionString: 'postgresql://qf_test@127.0.0.1:55433/qf_test',
-      tls: { mode: 'disabled' },
+      connectionString: 'postgresql://qf_test@db.example.invalid/qf_test',
+      tls: { mode: 'verify-full', caFile },
     },
     quickfurno: {
       baseUrl: 'https://quickfurno.example/',
       keyId: 'qfj.prod.1',
-      privateKeyPem: [
-        '-----BEGIN',
-        'PRIVATE KEY-----\nsynthetic\n-----END',
-        'PRIVATE KEY-----',
-      ].join(' '),
+      privateKeyFile: signingFile,
       timeoutMs: 5000,
+    },
+    knowledge: {
+      revision: 'knowledge.quickfurno.release.1',
+      embedding: {
+        executionClass: 'HOSTED',
+        endpoint: 'https://embedding.example/v1/embeddings',
+        modelRef: 'embedding-model-v1',
+        credentialFile: embeddingFile,
+        timeoutMs: 20000,
+        maxBatchItems: 64,
+        maxInputChars: 64000,
+      },
+      agents: {
+        RIYA: { topicFilters: [], candidatePool: 64, maxResults: 8, maxContentChars: 4096 },
+        ANISHA: { topicFilters: [], candidatePool: 64, maxResults: 8, maxContentChars: 4096 },
+        AAROHI: { topicFilters: [], candidatePool: 64, maxResults: 8, maxContentChars: 4096 },
+      },
     },
     spoolDirectory: spool,
     killSwitchFile: kill,
+    operationalSnapshotFile,
     runtimeId: 'qfj.whatsapp.production.v1',
     policyRevision: 'policy.quickfurno.production.v1',
     idlePollMs: 500,
@@ -66,7 +125,12 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     writeFileSync(path, JSON.stringify(validConfig(root)));
     const config = loadQuickFurnoWhatsAppProductionWorkerConfig(path);
     expect(config.revision).toBe('a'.repeat(40));
-    expect(config.database.tls).toEqual({ mode: 'disabled' });
+    expect(config.database.tls.mode).toBe('verify-full');
+    expect(config.riyaPersistenceDecision.jarvisRevision).toBe('a'.repeat(40));
+    expect(config.knowledge.revision).toBe('knowledge.quickfurno.release.1');
+    expect(config.knowledge.embedding.bearerToken).toBe(
+      'synthetic-embedding-token-not-used-by-loader-test',
+    );
     expect(config.database.applicationName).toBe('qf-jarvis-whatsapp-worker');
     expect(config.seal).toEqual({});
   });
@@ -82,6 +146,63 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
         database: {
           connectionString: 'postgresql://secret-user:secret-pass@db.example.invalid/db',
           tls: { mode: 'disabled' },
+        },
+      }),
+    );
+    expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+      'production-worker-config-invalid',
+    );
+  });
+
+  it('refuses a persistence decision that is not bound to the exact Jarvis revision', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const config = validConfig(root);
+    writeFileSync(
+      config.riyaPersistenceDecisionFile,
+      JSON.stringify({
+        protocol: 'qfj.riya-managed-persistence-owner-decision.v1',
+        status: 'APPROVED',
+        jarvisRevision: 'b'.repeat(40),
+        decisionRef: 'decision.synthetic.test',
+        continuityPolicyRef: 'policy.synthetic.continuity',
+        logicalTurnPolicyRef: 'policy.synthetic.logical-turn',
+        approvedAt: '2026-09-23T00:00:00.000Z',
+      }),
+    );
+    writeFileSync(path, JSON.stringify(config));
+    expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+      'production-worker-config-invalid',
+    );
+  });
+
+  it('refuses a floating knowledge revision', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const config = validConfig(root);
+    writeFileSync(
+      path,
+      JSON.stringify({ ...config, knowledge: { ...config.knowledge, revision: 'latest' } }),
+    );
+    expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+      'production-worker-config-invalid',
+    );
+  });
+
+  it('refuses hybrid search budgets wider than the runtime grounding envelope', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const config = validConfig(root);
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...config,
+        knowledge: {
+          ...config.knowledge,
+          agents: {
+            ...config.knowledge.agents,
+            RIYA: { ...config.knowledge.agents.RIYA, maxResults: 9, maxContentChars: 4097 },
+          },
         },
       }),
     );
@@ -119,6 +240,14 @@ describe('QuickFurno WhatsApp production worker containment', () => {
     expect(worker).toContain("providerMode: 'GROQ_ONLY'");
     expect(worker).toContain('defaultRetryBudget: 0');
     expect(worker).toContain('allowFallback: false');
+  });
+
+  it('binds the exact active hybrid knowledge revision before runtime construction', () => {
+    expect(worker).toContain('assertPostgresKnowledgeReleaseReady');
+    expect(worker).toContain('createPostgresHybridCandidateStore');
+    expect(worker).toContain('createHybridKnowledgeRetriever');
+    expect(worker).toContain('agentHybridKnowledge');
+    expect(worker).toContain('knowledgeRevision: config.knowledge.revision');
   });
 
   it('uses live QuickFurno authority rather than PostgreSQL business state', () => {
@@ -170,5 +299,17 @@ describe('QuickFurno WhatsApp production worker containment', () => {
     expect(binder).toContain('@qf-jarvis/jarvis-v1-production-profile');
     expect(worker).not.toContain('@qf-jarvis/jarvis-v1-provider-certification-live');
     expect(binder).not.toContain('@qf-jarvis/jarvis-v1-provider-certification-live');
+  });
+});
+
+describe('production worker deployment shape', () => {
+  it('refuses any deployment mode other than the single-owner file-spool topology', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const config = validConfig(root);
+    writeFileSync(path, JSON.stringify({ ...config, deploymentMode: 'MULTI_REPLICA' }));
+    expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+      'production-worker-config-invalid',
+    );
   });
 });

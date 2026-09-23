@@ -25,4 +25,12 @@ export {
   normalizeSourceDocument,
 } from './normalize.js';
 export { chunkKnowledgeDocument } from './chunk.js';
+export {
+  EXTRACTED_KNOWLEDGE_MEDIA_TYPES,
+  createExtractedKnowledgeSource,
+} from './source-adapter.js';
+export type {
+  ExtractedKnowledgeMediaType,
+  ExtractedKnowledgeSourceInput,
+} from './source-adapter.js';
 export { prepareKnowledgeBatch } from './pipeline.js';

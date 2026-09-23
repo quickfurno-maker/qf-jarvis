@@ -5,6 +5,7 @@ import { DEFAULT_CHUNKING_PROFILE } from '../contracts.js';
 import { KnowledgeIngestionError } from '../errors.js';
 import { normalizeKnowledgeText, renderStructuredKnowledge } from '../normalize.js';
 import { prepareKnowledgeBatch } from '../pipeline.js';
+import { createExtractedKnowledgeSource } from '../source-adapter.js';
 
 function base(over: Partial<KnowledgeSourceDocumentInput> = {}): KnowledgeSourceDocumentInput {
   return {
@@ -82,6 +83,35 @@ describe('knowledge ingestion', () => {
     expect(batch.chunks.length).toBeGreaterThan(4);
     expect(batch.chunks.every((chunk) => chunk.record.content.length <= 700)).toBe(true);
     expect(batch.chunks.some((chunk) => chunk.headingPath.includes('B'))).toBe(true);
+  });
+
+  it('refuses subject-linked material before semantic preparation', () => {
+    try {
+      prepareKnowledgeBatch([base({ subjectRef: '11111111-1111-4111-8111-111111111111' })]);
+      throw new Error('expected subject-linked semantic indexing refusal');
+    } catch (error) {
+      expect(error).toBeInstanceOf(KnowledgeIngestionError);
+      expect((error as KnowledgeIngestionError).code).toBe(
+        'subject-linked-semantic-indexing-forbidden',
+      );
+    }
+  });
+
+  it('admits only scanned, provenance-bearing extracted document text', () => {
+    const document = base();
+    const extracted = createExtractedKnowledgeSource({
+      document: Object.fromEntries(
+        Object.entries(document).filter(([key]) => !['payload', 'contentFormat'].includes(key)),
+      ) as Omit<KnowledgeSourceDocumentInput, 'payload' | 'contentFormat'>,
+      mediaType: 'application/pdf',
+      extractedText: 'Extracted approved installation guidance.',
+      extractionRef: 'extractor.pdf.v1',
+      sourceDigest: 'a'.repeat(64),
+      malwareScan: 'PASSED',
+    });
+    expect(extracted.contentFormat).toBe('PLAIN_TEXT');
+    expect(extracted.sourceRef).toContain('extract=extractor.pdf.v1');
+    expect(() => prepareKnowledgeBatch([extracted])).not.toThrow();
   });
 
   it('accepts structured source data only through explicit key value fields', () => {

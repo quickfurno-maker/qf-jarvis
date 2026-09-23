@@ -1,6 +1,7 @@
 import type {
   EmbeddedKnowledgeBatch,
   EmbeddedKnowledgeChunk,
+  KnowledgeEmbeddingCachePort,
   KnowledgeEmbeddingPort,
 } from './contracts.js';
 import { KNOWLEDGE_EMBEDDING_DIMENSION_V1 } from './contracts.js';
@@ -82,10 +83,11 @@ function requestBatches(
   return Object.freeze(result.map((batch) => Object.freeze([...batch])));
 }
 
-export async function embedPreparedKnowledgeBatch(
+async function embedPreparedKnowledgeBatchInternal(
   batch: PreparedKnowledgeBatch,
   port: KnowledgeEmbeddingPort,
-  options: EmbeddingBatchOptions = DEFAULT_EMBEDDING_BATCH_OPTIONS,
+  options: EmbeddingBatchOptions,
+  cache?: KnowledgeEmbeddingCachePort,
 ): Promise<EmbeddedKnowledgeBatch> {
   if (port.dimension !== KNOWLEDGE_EMBEDDING_DIMENSION_V1 || port.modelRef.length === 0) {
     throw new TypeError('embedding-port-invalid');
@@ -106,7 +108,21 @@ export async function embedPreparedKnowledgeBatch(
   }
 
   const byDigest = new Map<string, readonly number[]>();
-  for (const groups of requestBatches(batch.embeddingReuseGroups, options)) {
+  if (cache !== undefined && batch.embeddingReuseGroups.length > 0) {
+    const cached = await cache.read(
+      port.modelRef,
+      batch.embeddingReuseGroups.map((group) => group.chunkDigest),
+    );
+    for (const group of batch.embeddingReuseGroups) {
+      const vector = cached.get(group.chunkDigest);
+      if (vector !== undefined) {
+        byDigest.set(group.chunkDigest, validateVector(vector, port.dimension));
+      }
+    }
+  }
+
+  const misses = batch.embeddingReuseGroups.filter((group) => !byDigest.has(group.chunkDigest));
+  for (const groups of requestBatches(misses, options)) {
     const texts = groups.map((group) => group.content);
     const vectors = await port.embed(texts);
     if (vectors.length !== texts.length) {
@@ -132,8 +148,25 @@ export async function embedPreparedKnowledgeBatch(
   return Object.freeze({
     source: batch,
     chunks: Object.freeze(chunks),
-    uniqueEmbeddingsComputed: batch.embeddingReuseGroups.length,
+    uniqueEmbeddingsComputed: misses.length,
   });
+}
+
+export function embedPreparedKnowledgeBatch(
+  batch: PreparedKnowledgeBatch,
+  port: KnowledgeEmbeddingPort,
+  options: EmbeddingBatchOptions = DEFAULT_EMBEDDING_BATCH_OPTIONS,
+): Promise<EmbeddedKnowledgeBatch> {
+  return embedPreparedKnowledgeBatchInternal(batch, port, options);
+}
+
+export function embedPreparedKnowledgeBatchWithCache(
+  batch: PreparedKnowledgeBatch,
+  port: KnowledgeEmbeddingPort,
+  cache: KnowledgeEmbeddingCachePort,
+  options: EmbeddingBatchOptions = DEFAULT_EMBEDDING_BATCH_OPTIONS,
+): Promise<EmbeddedKnowledgeBatch> {
+  return embedPreparedKnowledgeBatchInternal(batch, port, options, cache);
 }
 
 export async function embedHybridQuery(

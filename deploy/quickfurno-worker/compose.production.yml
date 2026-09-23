@@ -27,8 +27,20 @@ services:
         target: /run/secrets/groq-production.key
         read_only: true
       - type: bind
+        source: /srv/qf-jarvis/secrets/quickfurno-signing.key
+        target: /run/secrets/quickfurno-signing.key
+        read_only: true
+      - type: bind
+        source: /srv/qf-jarvis/secrets/embedding-production.key
+        target: /run/secrets/embedding-production.key
+        read_only: true
+      - type: bind
         source: /srv/qf-jarvis/seals/jf5c-production-seal.json
         target: /run/secrets/jf5c-production-seal.json
+        read_only: true
+      - type: bind
+        source: /srv/qf-jarvis/secrets/riya-persistence-owner-decision.json
+        target: /run/secrets/riya-persistence-owner-decision.json
         read_only: true
       - type: bind
         source: /srv/qf-jarvis/secrets/postgres-ca.pem
@@ -42,6 +54,10 @@ services:
         source: /srv/qf-jarvis/state/quickfurno-worker-control
         target: /var/run/qfj-control
         read_only: true
+      - type: bind
+        source: /srv/qf-jarvis/state/observability
+        target: /var/run/qfj-observability
+        read_only: false
     deploy:
       resources:
         limits:
