@@ -189,6 +189,7 @@ describe('knowledge quality evaluator', () => {
           },
         ],
         thresholds,
+        'quality.cases.v1',
       ),
     ).toThrow('knowledge-quality-cases-invalid');
   });
