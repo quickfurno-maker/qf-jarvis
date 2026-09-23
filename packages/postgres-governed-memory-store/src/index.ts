@@ -1,1 +1,1 @@
-export { createPostgresGovernedMemoryStore } from './store.js';
+export { createPostgresGovernedMemoryStore, purgeExpiredGovernedMemory } from './store.js';
