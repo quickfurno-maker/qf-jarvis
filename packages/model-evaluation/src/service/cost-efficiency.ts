@@ -20,6 +20,29 @@ export interface ModelCostWorkload {
   readonly outputTokens: number;
 }
 
+export interface VersionedEmbeddingPriceCard {
+  readonly priceCardRef: string;
+  readonly billingUnit: 'REQUEST' | 'TEXT' | 'CHARACTER';
+  readonly usdPerMillionUnits: number;
+}
+
+export interface EmbeddingCostWorkload {
+  readonly requests: number;
+  readonly texts: number;
+  readonly characters: number;
+}
+
+export interface ConversationCostWorkload {
+  readonly model: ModelCostWorkload;
+  readonly embedding: EmbeddingCostWorkload;
+}
+
+export interface ConversationCostEstimate {
+  readonly modelUsd: number;
+  readonly embeddingUsd: number;
+  readonly totalUsd: number;
+}
+
 export interface CostSelectionOptions {
   readonly baselineEvaluationRef: string;
   readonly maxQualityDrop: number;
@@ -98,6 +121,45 @@ export function estimateModelCostUsd(
       workload.outputTokens * priceCard.outputUsdPerMillionTokens) /
     1_000_000
   );
+}
+
+export function estimateEmbeddingCostUsd(
+  workload: EmbeddingCostWorkload,
+  priceCard: VersionedEmbeddingPriceCard,
+): number {
+  if (
+    !Number.isInteger(workload.requests) ||
+    workload.requests < 0 ||
+    !Number.isInteger(workload.texts) ||
+    workload.texts < 0 ||
+    !Number.isInteger(workload.characters) ||
+    workload.characters < 0 ||
+    !validId(priceCard.priceCardRef) ||
+    !finiteNonNegative(priceCard.usdPerMillionUnits)
+  ) {
+    throw new TypeError('embedding-cost-input-invalid');
+  }
+  const units =
+    priceCard.billingUnit === 'REQUEST'
+      ? workload.requests
+      : priceCard.billingUnit === 'TEXT'
+        ? workload.texts
+        : workload.characters;
+  return (units * priceCard.usdPerMillionUnits) / 1_000_000;
+}
+
+export function estimateConversationCostUsd(
+  workload: ConversationCostWorkload,
+  modelPriceCard: VersionedModelPriceCard,
+  embeddingPriceCard: VersionedEmbeddingPriceCard,
+): ConversationCostEstimate {
+  const modelUsd = estimateModelCostUsd(workload.model, modelPriceCard);
+  const embeddingUsd = estimateEmbeddingCostUsd(workload.embedding, embeddingPriceCard);
+  return Object.freeze({
+    modelUsd,
+    embeddingUsd,
+    totalUsd: modelUsd + embeddingUsd,
+  });
 }
 
 /**
