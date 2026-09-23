@@ -26,7 +26,7 @@ A path-triggered CI lane runs deterministic evaluation and JF-5B regression test
 
 Worker observation v2 adds provider-reported token totals and embedding request/text/character counts to the existing aggregate queue, outcome and latency observations. It contains no conversation id, message text, retrieved text, subject reference, provider body or secret.
 
-The initial engineering SLO policy measures model p95 latency, knowledge p95 latency, oldest pending age, failed-indeterminate rate and technical RAG failure rate. Initial values are operating hypotheses and must be reviewed against real traffic before becoming production SLOs.
+The initial engineering SLO policy measures model p95 latency, knowledge p95 latency, model failure rate, fallback rate, model availability, oldest pending age, failed-indeterminate rate and technical RAG failure rate. Initial values are operating hypotheses and must be reviewed against real traffic before becoming production SLOs.
 
 ### Cost optimization is evidence-gated
 
