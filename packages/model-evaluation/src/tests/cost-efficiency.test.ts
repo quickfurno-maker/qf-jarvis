@@ -141,6 +141,19 @@ describe('cost-efficient qualified model selection', () => {
     ).toBeCloseTo(0.5);
   });
 
+  it('rejects an unknown embedding billing unit at the runtime boundary', () => {
+    expect(() =>
+      estimateEmbeddingCostUsd(
+        { requests: 1, texts: 1, characters: 1 },
+        {
+          priceCardRef: 'embedding.price.v1',
+          billingUnit: 'TOKEN' as never,
+          usdPerMillionUnits: 1,
+        },
+      ),
+    ).toThrow('embedding-cost-input-invalid');
+  });
+
   it('combines model and embedding usage without requiring a conversation identifier', () => {
     expect(
       estimateConversationCostUsd(
