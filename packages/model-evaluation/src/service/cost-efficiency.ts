@@ -135,6 +135,7 @@ export function estimateEmbeddingCostUsd(
     !Number.isInteger(workload.characters) ||
     workload.characters < 0 ||
     !validId(priceCard.priceCardRef) ||
+    !['REQUEST', 'TEXT', 'CHARACTER'].includes(priceCard.billingUnit) ||
     !finiteNonNegative(priceCard.usdPerMillionUnits)
   ) {
     throw new TypeError('embedding-cost-input-invalid');
