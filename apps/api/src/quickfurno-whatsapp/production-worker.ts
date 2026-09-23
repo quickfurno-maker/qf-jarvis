@@ -169,14 +169,17 @@ export async function createQuickFurnoWhatsAppProductionWorker(
   const observedGatewayInvoker = Object.freeze({
     async invoke(request: Parameters<typeof baseGatewayInvoker.invoke>[0]) {
       const result = await baseGatewayInvoker.invoke(request);
-      if (result.ok) observation.recordModelLatency(result.response.latencyMs, systemInstant());
+      if (result.ok) {
+        observation.recordModelLatency(result.response.latencyMs, systemInstant());
+        observation.recordModelUsage(result.response.usage);
+      }
       return result;
     },
   });
 
   let closed = false;
   try {
-    const embedding = createOpenAICompatibleEmbeddingPort({
+    const baseEmbedding = createOpenAICompatibleEmbeddingPort({
       endpoint: config.knowledge.embedding.endpoint,
       modelRef: config.knowledge.embedding.modelRef,
       executionClass: config.knowledge.embedding.executionClass,
@@ -186,6 +189,15 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       timeoutMs: config.knowledge.embedding.timeoutMs,
       maxBatchItems: config.knowledge.embedding.maxBatchItems,
       maxInputChars: config.knowledge.embedding.maxInputChars,
+    });
+    const embedding = Object.freeze({
+      modelRef: baseEmbedding.modelRef,
+      dimension: baseEmbedding.dimension,
+      executionClass: baseEmbedding.executionClass,
+      async embed(texts: readonly string[]) {
+        observation.recordEmbeddingUsage(texts);
+        return baseEmbedding.embed(texts);
+      },
     });
     await assertPostgresKnowledgeReleaseReady(
       pool,
