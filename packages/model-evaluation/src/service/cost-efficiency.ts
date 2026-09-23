@@ -1,1 +1,181 @@
-import type { EvaluationBinding } from '../contracts/binding.js';\nimport type { ApprovalEvidence } from '../contracts/evidence.js';\n\nexport interface VersionedModelPriceCard {\n  readonly priceCardRef: string;\n  readonly inputUsdPerMillionTokens: number;\n  readonly outputUsdPerMillionTokens: number;\n}\n\nexport interface EvaluatedCostCandidate {\n  readonly candidateId: string;\n  readonly evidence: ApprovalEvidence;\n  /** Normalized 0..1 quality score from an owner-approved comparison rubric. */\n  readonly qualityScore: number;\n  readonly priceCard: VersionedModelPriceCard;\n}\n\nexport interface ModelCostWorkload {\n  readonly inputTokens: number;\n  readonly outputTokens: number;\n}\n\nexport interface CostSelectionOptions {\n  readonly baselineEvaluationRef: string;\n  readonly maxQualityDrop: number;\n}\n\nexport type CostSelectionResult =\n  | {\n      readonly ok: true;\n      readonly selected: EvaluatedCostCandidate;\n      readonly baseline: EvaluatedCostCandidate;\n      readonly selectedEstimatedUsd: number;\n      readonly baselineEstimatedUsd: number;\n      readonly estimatedSavingsUsd: number;\n    }\n  | {\n      readonly ok: false;\n      readonly reason:\n        | 'invalid-input'\n        | 'baseline-missing'\n        | 'baseline-not-production-approved'\n        | 'no-equivalent-qualified-candidate';\n    };\n\nfunction finiteNonNegative(value: number): boolean {\n  return Number.isFinite(value) && value >= 0;\n}\n\nfunction validId(value: string): boolean {\n  return /^[A-Za-z0-9._:-]{1,128}$/u.test(value);\n}\n\nfunction sameEvaluationContext(a: EvaluationBinding, b: EvaluationBinding): boolean {\n  return (\n    a.evaluationSuiteId === b.evaluationSuiteId &&\n    a.evaluationSuiteVersion === b.evaluationSuiteVersion &&\n    a.redTeamSuiteId === b.redTeamSuiteId &&\n    a.redTeamSuiteVersion === b.redTeamSuiteVersion &&\n    a.fixtureManifestId === b.fixtureManifestId &&\n    a.fixtureManifestVersion === b.fixtureManifestVersion &&\n    a.evaluatorImplId === b.evaluatorImplId &&\n    a.evaluatorImplVersion === b.evaluatorImplVersion &&\n    a.promptFamily === b.promptFamily &&\n    a.promptVersion === b.promptVersion &&\n    a.promptDigest === b.promptDigest &&\n    a.capabilityProfileRef === b.capabilityProfileRef &&\n    a.knowledgeRevision === b.knowledgeRevision &&\n    a.policyContractRevision === b.policyContractRevision\n  );\n}\n\nfunction productionApproved(evidence: ApprovalEvidence): boolean {\n  return (\n    evidence.target === 'ACTIVE_MODEL_RELEASE' &&\n    evidence.productionApproval &&\n    !evidence.synthetic\n  );\n}\n\nexport function estimateModelCostUsd(\n  workload: ModelCostWorkload,\n  priceCard: VersionedModelPriceCard,\n): number {\n  if (\n    !Number.isInteger(workload.inputTokens) ||\n    workload.inputTokens < 0 ||\n    !Number.isInteger(workload.outputTokens) ||\n    workload.outputTokens < 0 ||\n    !validId(priceCard.priceCardRef) ||\n    !finiteNonNegative(priceCard.inputUsdPerMillionTokens) ||\n    !finiteNonNegative(priceCard.outputUsdPerMillionTokens)\n  ) {\n    throw new TypeError('model-cost-input-invalid');\n  }\n  return (\n    (workload.inputTokens * priceCard.inputUsdPerMillionTokens +\n      workload.outputTokens * priceCard.outputUsdPerMillionTokens) /\n    1_000_000\n  );\n}\n\n/**\n * Choose the cheapest candidate only among production-approved evaluations that were run under the\n * same suite, fixtures, prompt, capability profile, knowledge revision and policy as the baseline.\n *\n * This is an evidence/planning decision, not a serving mutation. The returned release still has to\n * be bound into a fresh production seal/composition before it can serve customer traffic.\n */\nexport function chooseCostEfficientQualifiedCandidate(\n  candidates: readonly EvaluatedCostCandidate[],\n  workload: ModelCostWorkload,\n  options: CostSelectionOptions,\n): CostSelectionResult {\n  if (\n    candidates.length < 1 ||\n    candidates.length > 64 ||\n    !validId(options.baselineEvaluationRef) ||\n    !finiteNonNegative(options.maxQualityDrop) ||\n    options.maxQualityDrop > 1\n  ) {\n    return { ok: false, reason: 'invalid-input' };\n  }\n\n  const ids = new Set<string>();\n  for (const candidate of candidates) {\n    if (\n      !validId(candidate.candidateId) ||\n      ids.has(candidate.candidateId) ||\n      !finiteNonNegative(candidate.qualityScore) ||\n      candidate.qualityScore > 1\n    ) {\n      return { ok: false, reason: 'invalid-input' };\n    }\n    ids.add(candidate.candidateId);\n    try {\n      estimateModelCostUsd(workload, candidate.priceCard);\n    } catch {\n      return { ok: false, reason: 'invalid-input' };\n    }\n  }\n\n  const baseline = candidates.find(\n    (candidate) => candidate.evidence.evaluationRef === options.baselineEvaluationRef,\n  );\n  if (baseline === undefined) return { ok: false, reason: 'baseline-missing' };\n  if (!productionApproved(baseline.evidence)) {\n    return { ok: false, reason: 'baseline-not-production-approved' };\n  }\n\n  const floor = Math.max(0, baseline.qualityScore - options.maxQualityDrop);\n  const eligible = candidates.filter(\n    (candidate) =>\n      productionApproved(candidate.evidence) &&\n      candidate.evidence.caseSetDigest === baseline.evidence.caseSetDigest &&\n      sameEvaluationContext(candidate.evidence.binding, baseline.evidence.binding) &&\n      candidate.qualityScore >= floor,\n  );\n  if (eligible.length === 0) {\n    return { ok: false, reason: 'no-equivalent-qualified-candidate' };\n  }\n\n  const ranked = eligible\n    .map((candidate) => ({\n      candidate,\n      cost: estimateModelCostUsd(workload, candidate.priceCard),\n    }))\n    .sort((a, b) => a.cost - b.cost || b.candidate.qualityScore - a.candidate.qualityScore || a.candidate.candidateId.localeCompare(b.candidate.candidateId));\n\n  const selected = ranked[0];\n  if (selected === undefined) return { ok: false, reason: 'no-equivalent-qualified-candidate' };\n  const baselineCost = estimateModelCostUsd(workload, baseline.priceCard);\n  return Object.freeze({\n    ok: true as const,\n    selected: selected.candidate,\n    baseline,\n    selectedEstimatedUsd: selected.cost,\n    baselineEstimatedUsd: baselineCost,\n    estimatedSavingsUsd: Math.max(0, baselineCost - selected.cost),\n  });\n}
+import type { EvaluationBinding } from '../contracts/binding.js';
+import type { ApprovalEvidence } from '../contracts/evidence.js';
+
+export interface VersionedModelPriceCard {
+  readonly priceCardRef: string;
+  readonly inputUsdPerMillionTokens: number;
+  readonly outputUsdPerMillionTokens: number;
+}
+
+export interface EvaluatedCostCandidate {
+  readonly candidateId: string;
+  readonly evidence: ApprovalEvidence;
+  /** Normalized 0..1 quality score from an owner-approved comparison rubric. */
+  readonly qualityScore: number;
+  readonly priceCard: VersionedModelPriceCard;
+}
+
+export interface ModelCostWorkload {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+}
+
+export interface CostSelectionOptions {
+  readonly baselineEvaluationRef: string;
+  readonly maxQualityDrop: number;
+}
+
+export type CostSelectionResult =
+  | {
+      readonly ok: true;
+      readonly selected: EvaluatedCostCandidate;
+      readonly baseline: EvaluatedCostCandidate;
+      readonly selectedEstimatedUsd: number;
+      readonly baselineEstimatedUsd: number;
+      readonly estimatedSavingsUsd: number;
+    }
+  | {
+      readonly ok: false;
+      readonly reason:
+        | 'invalid-input'
+        | 'baseline-missing'
+        | 'baseline-not-production-approved'
+        | 'no-equivalent-qualified-candidate';
+    };
+
+function finiteNonNegative(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
+}
+
+function validId(value: string): boolean {
+  return /^[A-Za-z0-9._:-]{1,128}$/u.test(value);
+}
+
+function sameEvaluationContext(a: EvaluationBinding, b: EvaluationBinding): boolean {
+  return (
+    a.evaluationSuiteId === b.evaluationSuiteId &&
+    a.evaluationSuiteVersion === b.evaluationSuiteVersion &&
+    a.redTeamSuiteId === b.redTeamSuiteId &&
+    a.redTeamSuiteVersion === b.redTeamSuiteVersion &&
+    a.fixtureManifestId === b.fixtureManifestId &&
+    a.fixtureManifestVersion === b.fixtureManifestVersion &&
+    a.evaluatorImplId === b.evaluatorImplId &&
+    a.evaluatorImplVersion === b.evaluatorImplVersion &&
+    a.promptFamily === b.promptFamily &&
+    a.promptVersion === b.promptVersion &&
+    a.promptDigest === b.promptDigest &&
+    a.capabilityProfileRef === b.capabilityProfileRef &&
+    a.knowledgeRevision === b.knowledgeRevision &&
+    a.policyContractRevision === b.policyContractRevision
+  );
+}
+
+function productionApproved(evidence: ApprovalEvidence): boolean {
+  return (
+    evidence.target === 'ACTIVE_MODEL_RELEASE' &&
+    evidence.productionApproval &&
+    !evidence.synthetic
+  );
+}
+
+export function estimateModelCostUsd(
+  workload: ModelCostWorkload,
+  priceCard: VersionedModelPriceCard,
+): number {
+  if (
+    !Number.isInteger(workload.inputTokens) ||
+    workload.inputTokens < 0 ||
+    !Number.isInteger(workload.outputTokens) ||
+    workload.outputTokens < 0 ||
+    !validId(priceCard.priceCardRef) ||
+    !finiteNonNegative(priceCard.inputUsdPerMillionTokens) ||
+    !finiteNonNegative(priceCard.outputUsdPerMillionTokens)
+  ) {
+    throw new TypeError('model-cost-input-invalid');
+  }
+  return (
+    (workload.inputTokens * priceCard.inputUsdPerMillionTokens +
+      workload.outputTokens * priceCard.outputUsdPerMillionTokens) /
+    1_000_000
+  );
+}
+
+/**
+ * Choose the cheapest candidate only among production-approved evaluations that were run under the
+ * same suite, fixtures, prompt, capability profile, knowledge revision and policy as the baseline.
+ *
+ * This is an evidence/planning decision, not a serving mutation. The returned release still has to
+ * be bound into a fresh production seal/composition before it can serve customer traffic.
+ */
+export function chooseCostEfficientQualifiedCandidate(
+  candidates: readonly EvaluatedCostCandidate[],
+  workload: ModelCostWorkload,
+  options: CostSelectionOptions,
+): CostSelectionResult {
+  if (
+    candidates.length < 1 ||
+    candidates.length > 64 ||
+    !validId(options.baselineEvaluationRef) ||
+    !finiteNonNegative(options.maxQualityDrop) ||
+    options.maxQualityDrop > 1
+  ) {
+    return { ok: false, reason: 'invalid-input' };
+  }
+
+  const ids = new Set<string>();
+  for (const candidate of candidates) {
+    if (
+      !validId(candidate.candidateId) ||
+      ids.has(candidate.candidateId) ||
+      !finiteNonNegative(candidate.qualityScore) ||
+      candidate.qualityScore > 1
+    ) {
+      return { ok: false, reason: 'invalid-input' };
+    }
+    ids.add(candidate.candidateId);
+    try {
+      estimateModelCostUsd(workload, candidate.priceCard);
+    } catch {
+      return { ok: false, reason: 'invalid-input' };
+    }
+  }
+
+  const baseline = candidates.find(
+    (candidate) => candidate.evidence.evaluationRef === options.baselineEvaluationRef,
+  );
+  if (baseline === undefined) return { ok: false, reason: 'baseline-missing' };
+  if (!productionApproved(baseline.evidence)) {
+    return { ok: false, reason: 'baseline-not-production-approved' };
+  }
+
+  const floor = Math.max(0, baseline.qualityScore - options.maxQualityDrop);
+  const eligible = candidates.filter(
+    (candidate) =>
+      productionApproved(candidate.evidence) &&
+      candidate.evidence.caseSetDigest === baseline.evidence.caseSetDigest &&
+      sameEvaluationContext(candidate.evidence.binding, baseline.evidence.binding) &&
+      candidate.qualityScore >= floor,
+  );
+  if (eligible.length === 0) {
+    return { ok: false, reason: 'no-equivalent-qualified-candidate' };
+  }
+
+  const ranked = eligible
+    .map((candidate) => ({
+      candidate,
+      cost: estimateModelCostUsd(workload, candidate.priceCard),
+    }))
+    .sort((a, b) => a.cost - b.cost || b.candidate.qualityScore - a.candidate.qualityScore || a.candidate.candidateId.localeCompare(b.candidate.candidateId));
+
+  const selected = ranked[0];
+  if (selected === undefined) return { ok: false, reason: 'no-equivalent-qualified-candidate' };
+  const baselineCost = estimateModelCostUsd(workload, baseline.priceCard);
+  return Object.freeze({
+    ok: true as const,
+    selected: selected.candidate,
+    baseline,
+    selectedEstimatedUsd: selected.cost,
+    baselineEstimatedUsd: baselineCost,
+    estimatedSavingsUsd: Math.max(0, baselineCost - selected.cost),
+  });
+}
