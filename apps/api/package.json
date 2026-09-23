@@ -23,6 +23,7 @@
     "@qf-jarvis/contracts": "workspace:*",
     "@qf-jarvis/core-decision-adapter": "workspace:*",
     "@qf-jarvis/core-data-tools": "workspace:*",
+    "@qf-jarvis/core-riya-intake": "workspace:*",
     "@qf-jarvis/core-decision-http-transport": "workspace:*",
     "@qf-jarvis/core-service-availability-read": "workspace:*",
     "@qf-jarvis/event-backbone": "workspace:*",
