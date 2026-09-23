@@ -1,0 +1,19 @@
+{
+  "name": "@qf-jarvis/knowledge-freshness",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Deterministic knowledge-source freshness assessment and release-candidate gating. Detects source drift but cannot ingest, seal, activate or publish a release.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  }
+}
