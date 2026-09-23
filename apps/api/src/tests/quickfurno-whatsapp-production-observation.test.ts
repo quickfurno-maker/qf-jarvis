@@ -19,6 +19,8 @@ describe('QuickFurno worker production observation', () => {
       embeddingModelRef: 'embedding/model-v1',
     });
     writer.recordModelLatency(123, '2026-09-23T00:00:00.000Z');
+    writer.recordModelUsage({ inputTokens: 120, outputTokens: 40, totalTokens: 160 });
+    writer.recordEmbeddingUsage(['first query', 'second']);
     writer.recordKnowledgeRetrieval('hybrid-served', 37, '2026-09-23T00:00:00.000Z');
     writer.recordKnowledgeRetrieval('hybrid-governance-refused', 11, '2026-09-23T00:00:00.500Z');
     writer.recordOutcome('completed-queued');
@@ -38,6 +40,7 @@ describe('QuickFurno worker production observation', () => {
 
     const raw = readFileSync(filePath, 'utf8');
     const parsed = parseQuickFurnoWorkerObservation(JSON.parse(raw));
+    expect(parsed.protocol).toBe('qfj.quickfurno-worker-observation.v2');
     expect(parsed.state).toBe('DEGRADED');
     expect(parsed.outcomes.completedQueued).toBe(1);
     expect(parsed.outcomes.failedIndeterminate).toBe(1);
@@ -45,6 +48,19 @@ describe('QuickFurno worker production observation', () => {
     expect(parsed.knowledgeRetrieval.served).toBe(1);
     expect(parsed.knowledgeRetrieval.governanceRefused).toBe(1);
     expect(parsed.knowledgeRetrieval.latency.map((sample) => sample.latencyMs)).toEqual([37, 11]);
+    if (parsed.protocol !== 'qfj.quickfurno-worker-observation.v2') return;
+    expect(parsed.modelUsage).toEqual({
+      invocations: 1,
+      reportedTokenInvocations: 1,
+      inputTokens: 120,
+      outputTokens: 40,
+      totalTokens: 160,
+    });
+    expect(parsed.embeddingUsage).toEqual({
+      requests: 1,
+      texts: 2,
+      characters: 17,
+    });
     expect(raw).not.toContain('conversationId');
     expect(raw).not.toContain('messageText');
     expect(raw).not.toContain('subjectRef');
