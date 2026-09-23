@@ -165,10 +165,17 @@ export function chooseCostEfficientQualifiedCandidate(
       candidate,
       cost: estimateModelCostUsd(workload, candidate.priceCard),
     }))
-    .sort((a, b) => a.cost - b.cost || b.candidate.qualityScore - a.candidate.qualityScore || a.candidate.candidateId.localeCompare(b.candidate.candidateId));
+    .sort(
+      (a, b) =>
+        a.cost - b.cost ||
+        b.candidate.qualityScore - a.candidate.qualityScore ||
+        a.candidate.candidateId.localeCompare(b.candidate.candidateId),
+    );
 
   const selected = ranked[0];
-  if (selected === undefined) return { ok: false, reason: 'no-equivalent-qualified-candidate' };
+  if (selected === undefined) {
+    return { ok: false, reason: 'no-equivalent-qualified-candidate' };
+  }
   const baselineCost = estimateModelCostUsd(workload, baseline.priceCard);
   return Object.freeze({
     ok: true as const,
