@@ -12,6 +12,7 @@ import type {
 } from '@qf-jarvis/governed-memory-foundation';
 
 const SAMPLE_LIMIT = 100;
+const MAX_PURGE_LIMIT = 1_000;
 const SUBJECT_KEY = /^[a-z0-9]+(?:-[a-z0-9]+)*\|[A-Za-z0-9._:-]{1,128}$/u;
 
 function subjectKey(subject: AgentMemoryRecordV1['subjectReferences'][number]): string {
@@ -143,5 +144,62 @@ export function createPostgresGovernedMemoryStore(pool: Pool): GovernedMemorySto
         truncated: row.invalidated_count > sampled.length,
       });
     },
+  });
+}
+
+
+function validInstant(value: string): boolean {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
+}
+
+/**
+ * Physically remove expired derived memory in one bounded, concurrency-safe batch.
+ *
+ * This is maintenance, not memory authority. It cannot make a record active or extend retention.
+ * Rows are selected oldest-first and locked with SKIP LOCKED so multiple maintenance workers cannot
+ * race over the same record. The caller owns scheduling and the pool.
+ */
+export async function purgeExpiredGovernedMemory(
+  pool: Pool,
+  input: Readonly<{ asOf: string; limit: number }>,
+): Promise<GovernedMemoryInvalidationResult> {
+  if (
+    !validInstant(input.asOf) ||
+    !Number.isInteger(input.limit) ||
+    input.limit < 1 ||
+    input.limit > MAX_PURGE_LIMIT
+  ) {
+    throw new TypeError('governed-memory-purge-invalid');
+  }
+
+  const result = await pool.query<InvalidationRow>(
+    [
+      'WITH doomed AS (',
+      'SELECT memory_record_id FROM qf_jarvis_memory.agent_memory_record',
+      'WHERE expires_at <= $1::timestamptz',
+      'ORDER BY expires_at ASC, memory_record_id ASC LIMIT $2',
+      'FOR UPDATE SKIP LOCKED',
+      '), deleted AS (',
+      'DELETE FROM qf_jarvis_memory.agent_memory_record AS memory USING doomed',
+      'WHERE memory.memory_record_id = doomed.memory_record_id',
+      'RETURNING memory.memory_record_id',
+      '), ranked AS (',
+      'SELECT memory_record_id, row_number() OVER (ORDER BY memory_record_id) AS rn FROM deleted',
+      ') SELECT count(*)::int AS invalidated_count,',
+      `coalesce(array_agg(memory_record_id ORDER BY memory_record_id) FILTER (WHERE rn <= ${String(SAMPLE_LIMIT)}), ARRAY[]::text[]) AS sampled_ids`,
+      'FROM ranked',
+    ].join(' '),
+    [input.asOf, input.limit],
+  );
+  const row = result.rows[0];
+  if (row === undefined || result.rows.length !== 1) {
+    throw new TypeError('governed-memory-purge-result-invalid');
+  }
+  const sampled = Object.freeze([...(row.sampled_ids ?? [])]);
+  return Object.freeze({
+    invalidatedCount: row.invalidated_count,
+    sampledMemoryRecordIds: sampled,
+    truncated: row.invalidated_count > sampled.length,
   });
 }
