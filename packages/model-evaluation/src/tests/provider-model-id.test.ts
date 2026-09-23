@@ -347,8 +347,8 @@ describe('public API and repository invariants', () => {
     // wildcard/`latest` governance predicate, exported so the benchmark package applies the SAME
     // rule to the prompt/capability/knowledge/policy refs it owns instead of copying it. Still an
     // EXACT count; it records an authorised addition, it does not relax the assertion.
-    // ADR-0160: 35 -> 39 adds only evaluation-impact and evidence-gated cost-intelligence exports.
-    expect(Object.keys(barrel)).toHaveLength(39);
+    // ADR-0160: 35 -> 41 adds only evaluation-impact and evidence-gated model/embedding cost-intelligence exports.
+    expect(Object.keys(barrel)).toHaveLength(41);
   });
 
   it('(9) the model-gateway canonical export surface is still intact', () => {
