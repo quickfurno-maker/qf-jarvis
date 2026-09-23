@@ -14,6 +14,7 @@ on:
       - 'packages/jarvis-runtime/**'
       - 'apps/api/src/composition/jf5b-**'
       - 'apps/api/src/tests/jf5b-**'
+      - 'apps/api/src/tests/credential-containment.test.ts'
       - '.github/workflows/continuous-evaluation.yml'
 
 permissions:
@@ -52,11 +53,4 @@ jobs:
           packages/jarvis-runtime/src/tests/hybrid-grounding.test.ts
           apps/api/src/tests/jf5b-certification-runner.test.ts
           apps/api/src/tests/jf5b-forbidden-claim-matcher.test.ts
-
-      - name: Verify evaluation inputs are content-free fixtures
-        shell: bash
-        run: |
-          if grep -RInE '(^|[^A-Za-z])(sk-|gsk-|Bearer[[:space:]])'             packages/model-evaluation/src/tests             packages/knowledge-index/src/tests/quality.test.ts             apps/api/src/tests/jf5b-certification-runner.test.ts; then
-            echo "::error::Continuous-evaluation fixtures contain a credential-shaped token."
-            exit 1
-          fi
+          apps/api/src/tests/credential-containment.test.ts
