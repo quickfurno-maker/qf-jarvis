@@ -1,9 +1,10 @@
 import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
+import type { ModelUsage } from '@qf-jarvis/model-gateway';
 import {
   parseQuickFurnoWorkerObservation,
-  type QuickFurnoWorkerObservation,
+  type QuickFurnoWorkerObservationV2,
 } from '@qf-jarvis/worker-observation-contract';
 
 import type { HybridRetrievalReason } from '@qf-jarvis/knowledge-index';
@@ -11,6 +12,7 @@ import type { HybridRetrievalReason } from '@qf-jarvis/knowledge-index';
 import type { QuickFurnoWhatsAppProcessorOutcome } from './turn-processor.js';
 
 const MAX_COUNTER = 1_000_000_000;
+const MAX_USAGE = 1_000_000_000_000;
 const MAX_LATENCY_SAMPLES = 120;
 
 export interface ProductionSpoolObservation {
@@ -23,6 +25,8 @@ export interface ProductionSpoolObservation {
 
 export interface QuickFurnoWorkerObservationWriter {
   recordModelLatency(latencyMs: number, at: string): void;
+  recordModelUsage(usage: ModelUsage): void;
+  recordEmbeddingUsage(texts: readonly string[]): void;
   recordKnowledgeRetrieval(reason: HybridRetrievalReason, latencyMs: number, at: string): void;
   recordOutcome(outcome: QuickFurnoWhatsAppProcessorOutcome): void;
   write(
@@ -42,6 +46,18 @@ export interface QuickFurnoWorkerObservationWriterConfig {
 
 function increment(value: number): number {
   return Math.min(MAX_COUNTER, value + 1);
+}
+
+function addUsage(value: number, delta: number | undefined): number {
+  if (
+    delta === undefined ||
+    !Number.isFinite(delta) ||
+    !Number.isInteger(delta) ||
+    delta < 0
+  ) {
+    return value;
+  }
+  return Math.min(MAX_USAGE, value + delta);
 }
 
 export function createQuickFurnoWorkerObservationWriter(
@@ -65,6 +81,18 @@ export function createQuickFurnoWorkerObservationWriter(
     releasedPreAgent: 0,
     failedIndeterminate: 0,
   };
+  const modelUsage = {
+    invocations: 0,
+    reportedTokenInvocations: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+  };
+  const embeddingUsage = {
+    requests: 0,
+    texts: 0,
+    characters: 0,
+  };
 
   return Object.freeze({
     recordModelLatency(latencyMs: number, at: string): void {
@@ -72,6 +100,29 @@ export function createQuickFurnoWorkerObservationWriter(
       latencies.push(Object.freeze({ at, latencyMs }));
       if (latencies.length > MAX_LATENCY_SAMPLES)
         latencies.splice(0, latencies.length - MAX_LATENCY_SAMPLES);
+    },
+
+    recordModelUsage(usage: ModelUsage): void {
+      modelUsage.invocations = increment(modelUsage.invocations);
+      const reportsAny =
+        usage.inputTokens !== undefined ||
+        usage.outputTokens !== undefined ||
+        usage.totalTokens !== undefined;
+      if (reportsAny) {
+        modelUsage.reportedTokenInvocations = increment(modelUsage.reportedTokenInvocations);
+      }
+      modelUsage.inputTokens = addUsage(modelUsage.inputTokens, usage.inputTokens);
+      modelUsage.outputTokens = addUsage(modelUsage.outputTokens, usage.outputTokens);
+      modelUsage.totalTokens = addUsage(modelUsage.totalTokens, usage.totalTokens);
+    },
+
+    recordEmbeddingUsage(texts: readonly string[]): void {
+      embeddingUsage.requests = increment(embeddingUsage.requests);
+      embeddingUsage.texts = addUsage(embeddingUsage.texts, texts.length);
+      embeddingUsage.characters = addUsage(
+        embeddingUsage.characters,
+        texts.reduce((sum, text) => sum + text.length, 0),
+      );
     },
 
     recordKnowledgeRetrieval(reason: HybridRetrievalReason, latencyMs: number, at: string): void {
@@ -118,8 +169,8 @@ export function createQuickFurnoWorkerObservationWriter(
       spool: ProductionSpoolObservation,
       emittedAt: string,
     ): Promise<void> {
-      const observation: QuickFurnoWorkerObservation = parseQuickFurnoWorkerObservation({
-        protocol: 'qfj.quickfurno-worker-observation.v1',
+      const observation: QuickFurnoWorkerObservationV2 = parseQuickFurnoWorkerObservation({
+        protocol: 'qfj.quickfurno-worker-observation.v2',
         emittedAt,
         revision: config.revision,
         runtimeId: config.runtimeId,
@@ -134,7 +185,9 @@ export function createQuickFurnoWorkerObservationWriter(
           ...knowledgeRetrieval,
           latency: knowledgeLatencies,
         },
-      });
+        modelUsage,
+        embeddingUsage,
+      }) as QuickFurnoWorkerObservationV2;
       const directory = dirname(config.filePath);
       await mkdir(directory, { recursive: true, mode: 0o700 });
       const temporary = config.filePath + '.tmp';
