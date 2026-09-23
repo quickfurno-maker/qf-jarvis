@@ -16,6 +16,7 @@ export interface KnowledgeSourceFingerprint {
   readonly contentDigest: string;
   readonly ownerRef: string;
   readonly approvedForProduction: boolean;
+  readonly approvalRef?: string;
 }
 
 export interface KnowledgeSourceDriftRecord {
@@ -53,7 +54,10 @@ function validFingerprint(value: KnowledgeSourceFingerprint): boolean {
     REF.test(value.sourceRef) &&
     REF.test(value.sourceRevision) &&
     SHA256.test(value.contentDigest) &&
-    REF.test(value.ownerRef)
+    REF.test(value.ownerRef) &&
+    (value.approvedForProduction
+      ? value.approvalRef !== undefined && REF.test(value.approvalRef)
+      : value.approvalRef === undefined)
   );
 }
 
@@ -99,7 +103,10 @@ export function assessKnowledgeFreshness(
     }
     if (
       previous.sourceRevision === current.sourceRevision &&
-      previous.contentDigest === current.contentDigest
+      previous.contentDigest === current.contentDigest &&
+      previous.ownerRef === current.ownerRef &&
+      previous.approvedForProduction === current.approvedForProduction &&
+      previous.approvalRef === current.approvalRef
     ) {
       return Object.freeze({
         sourceRef,
@@ -146,7 +153,11 @@ export function assessKnowledgeCandidate(input: {
       sourceCount: input.observedSources.length,
     });
   }
-  if (input.observedSources.some((source) => !source.approvedForProduction)) {
+  if (
+    input.observedSources.some(
+      (source) => !source.approvedForProduction || source.approvalRef === undefined,
+    )
+  ) {
     return Object.freeze({
       decision: 'BLOCKED_UNAPPROVED_SOURCE',
       sourceCount: input.observedSources.length,
