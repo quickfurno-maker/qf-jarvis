@@ -236,6 +236,8 @@ const ARGV = [
   OUTSIDE,
   '--groq-smoke-config',
   'D:/certification/smoke.json',
+  '--knowledge-revision',
+  'knowledge.quickfurno.certification.test.v1',
 ];
 
 async function failedRun(over: Parameters<typeof harness>[0] = {}) {

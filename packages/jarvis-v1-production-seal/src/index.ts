@@ -147,6 +147,9 @@ function expectedBinding(entry: Jf5bCoverageManifest['entries'][number]): Evalua
       capabilityProfileRef: JF5B_CAPABILITY_PROFILE_REF,
       policyContractRevision: JF5B_POLICY_CONTRACT_REVISION,
       createdAt: JF5B_CREATED_AT,
+      ...(entry.knowledgeRevision === undefined
+        ? {}
+        : { knowledgeRevision: entry.knowledgeRevision }),
     });
   } catch {
     return null;
@@ -208,6 +211,16 @@ export function createJf5cProductionSeal(input: {
     const key = reviewKey(review.provider, review.agent);
     if (reviews.has(key)) return refusal('review-set-mismatch');
     reviews.set(key, review);
+  }
+
+  const manifestRevisions = manifest.entries.flatMap((entry) =>
+    entry.knowledgeRevision === undefined ? [] : [entry.knowledgeRevision],
+  );
+  if (
+    manifestRevisions.length > 0 &&
+    (manifestRevisions.length !== manifest.entries.length || new Set(manifestRevisions).size !== 1)
+  ) {
+    return refusal('binding-mismatch');
   }
 
   const manifestDigest = contentDigest(manifest);

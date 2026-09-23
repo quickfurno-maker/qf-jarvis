@@ -332,6 +332,15 @@ export async function runJf5bLiveCertificationCli(
     deps.io.err('refused: --groq-smoke-config is required by the existing Groq smoke contract');
     return stop('PRECHECK', EXIT_CODES.INVALID_USAGE, 'groq-smoke-config-missing');
   }
+  if (
+    parsed.knowledgeRevision === undefined ||
+    !/^[A-Za-z0-9._:/-]{1,128}$/u.test(parsed.knowledgeRevision) ||
+    parsed.knowledgeRevision.toLowerCase() === 'latest' ||
+    parsed.knowledgeRevision.includes('*')
+  ) {
+    deps.io.err('refused: --knowledge-revision must name one exact governed knowledge release');
+    return stop('PRECHECK', EXIT_CODES.INVALID_USAGE, 'knowledge-revision-invalid');
+  }
 
   if (!deps.facts.worktreeClean) {
     // A dirty tree means the artifacts could not name what actually ran.
@@ -409,6 +418,7 @@ export async function runJf5bLiveCertificationCli(
     groqApiKey: groq.key,
     runId: deps.runId,
     headSha: deps.facts.headSha,
+    knowledgeRevision: parsed.knowledgeRevision,
     ledger,
   });
 

@@ -95,6 +95,7 @@ export interface CertifyArgv {
   readonly executeLive: boolean;
   readonly outputDirectory: string | undefined;
   readonly groqSmokeConfig: string | undefined;
+  readonly knowledgeRevision: string | undefined;
   /** Historical compatibility only. Always empty; Nara flags are collected as unknown. */
   readonly naraCandidates: readonly string[];
   readonly unknown: readonly string[];
@@ -108,6 +109,7 @@ export function parseCertifyArgv(argv: readonly string[]): CertifyArgv {
   let executeLive = false;
   let outputDirectory: string | undefined;
   let groqSmokeConfig: string | undefined;
+  let knowledgeRevision: string | undefined;
   const unknown: string[] = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -140,6 +142,18 @@ export function parseCertifyArgv(argv: readonly string[]): CertifyArgv {
       groqSmokeConfig = arg.slice('--groq-smoke-config='.length);
       continue;
     }
+    if (arg === '--knowledge-revision') {
+      const next = argv[index + 1];
+      if (next !== undefined) {
+        knowledgeRevision = next;
+        index += 1;
+      }
+      continue;
+    }
+    if (arg.startsWith('--knowledge-revision=')) {
+      knowledgeRevision = arg.slice('--knowledge-revision='.length);
+      continue;
+    }
     unknown.push(arg);
   }
 
@@ -147,6 +161,7 @@ export function parseCertifyArgv(argv: readonly string[]): CertifyArgv {
     executeLive,
     outputDirectory,
     groqSmokeConfig,
+    knowledgeRevision,
     naraCandidates: Object.freeze([]),
     unknown: Object.freeze(unknown),
   });

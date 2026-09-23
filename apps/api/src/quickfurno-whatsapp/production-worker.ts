@@ -87,7 +87,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
   config: QuickFurnoWhatsAppProductionWorkerConfig,
 ): Promise<QuickFurnoWhatsAppProductionWorker> {
   // Seal verification happens before credential resolution, database I/O or spool claims.
-  const sealed = bindJf5cSealForProduction(config.seal, config.revision);
+  const sealed = bindJf5cSealForProduction(config.seal, config.revision, config.knowledge.revision);
   if (!sealed.ok) throw new Error(`production-seal-refused:${sealed.reason}`);
   const binding = sealed.binding;
 
@@ -234,6 +234,9 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       release: binding.release,
       promptBindings: binding.promptBindings,
       riyaConversationEvolutionPromptBinding: binding.riyaConversationEvolutionPromptBinding,
+      riyaGroundedConversationEvolutionPromptBinding:
+        binding.riyaGroundedConversationEvolutionPromptBinding,
+      riyaGroundedReplyPromptBinding: binding.riyaGroundedReplyPromptBinding,
       promptRegistry,
       capabilityProfileRef: binding.capabilityProfileRef,
       gatewayInvoker: observedGatewayInvoker,

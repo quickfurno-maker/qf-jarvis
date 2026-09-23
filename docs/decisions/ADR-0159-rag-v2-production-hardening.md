@@ -39,3 +39,13 @@ The current file spool and process-local replay protections are approved only fo
 ADR-0095 and ADR-0104 remain controlling for migrations 0011 and 0012. This ADR neither selects a retention period nor authorizes live client-project continuity in managed QF-Jarvis PostgreSQL.
 
 A superseding owner decision is still required for data classification, purpose limitation, retention and erasure before that production persistence path can be activated.
+
+## Live certification of grounded paths
+
+The production RAG composition MUST NOT rely on an ungrounded provider certification alone. JF-5B therefore carries bounded synthetic hybrid-grounding fixtures for RIYA, ANISHA and AAROHI. Those cases traverse the same runtime grounding bridge used by production, place the governed record in the model-only payload, and PASS only when the accepted structured result cites the exact supplied synthetic knowledge id/version.
+
+At least one fixture contains adversarial instruction-like document text. The document remains reference data and may not override system instructions or QuickFurno authority.
+
+Riya's evolution, grounded-evolution and grounded-reply prompt definitions intentionally have the same prompt family, version, body and digest. One accepted CLIENT evidence binding therefore names the exact reviewed bytes for all three task-class variants. Production seal binding exposes that same immutable binding to all three Riya runtime surfaces; it does not synthesize a second prompt identity.
+
+This changes the JF-5B case-set digest and therefore requires a fresh live JF-5B run, human review and JF-5C seal for the new repository SHA before production activation.

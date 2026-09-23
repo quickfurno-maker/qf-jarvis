@@ -23,6 +23,7 @@ import {
 
 const reviewDigest = 'c'.repeat(64);
 const headSha = 'd'.repeat(40);
+const knowledgeRevision = 'knowledge.quickfurno.certification.test.v1';
 
 function manifest(over: Partial<Jf5bCoverageManifest> = {}): Jf5bCoverageManifest {
   const entries = CERTIFIED_AGENTS.map((agent, index) => {
@@ -41,6 +42,7 @@ function manifest(over: Partial<Jf5bCoverageManifest> = {}): Jf5bCoverageManifes
       evaluationSuiteVersion: JF5B_EVALUATION_SUITE_VERSION,
       redTeamSuiteId: JF5B_RED_TEAM_SUITE_ID,
       fixtureManifestId: JF5B_FIXTURE_MANIFEST_ID,
+      knowledgeRevision,
       liveRunId: 'jf5b.run.groq-only.test',
       caseSetDigest: String(index + 1)
         .repeat(64)
@@ -116,6 +118,7 @@ describe('JF-5C v2 Groq-only production evidence seal', () => {
       expect(evidence.target).toBe('ACTIVE_MODEL_RELEASE');
       expect(evidence.binding.release.providerId).toBe('groq');
       expect(evidence.binding.capabilityProfileRef).toBe(JF5B_CAPABILITY_PROFILE_REF);
+      expect(evidence.binding.knowledgeRevision).toBe(knowledgeRevision);
     }
     expect(result.seal.providers[0]?.evidenceRefs).toHaveLength(3);
     expect(new Set(result.seal.providers[0]?.promptDigests).size).toBe(3);
@@ -205,5 +208,17 @@ describe('JF-5C v2 Groq-only production evidence seal', () => {
     );
     const drifted = createJf5bCoverageManifest({ ...source, entries });
     expect(seal(drifted)).toEqual({ ok: false, reason: 'binding-mismatch' });
+  });
+});
+
+describe('JF-5C knowledge revision binding', () => {
+  it('refuses a mixed knowledge revision manifest before sealing', () => {
+    const source = manifest();
+    const entries = source.entries.map((entry, index) =>
+      index === 0 ? { ...entry, knowledgeRevision: 'knowledge.quickfurno.other' } : entry,
+    );
+    expect(() => createJf5bCoverageManifest({ ...source, entries })).toThrow(
+      'invalid-coverage-manifest',
+    );
   });
 });
