@@ -347,7 +347,7 @@ describe('public API and repository invariants', () => {
     // wildcard/`latest` governance predicate, exported so the benchmark package applies the SAME
     // rule to the prompt/capability/knowledge/policy refs it owns instead of copying it. Still an
     // EXACT count; it records an authorised addition, it does not relax the assertion.
-    expect(Object.keys(barrel)).toHaveLength(35);
+    expect(Object.keys(barrel)).toHaveLength(39);
   });
 
   it('(9) the model-gateway canonical export surface is still intact', () => {
