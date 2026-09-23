@@ -14,10 +14,14 @@ import type {
   CoreDecisionOutcome,
   InboundEnvelope,
   KnowledgePort,
+  ReplyPlan,
 } from '@qf-jarvis/agent-runtime';
 import { createOrchestrator, runAgentTurn } from '@qf-jarvis/agent-runtime';
 import { createCoreDecisionAdapter } from '@qf-jarvis/core-decision-adapter';
-import { createModelReplyAdapter } from '@qf-jarvis/model-reply-adapter';
+import {
+  DEFAULT_STRUCTURED_OUTPUT_PROFILE,
+  createModelReplyAdapter,
+} from '@qf-jarvis/model-reply-adapter';
 import { RIYA_COMPLETION_BUDGET_TOKENS } from '@qf-jarvis/riya-model-interaction';
 import type {
   ModelReplyPromptBinding,
@@ -28,10 +32,14 @@ import { aarohiBehaviourPort } from './aarohi-behaviour-adapter.js';
 import { anishaBehaviourPort } from './anisha-behaviour-adapter.js';
 import { behaviourMux } from './behaviour-mux.js';
 import { assignAgent } from '@qf-jarvis/agent-runtime';
-import { createAgentGroundedKnowledgeBridge } from './riya-grounded-knowledge.js';
+import {
+  createAgentGroundedKnowledgeBridge,
+  createAgentHybridGroundedKnowledgeBridge,
+} from './riya-grounded-knowledge.js';
 import type { RiyaGroundedKnowledgeBridge } from './riya-grounded-knowledge.js';
 import {
   AGENT_KNOWLEDGE_BINDINGS,
+  hybridPolicyForActor,
   isGroundedAgentActor,
   topicsForActor,
 } from '../contracts/agent-knowledge-policy.js';
@@ -131,6 +139,41 @@ interface SharedGroundedKnowledge {
 }
 
 /**
+ * Generic reply profile for a shared grounded turn.
+ *
+ * It keeps the ordinary strict reply schema and projection byte-for-byte, changing only the user
+ * content. The reader is lazy because M2 performs retrieval before M4 builds its request.
+ */
+function sharedGroundedReplyProfile(
+  bridge: RiyaGroundedKnowledgeBridge,
+): ModelReplyStructuredOutputProfile {
+  return Object.freeze({
+    structuredSchema: DEFAULT_STRUCTURED_OUTPUT_PROFILE.structuredSchema,
+    buildUserContent(plan: ReplyPlan) {
+      const groundedKnowledge = bridge.readCaptured();
+      if (groundedKnowledge === undefined || groundedKnowledge.records.length === 0) {
+        throw new TypeError('grounded-knowledge-missing');
+      }
+      const content = JSON.stringify({
+        message: plan.normalizedText ?? '',
+        groundedKnowledge,
+      });
+      if (content.length > 16_384) {
+        throw new TypeError('grounded-knowledge-content-limit');
+      }
+      return content;
+    },
+    projectStructuredResult(value: unknown) {
+      const projected = DEFAULT_STRUCTURED_OUTPUT_PROFILE.projectStructuredResult(value);
+      if (projected?.reply.kind === 'REPLY' && projected.reply.citations.length === 0) {
+        return undefined;
+      }
+      return projected;
+    },
+  });
+}
+
+/**
  * Build the shared agent-grounded bridge for THIS turn, or `undefined` when nothing grounds.
  *
  * ### Why party type is enough to pick the policy
@@ -180,6 +223,41 @@ function sharedGroundedKnowledgeFor(
     bridge: createAgentGroundedKnowledgeBridge({ ...common, retrieval: policy.retrieval }),
     topics,
   };
+}
+
+/**
+ * Build the scalable shared hybrid bridge for this turn.
+ *
+ * The actor is derived exactly as the exact-RAG path derives it. The deployment may choose bounded
+ * search budgets and optional topic prefilters, but never scope or purpose.
+ */
+function sharedHybridGroundedKnowledgeFor(
+  config: JarvisRuntimeConfig,
+  envelope: InboundEnvelope,
+): SharedGroundedKnowledge | undefined {
+  const policy = config.agentHybridKnowledge;
+  if (policy === undefined) return undefined;
+
+  const actor = assignAgent(envelope.partyType, false, config.policy);
+  if (!isGroundedAgentActor(actor)) return undefined;
+
+  const search = hybridPolicyForActor(policy, actor);
+  if (search === undefined) return undefined;
+
+  const binding = AGENT_KNOWLEDGE_BINDINGS[actor];
+  return Object.freeze({
+    bridge: createAgentHybridGroundedKnowledgeBridge({
+      envelope,
+      topicFilters: search.topicFilters,
+      agentScope: binding.agentScope,
+      purpose: binding.purpose,
+      candidatePool: search.candidatePool,
+      maxResults: search.maxResults,
+      maxContentChars: search.maxContentChars,
+      retrieval: policy.retrieval,
+    }),
+    topics: Object.freeze([...search.topicFilters]),
+  });
 }
 
 /**
@@ -286,6 +364,14 @@ export async function composeAndProcessInternal(
   const coreStateReader = coreStateReaderFor(source, stateKey);
   const privacyGate = privacyGateFor(source, stateKey);
 
+  // ONE shared grounding bridge for THIS turn. It is constructed before M4 so the model adapter may
+  // hold a LAZY reader for content that does not exist until M2 performs retrieval.
+  const shared =
+    riya?.knowledgePort === undefined
+      ? (sharedHybridGroundedKnowledgeFor(config, envelope) ??
+        sharedGroundedKnowledgeFor(config, envelope))
+      : undefined;
+
   // M4 model reply adapter (existing gateway stays the only routing authority).
   const modelReplyAdapter =
     riya === undefined
@@ -304,6 +390,9 @@ export async function composeAndProcessInternal(
             : { evaluationPromptDigest: config.evaluationPromptDigest }),
           stateReader: replyStateReader,
           clock: config.clock,
+          ...(shared === undefined
+            ? {}
+            : { structuredOutputProfile: sharedGroundedReplyProfile(shared.bridge) }),
           ...(config.gatewayInvoker === undefined ? {} : { invoker: config.gatewayInvoker }),
         })
       : // The Riya-aware adapter. It binds the DEDICATED evolution prompt for CLIENT and nothing
@@ -358,11 +447,6 @@ export async function composeAndProcessInternal(
   // evaluated evolution definition rather than a reply-only one that happens to share the scope.
   const taskClass = riya?.taskClass ?? config.taskClass ?? DEFAULT_TASK_CLASS;
 
-  // ONE bridge for THIS turn, for whichever agent the router will select. Built here rather than in
-  // each behaviour adapter: an adapter that retrieved would be a second place deciding what reaches
-  // a model, and three of them would be three places.
-  const shared =
-    riya?.knowledgePort === undefined ? sharedGroundedKnowledgeFor(config, envelope) : undefined;
   const behaviourPort = behaviourMux({
     ...(config.behaviourInput === undefined
       ? {}

@@ -46,6 +46,10 @@
  * search.
  */
 import type { KnowledgeAgentScope, KnowledgePurpose } from '@qf-jarvis/governed-knowledge';
+import type {
+  HybridKnowledgeRetrievalResult,
+  HybridKnowledgeSearchRequest,
+} from '@qf-jarvis/knowledge-index';
 
 import type { GovernedRetrievalPort } from './runtime-config.js';
 
@@ -158,4 +162,43 @@ export function topicsForActor(
     return undefined;
   }
   return Object.freeze([...configured.topics]);
+}
+
+/** An async semantic/hybrid retrieval authority. Policy still lives in governed-knowledge. */
+export interface HybridKnowledgeRetrievalPort {
+  /** Exact immutable index release this port is bound to. Never `latest` or a wildcard. */
+  readonly knowledgeRevision: string;
+  retrieve(request: HybridKnowledgeSearchRequest): Promise<HybridKnowledgeRetrievalResult>;
+}
+
+/**
+ * Per-agent hybrid search controls. Scope and purpose remain code-closed in
+ * AGENT_KNOWLEDGE_BINDINGS and cannot be configured here.
+ */
+export interface AgentHybridKnowledgeSearchPolicy {
+  /** Empty means no topic prefilter; it does NOT mean bypass governance. */
+  readonly topicFilters: readonly string[];
+  readonly candidatePool: number;
+  readonly maxResults: number;
+  readonly maxContentChars: number;
+}
+
+/**
+ * One shared large-scale retrieval plane for all three business agents.
+ * The deployment supplies the search implementation and per-agent bounded search controls only.
+ */
+export interface AgentHybridKnowledgePolicy {
+  /** Exact release approved by the deployment; must equal the injected port's bound revision. */
+  readonly knowledgeRevision: string;
+  readonly retrieval: HybridKnowledgeRetrievalPort;
+  readonly agents: Readonly<Partial<Record<GroundedAgentActor, AgentHybridKnowledgeSearchPolicy>>>;
+}
+
+/** The hybrid search policy for an already-assigned grounded actor, or undefined. */
+export function hybridPolicyForActor(
+  policy: AgentHybridKnowledgePolicy,
+  actor: string,
+): AgentHybridKnowledgeSearchPolicy | undefined {
+  if (!isGroundedAgentActor(actor)) return undefined;
+  return policy.agents[actor];
 }

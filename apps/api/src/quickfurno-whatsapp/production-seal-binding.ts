@@ -39,6 +39,7 @@ export type ProductionSealBindingRefusal =
   | 'provider-mode-mismatch'
   | 'coverage-mismatch'
   | 'prompt-coverage-mismatch'
+  | 'knowledge-revision-mismatch'
   | 'release-mismatch';
 
 export interface ProductionSealBinding {
@@ -47,6 +48,13 @@ export interface ProductionSealBinding {
   readonly capabilityProfileRef: typeof JARVIS_V1_PRODUCTION_CAPABILITY_PROFILE_REF;
   readonly promptBindings: ModelReplyPromptBindings;
   readonly riyaConversationEvolutionPromptBinding: ModelReplyPromptBinding;
+  /**
+   * Riya's three task-class prompt definitions intentionally share one prompt family, version, body
+   * and digest. The reviewed CLIENT evidence therefore binds the grounded variants to the exact same
+   * reviewed bytes without fabricating a second prompt identity.
+   */
+  readonly riyaGroundedConversationEvolutionPromptBinding: ModelReplyPromptBinding;
+  readonly riyaGroundedReplyPromptBinding: ModelReplyPromptBinding;
   readonly evaluationEvidence: readonly ApprovalEvidence[];
   readonly productionApprovals: readonly ProductionApprovalClaim[];
 }
@@ -112,8 +120,17 @@ function stringArray(value: unknown): readonly string[] | null {
 export function bindJf5cSealForProduction(
   value: unknown,
   expectedHeadSha: string,
+  expectedKnowledgeRevision?: string,
 ): ProductionSealBindingResult {
   if (!SHA40.test(expectedHeadSha) || !record(value)) return refusal('seal-invalid');
+  if (
+    expectedKnowledgeRevision !== undefined &&
+    (!REF.test(expectedKnowledgeRevision) ||
+      expectedKnowledgeRevision.toLowerCase() === 'latest' ||
+      expectedKnowledgeRevision.includes('*'))
+  ) {
+    return refusal('knowledge-revision-mismatch');
+  }
 
   const providerDataControlsRefs = stringArray(value['providerDataControlsRefs']);
   const evidenceRaw = Array.isArray(value['evidence']) ? (value['evidence'] as unknown[]) : null;
@@ -214,9 +231,14 @@ export function bindJf5cSealForProduction(
       typeof bindingRaw['promptVersion'] !== 'number' ||
       !Number.isSafeInteger(bindingRaw['promptVersion']) ||
       typeof bindingRaw['promptDigest'] !== 'string' ||
-      !SHA256.test(bindingRaw['promptDigest'])
+      !SHA256.test(bindingRaw['promptDigest']) ||
+      (expectedKnowledgeRevision !== undefined &&
+        bindingRaw['knowledgeRevision'] !== expectedKnowledgeRevision)
     ) {
-      return refusal('release-mismatch');
+      return expectedKnowledgeRevision !== undefined &&
+        bindingRaw['knowledgeRevision'] !== expectedKnowledgeRevision
+        ? refusal('knowledge-revision-mismatch')
+        : refusal('release-mismatch');
     }
     if (releaseKey(evidenceRelease) !== releaseKey(release)) return refusal('release-mismatch');
 
@@ -291,6 +313,8 @@ export function bindJf5cSealForProduction(
       capabilityProfileRef: JARVIS_V1_PRODUCTION_CAPABILITY_PROFILE_REF,
       promptBindings: frozenBindings,
       riyaConversationEvolutionPromptBinding: promptBindings.CLIENT,
+      riyaGroundedConversationEvolutionPromptBinding: promptBindings.CLIENT,
+      riyaGroundedReplyPromptBinding: promptBindings.CLIENT,
       evaluationEvidence: Object.freeze(evidenceList),
       productionApprovals: Object.freeze(approvals),
     }),

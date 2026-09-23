@@ -322,6 +322,7 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/quickfurno-whatsapp/quickfurno-http.ts',
     'src/quickfurno-whatsapp/specialist-runtime.ts',
     'src/quickfurno-whatsapp/turn-processor.ts',
+    'src/quickfurno-whatsapp/production-observation.ts',
     // JF-7 production worker: these named files are the reviewed private WhatsApp serving boundary.
     // Naming WhatsApp buys no provider-send authority: the worker emits only a signed proposal and
     // QuickFurno re-authorizes it at /whatsapp-reply.
@@ -333,6 +334,7 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/quickfurno-whatsapp/production-worker-config.ts',
     'src/quickfurno-whatsapp/production-worker.ts',
     'src/tests/quickfurno-whatsapp-authority-state-port.test.ts',
+    'src/tests/quickfurno-whatsapp-production-observation.test.ts',
     'src/tests/quickfurno-whatsapp-deployment-containment.test.ts',
     'src/tests/quickfurno-whatsapp-production-seal-binding.test.ts',
     'src/tests/quickfurno-whatsapp-production-worker.test.ts',
@@ -495,7 +497,7 @@ describe('(133-148) the declared budget and every prior lock', () => {
     }
   });
 
-  it('(140) no new package or app was created', () => {
+  it('(140) package and app sets remain exact, including reviewed ADR additions', () => {
     const dirs = (relative: string): string[] =>
       readdirSync(join(REPO_ROOT, relative))
         .filter((entry) => statSync(join(REPO_ROOT, relative, entry)).isDirectory())
@@ -609,10 +611,16 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // authority, it reaches no database, and a live provider call needs an explicit flag AND a
       // phrase typed at a terminal.
       'jarvis-v1-provider-certification-live',
+      // ADR-0158: the shared provider-neutral hybrid retrieval core and deterministic ingestion plane.
+      // These additions are explicit and exact; they add no agent-specific authority or serving app.
+      'knowledge-index',
+      'knowledge-ingestion',
       'model-evaluation',
       'model-gateway',
       'model-gateway-composition',
       'model-reply-adapter',
+      // ADR-0158: bounded OpenAI-compatible embedding transport. Policy remains in knowledge-index.
+      'openai-compatible-embedding-adapter',
       // QFJ-P08 (ADR-0081): the durable approval queue and audit. Still an EXACT set match -- this
       // records an authorised addition, it does not relax the assertion.
       'postgres-approval-queue',
@@ -624,6 +632,8 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // EXACT set match; it records an authorised addition, it does not relax the assertion. It is
       // TRANSPORT-NEUTRAL: no endpoint, no QuickFurno Core Automation, no provider, no credential, no intent payload.
       'postgres-execution-replay-store',
+      // ADR-0158: immutable PostgreSQL full-text + pgvector index and sealed-release pointer.
+      'postgres-knowledge-index',
       // RWC-P2B (ADR-0095): the durable PostgreSQL Riya conversation-continuity store -- the
       // implementation of the port RWC-P2C declared and deliberately left injected with no default.
       // Still an EXACT set match; it records an authorised addition, it does not relax the
@@ -755,6 +765,8 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // service with no ingress: no HTTP server, route, public endpoint, browser reachability,
       // database, migration, provider or live send, and nothing imports it.
       'riya-web-conversation-service',
+      // ADR-0159: pure content-free wire contract for read-only worker observations.
+      'worker-observation-contract',
     ]);
     // JOS-01A (docs/architecture/jarvis-os.md): the Jarvis OS operator control plane. Still an
     // EXACT set match -- this records authorised additions, it does not relax the assertion.
@@ -823,7 +835,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
 
   it('(141-148) every prior package-root runtime API lock still holds', async () => {
     const expected: Readonly<Record<string, number>> = {
-      'model-evaluation': 35,
+      // ADR-0160: 35 -> 41 for pure evaluation-impact plus model/embedding cost intelligence.
+      // No provider transport, activation authority, secret, environment read or business action.
+      'model-evaluation': 41,
       // MVP-P2A.2 HF4-R7: 71 -> 74 for the Groq strict-schema projection —
       // `projectGroqStrictJsonSchema`, `renderStructuredJsonSchema`, `GROQ_STRICT_PROJECTION_REASONS`.
       // Restated exactly; the count is still pinned.

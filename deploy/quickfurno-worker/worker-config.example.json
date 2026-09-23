@@ -1,6 +1,8 @@
 {
   "revision": "0000000000000000000000000000000000000000",
+  "deploymentMode": "SINGLE_OWNER",
   "sealFile": "/run/secrets/jf5c-production-seal.json",
+  "riyaPersistenceDecisionFile": "/run/secrets/riya-persistence-owner-decision.json",
   "groqCredentialReference": "groq.qfj.production.v1",
   "groqCredentialFile": "/run/secrets/groq-production.key",
   "database": {
@@ -9,19 +11,49 @@
     "connectionTimeoutMillis": 10000,
     "idleTimeoutMillis": 30000,
     "statementTimeoutMillis": 30000,
-    "tls": {
-      "mode": "verify-full",
-      "caFile": "/run/secrets/postgres-ca.pem"
-    }
+    "tls": { "mode": "verify-full", "caFile": "/run/secrets/postgres-ca.pem" }
   },
   "quickfurno": {
     "baseUrl": "https://REPLACE_AT_DEPLOYMENT/",
     "keyId": "REPLACE_AT_DEPLOYMENT",
-    "privateKeyPem": "REPLACE_AT_DEPLOYMENT",
+    "privateKeyFile": "/run/secrets/quickfurno-signing.key",
     "timeoutMs": 5000
+  },
+  "knowledge": {
+    "revision": "knowledge.quickfurno.REPLACE_EXACT",
+    "embedding": {
+      "executionClass": "HOSTED",
+      "endpoint": "https://REPLACE_AT_DEPLOYMENT/v1/embeddings",
+      "modelRef": "REPLACE_EXACT_MODEL",
+      "credentialFile": "/run/secrets/embedding-production.key",
+      "timeoutMs": 20000,
+      "maxBatchItems": 64,
+      "maxInputChars": 64000
+    },
+    "agents": {
+      "RIYA": {
+        "topicFilters": [],
+        "candidatePool": 64,
+        "maxResults": 8,
+        "maxContentChars": 12000
+      },
+      "ANISHA": {
+        "topicFilters": [],
+        "candidatePool": 64,
+        "maxResults": 8,
+        "maxContentChars": 12000
+      },
+      "AAROHI": {
+        "topicFilters": [],
+        "candidatePool": 64,
+        "maxResults": 8,
+        "maxContentChars": 12000
+      }
+    }
   },
   "spoolDirectory": "/var/lib/qfj-turns",
   "killSwitchFile": "/var/run/qfj-control/DISABLE_MODEL",
+  "operationalSnapshotFile": "/var/run/qfj-observability/whatsapp-worker.json",
   "runtimeId": "qfj.whatsapp.production.v1",
   "policyRevision": "policy.quickfurno.production.v1",
   "idlePollMs": 500,

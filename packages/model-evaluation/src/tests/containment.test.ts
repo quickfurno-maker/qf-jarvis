@@ -242,11 +242,35 @@ describe('observability and authority', () => {
     expect(refused).toEqual({ ok: false, code: 'evidence-digest-invalid' });
   });
 
-  it('(56) implements no semantic retrieval — the target is a research label only', () => {
+  it('(56) implements no semantic retrieval — cost accounting does not weaken that boundary', () => {
     expect([...EVALUATION_APPROVAL_TARGETS]).toContain('SEMANTIC_RETRIEVAL_RESEARCH_ELIGIBILITY');
     for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
-      expect(text).not.toMatch(/embedding|vector|cosine|\bRAG\b/i);
+      const path = file.replaceAll('\\', '/');
+
+      if (path.endsWith('/src/service/cost-efficiency.ts')) {
+        // ADR-0160 may NAME embedding usage as a billing unit, but this module must still have
+        // no retrieval implementation, vector math, embedding execution port or RAG dependency.
+        expect(text, file).not.toMatch(/vector|cosine|\bRAG\b|retriev/i);
+        expect(text, file).not.toMatch(
+          /@qf-jarvis\/(knowledge-index|openai-compatible-embedding-adapter)/,
+        );
+        expect(text, file).not.toMatch(/\bembed\s*\(/i);
+        continue;
+      }
+
+      if (path.endsWith('/src/index.ts')) {
+        // The root may re-export the reviewed billing vocabulary. Remove only lines that name that
+        // vocabulary before applying the original lexical retrieval lock to everything else.
+        const retrievalSurface = text
+          .split('\n')
+          .filter((line) => !/embedding/i.test(line))
+          .join('\n');
+        expect(retrievalSurface, file).not.toMatch(/vector|cosine|\bRAG\b/i);
+        continue;
+      }
+
+      expect(text, file).not.toMatch(/embedding|vector|cosine|\bRAG\b/i);
     }
   });
 });
@@ -294,6 +318,7 @@ describe('containment', () => {
       'EVALUATION_DATA_CLASSES',
       'EVALUATION_ERROR_CODES',
       'EVALUATION_EXECUTION_CLASSES',
+      'EVALUATION_IMPACT_DIMENSIONS',
       'EVALUATION_OUTCOMES',
       'EVALUATION_REASONS',
       'EVALUATION_SEVERITIES',
@@ -306,6 +331,8 @@ describe('containment', () => {
       'RED_TEAM_CASE_KINDS',
       'actionScopes',
       'bindingsMatch',
+      'chooseCostEfficientQualifiedCandidate',
+      'classifyEvaluationImpact',
       'contentDigest',
       'createApprovalEvidence',
       'createCandidateObservation',
@@ -317,6 +344,9 @@ describe('containment', () => {
       'createProviderReleaseRef',
       'createSuiteThresholds',
       'dataClassRank',
+      'estimateConversationCostUsd',
+      'estimateEmbeddingCostUsd',
+      'estimateModelCostUsd',
       'evaluateSuite',
       // RMB-A: the exactness predicate, shared so "exact identity" has one definition.
       'isExactGovernedIdentity',

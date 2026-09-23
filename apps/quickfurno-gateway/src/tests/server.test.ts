@@ -85,6 +85,14 @@ function memoryTurnSpool() {
     fail: () => Promise.resolve(),
     release: () => Promise.resolve(),
     recoverStale: () => Promise.resolve(0),
+    snapshot: () =>
+      Promise.resolve({
+        pending: records.size,
+        processing: 0,
+        completed: 0,
+        failed: 0,
+        oldestPendingAgeMs: null,
+      }),
   });
   return { spool, records };
 }

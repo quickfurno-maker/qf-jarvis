@@ -100,12 +100,14 @@ const JF7_CONFIG = 'src/quickfurno-whatsapp/production-worker-config.ts';
 const JF7_KILL_SWITCH = 'src/quickfurno-whatsapp/production-kill-switch.ts';
 const JF7_NETWORK = 'src/quickfurno-whatsapp/production-network.ts';
 const JF7_WORKER = 'src/quickfurno-whatsapp/production-worker.ts';
+const JF7_OBSERVATION = 'src/quickfurno-whatsapp/production-observation.ts';
 const JF7_FILES: readonly string[] = Object.freeze([
   JF7_BIN,
   JF7_CONFIG,
   JF7_KILL_SWITCH,
   JF7_NETWORK,
   JF7_WORKER,
+  JF7_OBSERVATION,
 ]);
 const isJf7File = (f: string, only: readonly string[] = JF7_FILES): boolean =>
   only.some((one) => normalise(f).endsWith(`/${one}`));
@@ -302,6 +304,15 @@ describe('(68) node:fs is confined to one designated adapter', () => {
         expect(code, file).toMatch(/import \{ statSync \} from 'node:fs'/);
         continue;
       }
+      if (isJf7File(file, [JF7_OBSERVATION])) {
+        expect(code, file).toMatch(
+          /import \{ mkdir, rename, writeFile \} from 'node:fs\/promises'/,
+        );
+        // This is the ONE reviewed production file writer: it emits only the strict, content-free
+        // worker observation contract and has no credential-reading primitive.
+        expect(code, file).not.toMatch(/readFile|open\(|createReadStream/);
+        continue;
+      }
       expect(code).not.toMatch(/from ['"]node:fs(\/promises)?['"]/);
     }
   });
@@ -432,6 +443,18 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         // `openai/gpt-oss-20b`. The rule this list enforces is "no vendor SDK, no vendor client" --
         // naming the exact model a certification run measured is the opposite of that failure, and a
         // floating alias would be the real one. The narrow exception is the model-id constant.
+        if (
+          forbidden === 'openai' &&
+          isJf7File(file, [JF7_WORKER]) &&
+          code.includes('@qf-jarvis/openai-compatible-embedding-adapter')
+        ) {
+          // ADR-0159: production RAG uses our provider-neutral OpenAI-compatible embeddings protocol
+          // adapter. This exception authorizes only that exact workspace package name; the serving
+          // boundary still may not import the OpenAI SDK/client or name any OpenAI credential.
+          expect(code, file).not.toContain("from 'openai'");
+          expect(code, file).not.toContain('openai.com');
+          continue;
+        }
         if (forbidden === 'openai' && isJf5bFile(file, [JF5B_RUNNER_IMPL])) {
           // CANDIDATE UPDATED, rule unchanged (JF-5B-R10). The rule is "a model id may be hard-coded in
           // exactly one JF-5B constant and nowhere else", and that is untouched. What changed is WHICH
@@ -653,12 +676,18 @@ describe('the staging smoke stays out of the production boundary', () => {
       '@qf-jarvis/jarvis-v1-production-profile',
       '@qf-jarvis/jarvis-v1-production-seal',
       '@qf-jarvis/jarvis-v1-provider-certification-live',
+      // ADR-0159 production RAG composition: the API worker owns the hybrid retriever, the
+      // provider-neutral embedding adapter, and the PostgreSQL implementation. All three are existing
+      // workspace packages and add no third-party SDK/client dependency to the serving boundary.
+      '@qf-jarvis/knowledge-index',
       '@qf-jarvis/model-evaluation',
       '@qf-jarvis/model-gateway',
       '@qf-jarvis/model-gateway-composition',
       '@qf-jarvis/model-reply-adapter',
+      '@qf-jarvis/openai-compatible-embedding-adapter',
       '@qf-jarvis/postgres-approval-queue',
       '@qf-jarvis/postgres-conversation-state',
+      '@qf-jarvis/postgres-knowledge-index',
       // JF-6 serving composition: these are the existing durable implementations of the two ports
       // Riya already requires. They receive the caller-owned pool and add no environment authority.
       '@qf-jarvis/postgres-riya-conversation-continuity-store',
@@ -671,6 +700,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       '@qf-jarvis/rag-provisioning',
       '@qf-jarvis/riya-prompts',
       '@qf-jarvis/riya-web-conversation-service',
+      // ADR-0159: pure, strict content-free telemetry schema shared by the private worker writer and
+      // Jarvis OS reader. It grants no database, provider, transport or business authority.
+      '@qf-jarvis/worker-observation-contract',
       // Exact Temporal client version is pinned in the app manifest; it is used only by the native
       // durable-orchestration client and does not grant business authority.
       '@temporalio/client',
@@ -768,7 +800,11 @@ describe('(71-77) package API and dependency locks are untouched', () => {
 
   it('(73-77) every package-root runtime API count is unchanged', async () => {
     const expected: Readonly<Record<string, number>> = {
-      'model-evaluation': 35,
+      // ADR-0160: 35 -> 41. Production intelligence adds six pure, authority-free root
+      // functions/constants: evaluation-impact classification plus evidence-gated model, embedding
+      // and combined cost estimation/selection. No transport, secret, environment read, serving
+      // mutation or approval authority.
+      'model-evaluation': 41,
       // MVP-P2A.2 HF4-R7: 71 -> 74. The Groq strict-schema projection —
       // `projectGroqStrictJsonSchema`, `renderStructuredJsonSchema`, `GROQ_STRICT_PROJECTION_REASONS`.
       // RUN S9's nine ordinary safety requests were rejected HTTP 400 because the raw Zod rendering

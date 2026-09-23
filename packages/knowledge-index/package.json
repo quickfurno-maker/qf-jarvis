@@ -1,0 +1,27 @@
+{
+  "name": "@qf-jarvis/knowledge-index",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Provider-neutral hybrid lexical/vector retrieval, deterministic fusion/reranking, and final governed-knowledge authorization for Jarvis.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/governed-knowledge": "workspace:*",
+    "@qf-jarvis/knowledge-ingestion": "workspace:*"
+  }
+}

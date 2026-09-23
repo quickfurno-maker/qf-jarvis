@@ -190,8 +190,9 @@ describe('secret containment in application source', () => {
     const loader = readFileSync(join(authDir, 'config/loader.ts'), 'utf8');
     // The only variable, and it holds a path rather than any secret material.
     expect(loader).toContain("AUTH_CONFIG_PATH_VAR = 'QFJ_JOS_AUTH_CONFIG_FILE'");
+    expect(loader).toContain("WORKER_OBSERVATION_PATH_VAR = 'QFJ_WORKER_OBSERVATION_FILE'");
     const envReads = loader.match(/process\.env\[/gu) ?? [];
-    expect(envReads).toHaveLength(1);
+    expect(envReads).toHaveLength(2);
   });
 
   it('imports node:fs only in the auth config loader', () => {
@@ -202,7 +203,11 @@ describe('secret containment in application source', () => {
         continue;
       }
       const code = readFileSync(file, 'utf8');
-      if (/from '(node:)?fs/u.test(code) && relative !== 'server/auth/config/loader.ts') {
+      if (
+        /from '(node:)?fs/u.test(code) &&
+        relative !== 'server/auth/config/loader.ts' &&
+        relative !== 'server/control-plane/sources/worker-observation-source.ts'
+      ) {
         offenders.push(relative);
       }
     }

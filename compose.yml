@@ -35,7 +35,7 @@ name: qf-jarvis-dev
 services:
   postgres:
     # Pinned to an exact PostgreSQL 17 patch release. `postgres:17` would drift.
-    image: postgres:17.10-alpine
+    image: pgvector/pgvector:0.8.6-pg17-trixie@sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6
     container_name: qf-jarvis-postgres-dev
 
     environment:

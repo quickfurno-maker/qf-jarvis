@@ -36,6 +36,7 @@
     // authority. Deterministic, exact, bounded and citation-required; it reaches nothing itself and
     // brings no retrieval engine, no index and no embedding with it.
     { "path": "../governed-knowledge/tsconfig.build.json" },
+    { "path": "../knowledge-index/tsconfig.build.json" },
     { "path": "../anisha-agent/tsconfig.build.json" },
     // JF-4C (ADR-0150): the existing Aarohi AVG domain. ONE edge, for ONE evaluator.
     { "path": "../aarohi-agent/tsconfig.build.json" },

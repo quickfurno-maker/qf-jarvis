@@ -7,11 +7,8 @@ import { buildControlPlaneSnapshot, buildControlPlaneSnapshotV2 } from './build-
 import { baselineSections } from './repository-baseline';
 import { assertOwnershipIsWellFormed } from './sources/compose';
 import { normalizeResult } from './sources/normalize';
-import {
-  ADOPTED_READ_SOURCES,
-  type CollectedObservation,
-  type ReadSourceDescriptor,
-} from './sources/read-source';
+import { ADOPTED_READ_SOURCES } from './sources/adopted';
+import type { CollectedObservation, ReadSourceDescriptor } from './sources/read-source';
 
 /**
  * The request-scoped snapshot boundary (JOS-01E, ADR-0089).

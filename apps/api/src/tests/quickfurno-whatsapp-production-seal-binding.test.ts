@@ -20,6 +20,7 @@ import { bindJf5cSealForProduction } from '../quickfurno-whatsapp/production-sea
 
 const HEAD = 'd'.repeat(40);
 const REVIEW_DIGEST = 'c'.repeat(64);
+const KNOWLEDGE_REVISION = 'knowledge.quickfurno.release.1';
 
 function buildSeal() {
   const manifest = createJf5bCoverageManifest({
@@ -45,6 +46,7 @@ function buildSeal() {
         evaluationSuiteVersion: JF5B_EVALUATION_SUITE_VERSION,
         redTeamSuiteId: JF5B_RED_TEAM_SUITE_ID,
         fixtureManifestId: JF5B_FIXTURE_MANIFEST_ID,
+        knowledgeRevision: KNOWLEDGE_REVISION,
         liveRunId: 'jf5b.run.worker.test',
         caseSetDigest: String(index + 1).repeat(64),
         resultDigest: String(index + 4).repeat(64),
@@ -79,13 +81,18 @@ function buildSeal() {
 
 describe('QuickFurno production seal binding', () => {
   it('derives exactly three prompt-scoped approvals from one exact Groq release', () => {
-    const result = bindJf5cSealForProduction(buildSeal(), HEAD);
+    const result = bindJf5cSealForProduction(buildSeal(), HEAD, KNOWLEDGE_REVISION);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
     expect(result.binding.release.providerId).toBe('groq');
     expect(result.binding.release.modelId).toBe('openai/gpt-oss-120b');
     expect(result.binding.productionApprovals).toHaveLength(3);
+    expect(
+      result.binding.evaluationEvidence.every(
+        (one) => one.binding.knowledgeRevision === KNOWLEDGE_REVISION,
+      ),
+    ).toBe(true);
     expect(result.binding.evaluationEvidence).toHaveLength(3);
     expect(new Set(result.binding.productionApprovals.map((one) => one.evaluationRef)).size).toBe(
       3,
@@ -102,6 +109,18 @@ describe('QuickFurno production seal binding', () => {
     expect(result.binding.riyaConversationEvolutionPromptBinding).toBe(
       result.binding.promptBindings.CLIENT,
     );
+    expect(result.binding.riyaGroundedConversationEvolutionPromptBinding).toBe(
+      result.binding.promptBindings.CLIENT,
+    );
+    expect(result.binding.riyaGroundedReplyPromptBinding).toBe(
+      result.binding.promptBindings.CLIENT,
+    );
+  });
+
+  it('refuses a seal certified for a different governed knowledge revision', () => {
+    expect(
+      bindJf5cSealForProduction(buildSeal(), HEAD, 'knowledge.quickfurno.release.other'),
+    ).toEqual({ ok: false, reason: 'knowledge-revision-mismatch' });
   });
 
   it('refuses a seal from a different repository head', () => {

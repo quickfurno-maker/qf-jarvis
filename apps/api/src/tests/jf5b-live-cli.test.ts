@@ -30,6 +30,7 @@ import {
 const REPO = 'C:/repo/qf-jarvis-jf5b';
 const OUTSIDE = 'D:/jarvis-certification/JF-5B/groq-only-test';
 const REVIEW_DIGEST = 'c'.repeat(64);
+const KNOWLEDGE_REVISION = 'knowledge.quickfurno.certification.test.v1';
 
 const FULL_ARGV = [
   '--execute-live',
@@ -37,6 +38,8 @@ const FULL_ARGV = [
   OUTSIDE,
   '--groq-smoke-config',
   'D:/certification/smoke.json',
+  '--knowledge-revision',
+  KNOWLEDGE_REVISION,
 ] as const;
 
 function manifest() {
@@ -63,6 +66,7 @@ function manifest() {
         evaluationSuiteVersion: JF5B_EVALUATION_SUITE_VERSION,
         redTeamSuiteId: JF5B_RED_TEAM_SUITE_ID,
         fixtureManifestId: JF5B_FIXTURE_MANIFEST_ID,
+        knowledgeRevision: KNOWLEDGE_REVISION,
         liveRunId: 'run.jf5b.groq-only.test',
         caseSetDigest: String(index + 1).repeat(64),
         resultDigest: String(index + 4).repeat(64),
@@ -241,7 +245,15 @@ describe('JF-5B-R25 Groq-only operator gates', () => {
     expect(
       (
         await runJf5bLiveCertificationCli(
-          ['--execute-live', '--output-dir', `${REPO}/out`, '--groq-smoke-config', 'D:/c.json'],
+          [
+            '--execute-live',
+            '--output-dir',
+            `${REPO}/out`,
+            '--groq-smoke-config',
+            'D:/c.json',
+            '--knowledge-revision',
+            KNOWLEDGE_REVISION,
+          ],
           inside.deps,
         )
       ).reason,
@@ -334,5 +346,23 @@ describe('JF-5B-R25 Groq-only execution', () => {
     expect(text).not.toContain('nara api key');
     expect(text).not.toContain('/v1/models');
     expect(text).not.toContain('router.bynara.id');
+  });
+});
+
+describe('JF-5B exact knowledge revision gate', () => {
+  it('refuses missing or floating knowledge revisions before provider work', async () => {
+    const missing = harness();
+    const missingArgv = FULL_ARGV.slice(0, -2);
+    const missingOutcome = await runJf5bLiveCertificationCli(missingArgv, missing.deps);
+    expect(missingOutcome.reason).toBe('knowledge-revision-invalid');
+    expect([missing.seen.groqRuns, missing.seen.certifyGroqOnlyCalls]).toEqual([0, 0]);
+
+    const floating = harness();
+    const floatingOutcome = await runJf5bLiveCertificationCli(
+      [...FULL_ARGV.slice(0, -1), 'latest'],
+      floating.deps,
+    );
+    expect(floatingOutcome.reason).toBe('knowledge-revision-invalid');
+    expect([floating.seen.groqRuns, floating.seen.certifyGroqOnlyCalls]).toEqual([0, 0]);
   });
 });

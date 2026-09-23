@@ -246,6 +246,10 @@ describe('public API lock', () => {
       // knowledge authority. A contract and a registry; it reaches nothing itself and brings no
       // retrieval engine, no index and no embedding with it.
       '@qf-jarvis/governed-knowledge',
+      // ADR-0158: provider-neutral hybrid search contracts and deterministic ranking only. The
+      // runtime still imports no database/provider implementation; authority remains above in
+      // governed-knowledge and the concrete store/embedding ports stay injected.
+      '@qf-jarvis/knowledge-index',
       '@qf-jarvis/model-reply-adapter',
       // QFJ-S3-I-B (ADR-0073): the injected prompt registry. Still an EXACT set match.
       '@qf-jarvis/prompt-registry',

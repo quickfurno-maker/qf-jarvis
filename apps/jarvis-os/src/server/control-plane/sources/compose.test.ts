@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildControlPlaneSnapshot } from '../build-snapshot';
@@ -7,7 +8,6 @@ import { baselineSections } from '../repository-baseline';
 
 import { ReadSourceCompositionError, composeSections, type ObservationWindow } from './compose';
 import {
-  ADOPTED_READ_SOURCES,
   SECTIONS_CLOSED_TO_ADAPTERS,
   type CollectedObservation,
   type ControlPlaneSectionName,
@@ -15,6 +15,7 @@ import {
   type ReadSourceResult,
   type SectionContributions,
 } from './read-source';
+import { createAdoptedReadSources } from './adopted';
 
 /**
  * Progressive read-source composition (JOS-01E, ADR-0089).
@@ -98,10 +99,14 @@ const build = (collected: readonly CollectedObservation[]) =>
   });
 
 describe('the adopted registry', () => {
-  it('adopts no source in this release', () => {
-    // Not a placeholder: nothing in merged main is reachable from Jarvis OS without crossing a
-    // boundary this phase may not cross. Inventing one would be the only way to make it non-empty.
-    expect(ADOPTED_READ_SOURCES).toHaveLength(0);
+  it('adopts no source when the observation path is not configured', () => {
+    expect(createAdoptedReadSources(undefined)).toHaveLength(0);
+  });
+
+  it('adopts exactly the read-only worker observation source when explicitly configured', () => {
+    const adopted = createAdoptedReadSources(resolve('worker-observation.json'));
+    expect(adopted).toHaveLength(1);
+    expect(adopted[0]?.id).toBe('quickfurno-whatsapp-worker-observation');
   });
 
   it('leaves the default snapshot exactly as the repository baseline', () => {

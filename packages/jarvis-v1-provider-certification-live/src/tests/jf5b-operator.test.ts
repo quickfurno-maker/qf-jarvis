@@ -255,6 +255,7 @@ describe('JF-5B (C) live execution needs BOTH gates', () => {
     expect(Object.keys(parsed).sort()).toEqual([
       'executeLive',
       'groqSmokeConfig',
+      'knowledgeRevision',
       // JF-5B-R3 adds one NON-SECRET repeatable switch, and it names models to PROBE -- never a
       // winner, never a provider, never a credential. The scorer still chooses.
       'naraCandidates',

@@ -28,8 +28,19 @@ import type { AuthConfigV1 } from './schema';
  * synchronous read of a file the OS already has in page cache.
  */
 
-/** The one environment variable this application reads. It contains a path, never a secret. */
+/** The only environment variables this application reads. Both contain paths, never secrets. */
 export const AUTH_CONFIG_PATH_VAR = 'QFJ_JOS_AUTH_CONFIG_FILE';
+export const WORKER_OBSERVATION_PATH_VAR = 'QFJ_WORKER_OBSERVATION_FILE';
+
+/**
+ * Read the optional content-free worker observation path through the same reviewed environment
+ * boundary as authentication configuration. Keeping this here prevents operational adapters from
+ * growing their own ambient configuration channels.
+ */
+export function readWorkerObservationPathFromEnvironment(): string | undefined {
+  const value = process.env[WORKER_OBSERVATION_PATH_VAR];
+  return value === undefined || value.trim() === '' ? undefined : value;
+}
 
 export interface LoaderOptions {
   /** Injected for tests. Production passes nothing and the real environment is read. */

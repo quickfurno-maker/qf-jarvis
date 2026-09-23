@@ -60,7 +60,7 @@ const NEUTRAL_BODY =
  * ask for genuinely different shapes, and a fake that always returned one of them would quietly prove
  * that only one of the two paths was ever exercised.
  */
-function answerFor(body: string, replyBody: string): string {
+function answerFor(body: string, replyBody: string, citeGrounded = true): string {
   const parsed = JSON.parse(body) as {
     response_format?: { json_schema?: { schema?: { properties?: Record<string, unknown> } } };
     messages?: readonly { readonly role: string; readonly content: string }[];
@@ -71,12 +71,37 @@ function answerFor(body: string, replyBody: string): string {
   // assuming a schema it was never sent. Without this, the Nara side of Riya's certification would
   // look broken when what was really broken was the double.
   const system = parsed.messages?.find((one) => one.role === 'system')?.content ?? '';
+  const citations: readonly { readonly knowledgeId: string; readonly version: number }[] = (() => {
+    if (!citeGrounded) return [];
+    for (const message of parsed.messages ?? []) {
+      if (message.role !== 'user') continue;
+      let payload: unknown;
+      try {
+        payload = JSON.parse(message.content) as unknown;
+      } catch {
+        continue;
+      }
+      if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) continue;
+      const grounded = (payload as Record<string, unknown>)['groundedKnowledge'];
+      if (typeof grounded !== 'object' || grounded === null || Array.isArray(grounded)) continue;
+      const rawRecords: unknown = (grounded as Record<string, unknown>)['records'];
+      if (!Array.isArray(rawRecords)) continue;
+      const records = rawRecords as readonly unknown[];
+      const first: unknown = records[0];
+      if (typeof first !== 'object' || first === null || Array.isArray(first)) continue;
+      const record = first as Record<string, unknown>;
+      if (typeof record['knowledgeId'] === 'string' && typeof record['version'] === 'number') {
+        return [{ knowledgeId: record['knowledgeId'], version: record['version'] }];
+      }
+    }
+    return [];
+  })();
   const wantsEvolution =
     Object.prototype.hasOwnProperty.call(properties, 'evolution') ||
     system.startsWith('You are Riya,');
   if (wantsEvolution) {
     return JSON.stringify({
-      reply: { kind: 'REPLY', replyBody, reasonCode: null, citations: [] },
+      reply: { kind: 'REPLY', replyBody, reasonCode: null, citations },
       evolution: {
         observations: { sets: [], clears: [] },
         skipProjectDetails: false,
@@ -88,7 +113,7 @@ function answerFor(body: string, replyBody: string): string {
   }
   // The GENERIC wire shape: every property present, the semantically-optional one explicitly null.
   // A strict endpoint has no concept of an absent key, so "no reason code" has to be said.
-  return JSON.stringify({ kind: 'REPLY', replyBody, reasonCode: null, citations: [] });
+  return JSON.stringify({ kind: 'REPLY', replyBody, reasonCode: null, citations });
 }
 
 function chatCompletion(content: string): string {
@@ -121,7 +146,7 @@ interface Wire {
 }
 
 /** Deterministic transports. They open no socket, and they count what they were asked to send. */
-function wire(replyBody: string = NEUTRAL_BODY): Wire {
+function wire(replyBody: string = NEUTRAL_BODY, citeGrounded = true): Wire {
   const counts = { groq: 0, nara: 0 };
   const urls: string[] = [];
   return {
@@ -135,7 +160,7 @@ function wire(replyBody: string = NEUTRAL_BODY): Wire {
         return Promise.resolve({
           status: 200,
           retryAfterSeconds: null,
-          bodyText: chatCompletion(answerFor(request.body, replyBody)),
+          bodyText: chatCompletion(answerFor(request.body, replyBody, citeGrounded)),
         });
       },
     },
@@ -146,7 +171,7 @@ function wire(replyBody: string = NEUTRAL_BODY): Wire {
         return Promise.resolve({
           status: 200,
           retryAfterSeconds: null,
-          bodyText: chatCompletion(answerFor(request.body, replyBody)),
+          bodyText: chatCompletion(answerFor(request.body, replyBody, citeGrounded)),
         });
       },
     },
@@ -183,6 +208,8 @@ function brokenWire(): Wire {
     },
   };
 }
+
+const KNOWLEDGE_REVISION = 'knowledge.quickfurno.certification.test.v1';
 
 const budget = () =>
   createCallLedger(
@@ -221,6 +248,7 @@ describe('JF-5B-R25 current Groq-only certification path', () => {
       groqApiKey: GROQ_KEY,
       runId: RUN_ID,
       headSha: HEAD,
+      knowledgeRevision: KNOWLEDGE_REVISION,
       ledger,
     });
 
@@ -245,6 +273,34 @@ describe('JF-5B-R25 current Groq-only certification path', () => {
     expect(result.manifest.dataControlsRefs).toEqual([GROQ_DATA_CONTROLS_REF]);
     expect(result.manifest.entries).toHaveLength(3);
     expect(result.manifest.entries.every((entry) => entry.provider === 'groq')).toBe(true);
+    expect(
+      result.manifest.entries.every((entry) => entry.knowledgeRevision === KNOWLEDGE_REVISION),
+    ).toBe(true);
+  });
+  it('fails every grounded live case when the provider omits the exact retrieved citation', async () => {
+    const seams = wire(NEUTRAL_BODY, false);
+    const result = await createJf5bCertificationRunner({
+      groqTransport: seams.groq,
+      naraTransport: seams.nara,
+    }).certifyGroqOnly({
+      groqApiKey: GROQ_KEY,
+      runId: RUN_ID,
+      headSha: HEAD,
+      knowledgeRevision: KNOWLEDGE_REVISION,
+      ledger: budget(),
+    });
+
+    const groundedIds = new Set(
+      JF5B_CASES.filter((one) => one.grounding !== undefined).map((one) => one.caseId),
+    );
+    const grounded = result.cases.filter((one) => groundedIds.has(one.caseId));
+    expect(grounded).toHaveLength(3);
+    expect(
+      grounded.every(
+        (one) => one.outcome === 'FAIL' && one.reason === 'grounding-citation-missing',
+      ),
+    ).toBe(true);
+    expect(result.ok).toBe(false);
   });
 });
 

@@ -86,6 +86,9 @@ importers:
       '@qf-jarvis/jarvis-v1-provider-certification-live':
         specifier: workspace:*
         version: link:../../packages/jarvis-v1-provider-certification-live
+      '@qf-jarvis/knowledge-index':
+        specifier: workspace:*
+        version: link:../../packages/knowledge-index
       '@qf-jarvis/model-evaluation':
         specifier: workspace:*
         version: link:../../packages/model-evaluation
@@ -98,12 +101,18 @@ importers:
       '@qf-jarvis/model-reply-adapter':
         specifier: workspace:*
         version: link:../../packages/model-reply-adapter
+      '@qf-jarvis/openai-compatible-embedding-adapter':
+        specifier: workspace:*
+        version: link:../../packages/openai-compatible-embedding-adapter
       '@qf-jarvis/postgres-approval-queue':
         specifier: workspace:*
         version: link:../../packages/postgres-approval-queue
       '@qf-jarvis/postgres-conversation-state':
         specifier: workspace:*
         version: link:../../packages/postgres-conversation-state
+      '@qf-jarvis/postgres-knowledge-index':
+        specifier: workspace:*
+        version: link:../../packages/postgres-knowledge-index
       '@qf-jarvis/postgres-riya-conversation-continuity-store':
         specifier: workspace:*
         version: link:../../packages/postgres-riya-conversation-continuity-store
@@ -125,6 +134,9 @@ importers:
       '@qf-jarvis/riya-web-conversation-service':
         specifier: workspace:*
         version: link:../../packages/riya-web-conversation-service
+      '@qf-jarvis/worker-observation-contract':
+        specifier: workspace:*
+        version: link:../../packages/worker-observation-contract
       '@temporalio/client':
         specifier: 1.24.0
         version: 1.24.0
@@ -147,6 +159,9 @@ importers:
       '@qf-jarvis/control-plane-read-contract':
         specifier: workspace:*
         version: link:../../packages/control-plane-read-contract
+      '@qf-jarvis/worker-observation-contract':
+        specifier: workspace:*
+        version: link:../../packages/worker-observation-contract
       next:
         specifier: 16.2.11
         version: 16.2.11(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -488,6 +503,9 @@ importers:
       '@qf-jarvis/governed-knowledge':
         specifier: workspace:*
         version: link:../governed-knowledge
+      '@qf-jarvis/knowledge-index':
+        specifier: workspace:*
+        version: link:../knowledge-index
       '@qf-jarvis/model-reply-adapter':
         specifier: workspace:*
         version: link:../model-reply-adapter
@@ -571,6 +589,21 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/knowledge-index:
+    dependencies:
+      '@qf-jarvis/governed-knowledge':
+        specifier: workspace:*
+        version: link:../governed-knowledge
+      '@qf-jarvis/knowledge-ingestion':
+        specifier: workspace:*
+        version: link:../knowledge-ingestion
+
+  packages/knowledge-ingestion:
+    dependencies:
+      '@qf-jarvis/governed-knowledge':
+        specifier: workspace:*
+        version: link:../governed-knowledge
+
   packages/model-evaluation:
     dependencies:
       zod:
@@ -609,6 +642,12 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/openai-compatible-embedding-adapter:
+    dependencies:
+      '@qf-jarvis/knowledge-index':
+        specifier: workspace:*
+        version: link:../knowledge-index
 
   packages/postgres-approval-queue:
     dependencies:
@@ -666,6 +705,25 @@ importers:
       '@qf-jarvis/event-backbone':
         specifier: workspace:*
         version: link:../event-backbone
+      '@types/pg':
+        specifier: 8.20.0
+        version: 8.20.0
+
+  packages/postgres-knowledge-index:
+    dependencies:
+      '@qf-jarvis/governed-knowledge':
+        specifier: workspace:*
+        version: link:../governed-knowledge
+      '@qf-jarvis/knowledge-index':
+        specifier: workspace:*
+        version: link:../knowledge-index
+      '@qf-jarvis/knowledge-ingestion':
+        specifier: workspace:*
+        version: link:../knowledge-ingestion
+      pg:
+        specifier: 8.22.0
+        version: 8.22.0
+    devDependencies:
       '@types/pg':
         specifier: 8.20.0
         version: 8.20.0
@@ -989,6 +1047,12 @@ importers:
       '@qf-jarvis/riya-conversation-evolution':
         specifier: workspace:*
         version: link:../riya-conversation-evolution
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  packages/worker-observation-contract:
+    dependencies:
       zod:
         specifier: 4.4.3
         version: 4.4.3

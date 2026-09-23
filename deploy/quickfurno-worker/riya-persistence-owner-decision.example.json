@@ -1,0 +1,9 @@
+{
+  "protocol": "qfj.riya-managed-persistence-owner-decision.v1",
+  "status": "REPLACE_WITH_OWNER_APPROVAL",
+  "jarvisRevision": "0000000000000000000000000000000000000000",
+  "decisionRef": "REPLACE_WITH_OWNER_DECISION_REF",
+  "continuityPolicyRef": "REPLACE_WITH_APPROVED_CONTINUITY_POLICY_REF",
+  "logicalTurnPolicyRef": "REPLACE_WITH_APPROVED_LOGICAL_TURN_POLICY_REF",
+  "approvedAt": "REPLACE_WITH_OWNER_APPROVAL_INSTANT"
+}

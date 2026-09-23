@@ -36,6 +36,8 @@
  * So Riya is certified through the real service, composed here with in-memory collaborators, and
  * reached through the SAME Mastra workflow the other two use.
  */
+import { createHash } from 'node:crypto';
+
 import { createInboundEnvelope, createRuntimePolicy } from '@qf-jarvis/agent-runtime';
 import type { InboundEnvelope, RuntimeDataClass } from '@qf-jarvis/agent-runtime';
 import type { CoreDecisionTransport } from '@qf-jarvis/core-decision-adapter';
@@ -49,6 +51,7 @@ import type {
   AuthoritativeConversationStatePort,
   ConversationControlState,
   ConversationStateKey,
+  HybridKnowledgeRetrievalPort,
   JarvisRuntimeConfig,
   RiyaConversationEvolutionJarvisRuntime,
 } from '@qf-jarvis/jarvis-runtime';
@@ -358,12 +361,89 @@ export function certificationTurnCoordinator(): RiyaTurnCoordinatorPort {
 // The runtimes.
 // ---------------------------------------------------------------------------
 
+export interface CertificationGroundingInput {
+  readonly knowledgeId: string;
+  readonly topic: string;
+  readonly content: string;
+  readonly sourceRef: string;
+}
+
+const HISTORICAL_JF5B_KNOWLEDGE_REVISION = 'knowledge.synthetic.jf5b.v1';
+
+function certificationHybridKnowledge(
+  grounding: CertificationGroundingInput,
+  knowledgeRevision: string,
+): HybridKnowledgeRetrievalPort {
+  const digest = createHash('sha256').update(grounding.content, 'utf8').digest('hex');
+  return Object.freeze({
+    knowledgeRevision,
+    retrieve(request: Parameters<HybridKnowledgeRetrievalPort['retrieve']>[0]) {
+      if (
+        request.topicFilters.length !== 1 ||
+        request.topicFilters[0] !== grounding.topic ||
+        request.dataClass !== 'HOSTED_ALLOWED'
+      ) {
+        return Promise.resolve(
+          Object.freeze({ ok: false as const, reason: 'hybrid-governance-refused' as const }),
+        );
+      }
+      return Promise.resolve(
+        Object.freeze({
+          ok: true as const,
+          reason: 'hybrid-served' as const,
+          hits: Object.freeze([
+            Object.freeze({
+              chunkId: grounding.knowledgeId,
+              parentKnowledgeId: grounding.knowledgeId,
+              parentVersion: 1,
+              topic: grounding.topic,
+              content: grounding.content,
+              contentFormat: 'PLAIN_TEXT' as const,
+              headingPath: Object.freeze(['JF5B synthetic governed reference']),
+              citation: Object.freeze({
+                knowledgeId: grounding.knowledgeId,
+                version: 1,
+                sourceRef: grounding.sourceRef,
+                sourceRevision: 'jf5b.synthetic.v1',
+                authorityTier: 'APPROVED_INTERNAL_DOCUMENT' as const,
+                effectiveFrom: '2026-09-01T00:00:00.000Z',
+                expiresAt: undefined,
+                contentDigest: digest,
+              }),
+              fusedScore: 1,
+              rerankScore: 1,
+            }),
+          ]),
+        }),
+      );
+    },
+  });
+}
+
+function certificationHybridAgents(
+  agent: CertifiedAgent,
+  topic: string,
+): NonNullable<JarvisRuntimeConfig['agentHybridKnowledge']>['agents'] {
+  const search = Object.freeze({
+    topicFilters: Object.freeze([topic]),
+    candidatePool: 8,
+    maxResults: 1,
+    maxContentChars: 4_096,
+  });
+  if (agent === 'RIYA') return Object.freeze({ RIYA: search });
+  if (agent === 'ANISHA') return Object.freeze({ ANISHA: search });
+  return Object.freeze({ AAROHI: search });
+}
+
 export interface CertificationRuntimeInput {
   readonly agent: CertifiedAgent;
   readonly invoker: ModelGatewayInvoker;
   readonly state: () => ConversationControlState;
   readonly release: JarvisRuntimeConfig['release'];
   readonly clock: () => string;
+  /** Exact release identity for hybrid cases. Direct unit callers may omit and use the synthetic id. */
+  readonly knowledgeRevision?: string;
+  readonly grounding?: CertificationGroundingInput;
 }
 
 /**
@@ -387,7 +467,31 @@ export function createCertificationRuntime(
     // Riya's reviewed bytes are served ONLY through her dedicated capability, so her binding is
     // supplied there as well. The scope binding above exists because a runtime must declare at least
     // one configured agent; nothing in a Riya certification resolves it.
-    ...(input.agent === 'RIYA' ? { riyaConversationEvolutionPromptBinding: binding } : {}),
+    ...(input.agent === 'RIYA'
+      ? {
+          riyaConversationEvolutionPromptBinding: binding,
+          ...(input.grounding === undefined
+            ? {}
+            : {
+                // All three Riya task variants intentionally share the exact same reviewed body,
+                // family, version and digest; the same evaluation binding is therefore exact here.
+                riyaGroundedConversationEvolutionPromptBinding: binding,
+                riyaGroundedReplyPromptBinding: binding,
+              }),
+        }
+      : {}),
+    ...(input.grounding === undefined
+      ? {}
+      : {
+          agentHybridKnowledge: {
+            knowledgeRevision: input.knowledgeRevision ?? HISTORICAL_JF5B_KNOWLEDGE_REVISION,
+            retrieval: certificationHybridKnowledge(
+              input.grounding,
+              input.knowledgeRevision ?? HISTORICAL_JF5B_KNOWLEDGE_REVISION,
+            ),
+            agents: certificationHybridAgents(input.agent, input.grounding.topic),
+          },
+        }),
     promptRegistry: registryFor(input.agent),
     capabilityProfileRef: JF5B_CAPABILITY_PROFILE_REF,
     gatewayInvoker: input.invoker,

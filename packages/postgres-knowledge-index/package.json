@@ -1,0 +1,29 @@
+{
+  "name": "@qf-jarvis/postgres-knowledge-index",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "PostgreSQL full-text plus pgvector HNSW implementation of the Jarvis hybrid knowledge candidate store and immutable index writer.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json",
+    "benchmark:rag": "node ./dist/benchmark-cli.js"
+  },
+  "dependencies": {
+    "@qf-jarvis/governed-knowledge": "workspace:*",
+    "@qf-jarvis/knowledge-ingestion": "workspace:*",
+    "@qf-jarvis/knowledge-index": "workspace:*",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.20.0"
+  }
+}

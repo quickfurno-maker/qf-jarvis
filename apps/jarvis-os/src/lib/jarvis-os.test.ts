@@ -493,9 +493,14 @@ describe('no live action capability is exposed', () => {
       expect(code, `${label}: node io`).not.toMatch(
         /from ['"]node:(net|http|https|dns|tls|child_process|dgram)['"]/,
       );
-      // `node:fs` is permitted ONLY in the auth config loader. Everything else -- every page,
-      // component and control-plane module -- still may not touch the filesystem.
-      if (label !== 'src/server/auth/config/loader.ts') {
+      // Node filesystem access stays closed to the UI. Production may read only auth config and
+      // the one content-free worker observation file; the matching source test may create fixtures.
+      const fsAllowed = new Set([
+        'src/server/auth/config/loader.ts',
+        'src/server/control-plane/sources/worker-observation-source.ts',
+        'src/server/control-plane/sources/worker-observation-source.test.ts',
+      ]);
+      if (!fsAllowed.has(label)) {
         expect(code, `${label}: fs`).not.toMatch(/from ['"]node:fs['"]/);
       }
     }
@@ -531,19 +536,20 @@ describe('no live action capability is exposed', () => {
     }
   });
 
-  it('imports exactly one workspace package, and it is the read contract', () => {
-    // JOS-01B NARROWS this rule rather than relaxing it. Jarvis OS may import
-    // `@qf-jarvis/control-plane-read-contract` -- a pure zod schema package with no Node API, no
-    // network, no persistence and no authority -- and nothing else. Every backend package stays
-    // forbidden: pulling one in would put persistence, transport or approval logic into a browser
-    // bundle, which is the failure this rule has always existed to prevent.
-    const ALLOWED = '@qf-jarvis/control-plane-read-contract';
+  it('imports exactly two workspace packages, and both are powerless read contracts', () => {
+    // JOS-01B/ADR-0159 NARROW this rule rather than relaxing it. Jarvis OS may import only the
+    // control-plane read contract and the strict content-free worker observation schema. Neither has
+    // Node I/O, network, persistence or authority; every backend/runtime package stays forbidden.
+    const ALLOWED = new Set([
+      '@qf-jarvis/control-plane-read-contract',
+      '@qf-jarvis/worker-observation-contract',
+    ]);
     for (const file of sourceFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8'));
       const label = file.replace(/\\/g, '/').split('/apps/jarvis-os/')[1] ?? file;
       const specifiers = code.match(/@qf-jarvis\/[a-z0-9-]+/g) ?? [];
       for (const specifier of specifiers) {
-        expect(specifier, `${label}: workspace import`).toBe(ALLOWED);
+        expect(ALLOWED.has(specifier), `${label}: workspace import ${specifier}`).toBe(true);
       }
     }
   });

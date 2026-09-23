@@ -107,6 +107,8 @@ const entrySchema = z
     evaluationSuiteVersion: z.int().min(1).max(1_000_000),
     redTeamSuiteId: IDENTIFIER,
     fixtureManifestId: IDENTIFIER,
+    /** Exact governed knowledge release when this certification exercised hybrid grounding. */
+    knowledgeRevision: IDENTIFIER.optional(),
     liveRunId: IDENTIFIER,
     /** A digest over the exact case set executed, so a later reader can prove what was covered. */
     caseSetDigest: DIGEST,
@@ -186,6 +188,19 @@ export function createJf5bCoverageManifest(input: unknown): Jf5bCoverageManifest
       }
     }
   }
+  // If a manifest carries a knowledge revision, it is exact and consistent across every entry. Old
+  // manifests may carry none; a partial/mixed/floating corpus claim is never accepted.
+  const revisions = parsed.data.entries.flatMap((entry) =>
+    entry.knowledgeRevision === undefined ? [] : [entry.knowledgeRevision],
+  );
+  if (
+    revisions.some((revision) => revision.toLowerCase() === 'latest' || revision.includes('*')) ||
+    (revisions.length > 0 &&
+      (revisions.length !== parsed.data.entries.length || new Set(revisions).size !== 1))
+  ) {
+    throw new Error('invalid-coverage-manifest');
+  }
+
   // Distinct prompt digests per provider: three agents, three reviewed bodies. A manifest whose three
   // entries for one provider shared a digest would be exactly the "one prompt stands in for three"
   // shortcut, wearing the shape of full coverage.
