@@ -164,6 +164,20 @@ describe('postgres hybrid knowledge index', () => {
     expect(current.ok).toBe(true);
   }, 60_000);
 
+  it('fails closed when stored chunk content no longer matches its sealed digest', async () => {
+    await publish('knowledge.release.corrupt', [
+      source('doc.corrupt', 1, 'Installation scheduling ORIGINAL integrity marker.'),
+    ]);
+
+    await pool.query(
+      "UPDATE qf_jarvis_knowledge.chunk SET content='Installation scheduling CORRUPTED integrity marker.' " +
+        "WHERE knowledge_id='doc.corrupt' AND version=1",
+    );
+
+    const result = await retrieval('knowledge.release.corrupt', 'installation scheduling corrupted');
+    expect(result).toEqual({ ok: false, reason: 'hybrid-candidate-store-failed' });
+  }, 60_000);
+
   it('supports atomic rollback by switching only the active sealed-release pointer', async () => {
     await publish('knowledge.release.one', [
       source('doc.one', 1, 'Installation scheduling OLD RELEASE marker.'),
