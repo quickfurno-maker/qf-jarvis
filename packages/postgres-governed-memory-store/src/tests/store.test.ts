@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createPostgresGovernedMemoryStore } from '../store.js';
+import { createPostgresGovernedMemoryStore, purgeExpiredGovernedMemory } from '../store.js';
 
 const record = {
   memoryRecordId: 'c2000004-0000-4000-8000-000000000004',
@@ -74,5 +74,44 @@ describe('postgres governed memory store', () => {
     expect(String(query.mock.calls[0]?.[0])).toContain(
       'DELETE FROM qf_jarvis_memory.agent_memory_record',
     );
+  });
+
+  it('purges only an oldest-first bounded expired batch', async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [{ invalidated_count: 2, sampled_ids: ['id.1', 'id.2'] }],
+      rowCount: 1,
+    });
+    const result = await purgeExpiredGovernedMemory(pool(query), {
+      asOf: '2026-10-24T00:00:00.000Z',
+      limit: 250,
+    });
+    expect(result).toEqual({
+      invalidatedCount: 2,
+      sampledMemoryRecordIds: ['id.1', 'id.2'],
+      truncated: false,
+    });
+    const sql = String(query.mock.calls[0]?.[0]);
+    expect(sql).toContain('expires_at <= $1::timestamptz');
+    expect(sql).toContain('LIMIT $2');
+    expect(sql).toContain('FOR UPDATE SKIP LOCKED');
+    expect(sql).toContain('DELETE FROM qf_jarvis_memory.agent_memory_record');
+    expect(query.mock.calls[0]?.[1]).toEqual(['2026-10-24T00:00:00.000Z', 250]);
+  });
+
+  it('refuses an unbounded or malformed expiry purge', async () => {
+    const query = vi.fn();
+    await expect(
+      purgeExpiredGovernedMemory(pool(query), {
+        asOf: 'not-an-instant',
+        limit: 100,
+      }),
+    ).rejects.toThrow('governed-memory-purge-invalid');
+    await expect(
+      purgeExpiredGovernedMemory(pool(query), {
+        asOf: '2026-10-24T00:00:00.000Z',
+        limit: 1001,
+      }),
+    ).rejects.toThrow('governed-memory-purge-invalid');
+    expect(query).not.toHaveBeenCalled();
   });
 });
