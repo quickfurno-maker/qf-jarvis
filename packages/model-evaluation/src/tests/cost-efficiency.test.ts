@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ApprovalEvidence } from '../contracts/evidence.js';
-import { chooseCostEfficientQualifiedCandidate, estimateModelCostUsd } from '../service/cost-efficiency.js';
+import {
+  chooseCostEfficientQualifiedCandidate,
+  estimateModelCostUsd,
+} from '../service/cost-efficiency.js';
 import { createSyntheticBinding } from '../testing/fixtures.js';
 
 function evidence(
@@ -127,13 +130,21 @@ describe('cost-efficient qualified model selection', () => {
     expect(
       estimateModelCostUsd(
         { inputTokens: 1_000_000, outputTokens: 1_000_000 },
-        { priceCardRef: 'price.v1', inputUsdPerMillionTokens: 1.25, outputUsdPerMillionTokens: 2.5 },
+        {
+          priceCardRef: 'price.v1',
+          inputUsdPerMillionTokens: 1.25,
+          outputUsdPerMillionTokens: 2.5,
+        },
       ),
     ).toBeCloseTo(3.75);
     expect(() =>
       estimateModelCostUsd(
         { inputTokens: 1, outputTokens: 1 },
-        { priceCardRef: 'bad price', inputUsdPerMillionTokens: 1, outputUsdPerMillionTokens: 1 },
+        {
+          priceCardRef: 'bad price',
+          inputUsdPerMillionTokens: 1,
+          outputUsdPerMillionTokens: 1,
+        },
       ),
     ).toThrow('model-cost-input-invalid');
   });
