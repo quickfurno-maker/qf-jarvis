@@ -23,6 +23,7 @@ export interface WorkerSloPolicy extends WorkerSloPolicyInput {}
 
 export interface WorkerSloObservationInput {
   readonly spool: {
+    readonly pending: number;
     readonly oldestPendingAgeMs: number | null;
   };
   readonly outcomes: {
