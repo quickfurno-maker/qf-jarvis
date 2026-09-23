@@ -78,6 +78,13 @@ export const quickFurnoWorkerObservationV2Schema = z
   .object({
     protocol: z.literal('qfj.quickfurno-worker-observation.v2'),
     ...baseShape,
+    modelGateway: z
+      .object({
+        completed: boundedCount,
+        failed: boundedCount,
+        fallbackUsed: boundedCount,
+      })
+      .strict(),
     modelUsage: z
       .object({
         invocations: boundedCount,
