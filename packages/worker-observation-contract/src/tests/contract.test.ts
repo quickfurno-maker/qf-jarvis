@@ -69,6 +69,7 @@ describe('worker observation contract', () => {
         otherFailed: 0,
         latency: [{ at: '2026-09-23T00:00:00.000Z', latencyMs: 37 }],
       },
+      modelGateway: { completed: 2, failed: 0, fallbackUsed: 0 },
       modelUsage: {
         invocations: 2,
         reportedTokenInvocations: 2,
