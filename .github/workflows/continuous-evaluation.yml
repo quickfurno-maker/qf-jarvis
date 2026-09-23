@@ -21,6 +21,10 @@ on:
       - 'packages/knowledge-ingestion/**'
       - 'packages/postgres-knowledge-index/**'
       - 'packages/rag-provisioning/**'
+      - 'packages/governed-memory-foundation/**'
+      - 'packages/core-data-tools/**'
+      - 'packages/knowledge-freshness/**'
+      - 'packages/jao-action-registry/**'
       - 'packages/jarvis-runtime/**'
       - 'apps/api/src/composition/jf5b-**'
       - 'apps/api/src/tests/jf5b-**'
@@ -65,6 +69,10 @@ jobs:
           pnpm exec vitest run
           packages/model-evaluation/src/tests
           packages/knowledge-index/src/tests/quality.test.ts
+          packages/governed-memory-foundation/src/tests
+          packages/core-data-tools/src/tests
+          packages/knowledge-freshness/src/tests
+          packages/jao-action-registry/src/tests
           packages/jarvis-runtime/src/tests/hybrid-grounding.test.ts
           packages/jarvis-runtime/src/tests/jf4-three-agent-rag.test.ts
           packages/jarvis-runtime/src/tests/fail-closed.test.ts
