@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildControlPlaneSnapshot } from '../build-snapshot';
@@ -103,7 +104,7 @@ describe('the adopted registry', () => {
   });
 
   it('adopts exactly the read-only worker observation source when explicitly configured', () => {
-    const adopted = createAdoptedReadSources('C:\\qfj\\worker-observation.json');
+    const adopted = createAdoptedReadSources(resolve('worker-observation.json'));
     expect(adopted).toHaveLength(1);
     expect(adopted[0]?.id).toBe('quickfurno-whatsapp-worker-observation');
   });
