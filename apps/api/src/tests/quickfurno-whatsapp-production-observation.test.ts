@@ -19,6 +19,7 @@ describe('QuickFurno worker production observation', () => {
       embeddingModelRef: 'embedding/model-v1',
     });
     writer.recordModelLatency(123, '2026-09-23T00:00:00.000Z');
+    writer.recordModelOutcome(true, false);
     writer.recordModelUsage({ inputTokens: 120, outputTokens: 40, totalTokens: 160 });
     writer.recordEmbeddingUsage(['first query', 'second']);
     writer.recordKnowledgeRetrieval('hybrid-served', 37, '2026-09-23T00:00:00.000Z');
@@ -49,6 +50,7 @@ describe('QuickFurno worker production observation', () => {
     expect(parsed.knowledgeRetrieval.governanceRefused).toBe(1);
     expect(parsed.knowledgeRetrieval.latency.map((sample) => sample.latencyMs)).toEqual([37, 11]);
     if (parsed.protocol !== 'qfj.quickfurno-worker-observation.v2') return;
+    expect(parsed.modelGateway).toEqual({ completed: 1, failed: 0, fallbackUsed: 0 });
     expect(parsed.modelUsage).toEqual({
       invocations: 1,
       reportedTokenInvocations: 1,
