@@ -175,7 +175,6 @@ export function assessKnowledgeCandidate(input: {
   });
 }
 
-
 export interface KnowledgeSourceFingerprintReader {
   readCurrent(): Promise<readonly KnowledgeSourceFingerprint[]>;
 }

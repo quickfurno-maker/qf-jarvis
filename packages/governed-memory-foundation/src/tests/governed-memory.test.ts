@@ -65,7 +65,9 @@ describe('governed memory foundation', () => {
   });
 
   it('refuses malformed or free-form-shaped fact identifiers', () => {
-    expect(assessGovernedMemoryWrite({ ...fact, valueRef: 'call me after dinner please!' })).toEqual({
+    expect(
+      assessGovernedMemoryWrite({ ...fact, valueRef: 'call me after dinner please!' }),
+    ).toEqual({
       decision: 'REFUSE_INVALID_FACT',
       policyRef: GOVERNED_MEMORY_ENGINEERING_POLICY_V1.policyRef,
     });

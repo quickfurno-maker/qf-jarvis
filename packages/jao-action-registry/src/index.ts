@@ -1,6 +1,11 @@
 const REF = /^[A-Za-z0-9._:-]{1,128}$/u;
 
-export const JAO_ACTION_RISK_CLASSES = Object.freeze(['READ_ONLY', 'LOW', 'MEDIUM', 'HIGH'] as const);
+export const JAO_ACTION_RISK_CLASSES = Object.freeze([
+  'READ_ONLY',
+  'LOW',
+  'MEDIUM',
+  'HIGH',
+] as const);
 export type JaoActionRiskClass = (typeof JAO_ACTION_RISK_CLASSES)[number];
 
 export const JAO_ACTION_EFFECT_CLASSES = Object.freeze([
@@ -93,9 +98,7 @@ export function assessJaoActionProposal(input: {
   readonly actionVersion: number;
   readonly agentScope: 'RIYA' | 'ANISHA' | 'AAROHI';
   readonly maturityDecision:
-    | 'KEEP_DEFAULT_OFF'
-    | 'SHADOW_EVIDENCE_SUFFICIENT'
-    | 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE';
+    'KEEP_DEFAULT_OFF' | 'SHADOW_EVIDENCE_SUFFICIENT' | 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE';
   readonly authorityEvidenceRef?: string;
   readonly approvalEvidenceRef?: string;
 }): JaoActionProposalAssessment {
@@ -112,16 +115,10 @@ export function assessJaoActionProposal(input: {
   if (input.maturityDecision !== 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE') {
     return Object.freeze({ ...base, decision: 'MATURITY_REVIEW_REQUIRED' as const });
   }
-  if (
-    input.authorityEvidenceRef === undefined ||
-    !REF.test(input.authorityEvidenceRef)
-  ) {
+  if (input.authorityEvidenceRef === undefined || !REF.test(input.authorityEvidenceRef)) {
     return Object.freeze({ ...base, decision: 'AUTHORITY_EVIDENCE_MISSING' as const });
   }
-  if (
-    input.approvalEvidenceRef === undefined ||
-    !REF.test(input.approvalEvidenceRef)
-  ) {
+  if (input.approvalEvidenceRef === undefined || !REF.test(input.approvalEvidenceRef)) {
     return Object.freeze({ ...base, decision: 'APPROVAL_EVIDENCE_MISSING' as const });
   }
   return Object.freeze({ ...base, decision: 'ELIGIBLE_FOR_PROPOSAL' as const });

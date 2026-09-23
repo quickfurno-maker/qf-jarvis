@@ -27,8 +27,16 @@ describe('Core data tools', () => {
       'CORE_RIYA_INTAKE_STATE_READ',
       'CORE_RIYA_SUBMISSION_LOOKUP',
     ]);
-    expect(tools.descriptors.every((item) => item.effect === 'READ_ONLY')).toBe(true);
-    expect(tools.descriptors.every((item) => item.resultTrust === 'CANONICAL_PARSED')).toBe(true);
+    expect(tools.descriptors.map((item) => item.effect)).toEqual([
+      'READ_ONLY',
+      'READ_ONLY',
+      'READ_ONLY',
+    ]);
+    expect(tools.descriptors.map((item) => item.resultTrust)).toEqual([
+      'CANONICAL_PARSED',
+      'CANONICAL_PARSED',
+      'CANONICAL_PARSED',
+    ]);
   });
 
   it('delegates service availability once and re-proves the returned boundary value', async () => {

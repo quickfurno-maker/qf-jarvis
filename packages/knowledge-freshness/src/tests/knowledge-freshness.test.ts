@@ -23,8 +23,13 @@ describe('knowledge freshness', () => {
     const accepted = [source('policy.a', 'rev.1', digest('a'))];
     const report = assessKnowledgeFreshness(accepted, accepted);
     expect(report.requiresCandidateRelease).toBe(false);
-    expect(assessKnowledgeCandidate({ freshness: report, observedSources: accepted, evaluationPassed: true }))
-      .toEqual({ decision: 'NO_CHANGE', sourceCount: 1 });
+    expect(
+      assessKnowledgeCandidate({
+        freshness: report,
+        observedSources: accepted,
+        evaluationPassed: true,
+      }),
+    ).toEqual({ decision: 'NO_CHANGE', sourceCount: 1 });
   });
 
   it('detects changed, new and missing sources explicitly', () => {

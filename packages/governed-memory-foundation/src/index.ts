@@ -162,7 +162,6 @@ export function assessGovernedMemoryWrite(
   });
 }
 
-
 export interface GovernedMemoryReadQuery {
   readonly subjectRef: string;
   readonly factTypes?: readonly string[];

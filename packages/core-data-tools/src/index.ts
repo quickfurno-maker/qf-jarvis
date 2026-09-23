@@ -7,9 +7,7 @@ import type {
   CoreRiyaIntakeStateV1,
   CoreRiyaIntakeSubmissionLookupV1,
 } from '@qf-jarvis/core-riya-intake';
-import {
-  parseCoreServiceAvailabilitySnapshotV1,
-} from '@qf-jarvis/core-service-availability-read';
+import { parseCoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import type {
   CoreServiceAvailabilityReader,
   CoreServiceAvailabilitySnapshotV1,
@@ -41,9 +39,7 @@ export interface CoreDataToolDescriptor {
 }
 
 export type CoreDataToolResult =
-  | CoreServiceAvailabilitySnapshotV1
-  | CoreRiyaIntakeStateV1
-  | CoreRiyaIntakeSubmissionLookupV1;
+  CoreServiceAvailabilitySnapshotV1 | CoreRiyaIntakeStateV1 | CoreRiyaIntakeSubmissionLookupV1;
 
 export interface CoreDataToolInvocation {
   readonly descriptor: CoreDataToolDescriptor;

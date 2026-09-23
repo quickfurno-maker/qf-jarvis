@@ -5,6 +5,13 @@ import {
   assessJaoActionProposal,
   createJaoActionRegistry,
 } from '../index.js';
+import type { JaoActionDefinition } from '../index.js';
+
+function engineeringAction(): JaoActionDefinition {
+  const action = JAO_ENGINEERING_REGISTRY_V1.actions[0];
+  if (action === undefined) throw new Error('engineering-action-missing');
+  return action;
+}
 
 describe('JAO action registry', () => {
   it('ships all engineering actions disabled', () => {
@@ -28,7 +35,7 @@ describe('JAO action registry', () => {
   it('requires maturity, authority evidence and approval evidence even for an enabled reviewed action', () => {
     const registry = createJaoActionRegistry({
       registryRef: 'registry.reviewed.1',
-      actions: [{ ...JAO_ENGINEERING_REGISTRY_V1.actions[0]!, enabled: true }],
+      actions: [{ ...engineeringAction(), enabled: true }],
     });
 
     expect(
@@ -66,7 +73,7 @@ describe('JAO action registry', () => {
   it('returns only proposal eligibility, never an execution result', () => {
     const registry = createJaoActionRegistry({
       registryRef: 'registry.reviewed.1',
-      actions: [{ ...JAO_ENGINEERING_REGISTRY_V1.actions[0]!, enabled: true }],
+      actions: [{ ...engineeringAction(), enabled: true }],
     });
 
     const result = assessJaoActionProposal({
@@ -88,7 +95,7 @@ describe('JAO action registry', () => {
   });
 
   it('refuses duplicate version identities', () => {
-    const action = JAO_ENGINEERING_REGISTRY_V1.actions[0]!;
+    const action = engineeringAction();
     expect(() =>
       createJaoActionRegistry({
         registryRef: 'registry.duplicate.1',
