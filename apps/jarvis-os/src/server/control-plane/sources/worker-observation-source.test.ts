@@ -86,6 +86,7 @@ describe('worker observation read source', () => {
     const v2 = {
       ...observation(),
       protocol: 'qfj.quickfurno-worker-observation.v2',
+      modelGateway: { completed: 5, failed: 0, fallbackUsed: 0 },
       modelUsage: {
         invocations: 5,
         reportedTokenInvocations: 5,
