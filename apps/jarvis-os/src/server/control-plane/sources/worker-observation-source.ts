@@ -87,6 +87,31 @@ export function createWorkerObservationReadSource(filePath: string): ReadSourceD
         observation.protocol === 'qfj.quickfurno-worker-observation.v2'
           ? [
               {
+                id: 'model-availability',
+                label: 'Model availability',
+                value: (() => {
+                  const total =
+                    observation.modelGateway.completed + observation.modelGateway.failed;
+                  return total === 0
+                    ? 'n/a'
+                    : ((observation.modelGateway.completed / total) * 100).toFixed(2) + '%';
+                })(),
+                caption: 'Validated gateway completions divided by completed plus failed model calls.',
+              },
+              {
+                id: 'model-fallback-rate',
+                label: 'Model fallback',
+                value:
+                  observation.modelGateway.completed === 0
+                    ? 'n/a'
+                    : (
+                        (observation.modelGateway.fallbackUsed /
+                          observation.modelGateway.completed) *
+                        100
+                      ).toFixed(2) + '%',
+                caption: 'Fallback use among validated model completions; production policy currently disables fallback.',
+              },
+              {
                 id: 'model-total-tokens',
                 label: 'Model tokens',
                 value: String(observation.modelUsage.totalTokens),
