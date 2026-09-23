@@ -114,12 +114,18 @@ export type {
 
 export {
   estimateModelCostUsd,
+  estimateEmbeddingCostUsd,
+  estimateConversationCostUsd,
   chooseCostEfficientQualifiedCandidate,
 } from './service/cost-efficiency.js';
 export type {
   VersionedModelPriceCard,
+  VersionedEmbeddingPriceCard,
   EvaluatedCostCandidate,
   ModelCostWorkload,
+  EmbeddingCostWorkload,
+  ConversationCostWorkload,
+  ConversationCostEstimate,
   CostSelectionOptions,
   CostSelectionResult,
 } from './service/cost-efficiency.js';
