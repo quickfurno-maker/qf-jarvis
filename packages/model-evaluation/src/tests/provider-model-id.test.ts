@@ -326,7 +326,7 @@ describe('generic identifiers in this package did NOT learn to accept a slash', 
 });
 
 describe('public API and repository invariants', () => {
-  it('(8) this package’s public API is UNCHANGED — the grammar stays internal', () => {
+  it('(8) ADR-0160 widens only the approved intelligence API — provider grammar stays internal', () => {
     // The validator is deliberately not re-exported: the barrel lock in containment.test.ts is the
     // authority on this surface, and this repair adds nothing to it.
     const surface = barrel as unknown as Record<string, unknown>;
@@ -347,6 +347,7 @@ describe('public API and repository invariants', () => {
     // wildcard/`latest` governance predicate, exported so the benchmark package applies the SAME
     // rule to the prompt/capability/knowledge/policy refs it owns instead of copying it. Still an
     // EXACT count; it records an authorised addition, it does not relax the assertion.
+    // ADR-0160: 35 -> 39 adds only evaluation-impact and evidence-gated cost-intelligence exports.
     expect(Object.keys(barrel)).toHaveLength(39);
   });
 
