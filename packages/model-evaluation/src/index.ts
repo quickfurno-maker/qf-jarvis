@@ -102,3 +102,24 @@ export { createApprovalEvidence } from './service/create-evidence.js';
 export type { CreateEvidenceOptions, EvidenceResult } from './service/create-evidence.js';
 export { toRolloutApprovalReference } from './service/rollout-bridge.js';
 export type { RolloutApprovalReference } from './service/rollout-bridge.js';
+
+export {
+  EVALUATION_IMPACT_DIMENSIONS,
+  classifyEvaluationImpact,
+} from './service/change-impact.js';
+export type {
+  EvaluationImpactDimension,
+  EvaluationImpactReport,
+} from './service/change-impact.js';
+
+export {
+  estimateModelCostUsd,
+  chooseCostEfficientQualifiedCandidate,
+} from './service/cost-efficiency.js';
+export type {
+  VersionedModelPriceCard,
+  EvaluatedCostCandidate,
+  ModelCostWorkload,
+  CostSelectionOptions,
+  CostSelectionResult,
+} from './service/cost-efficiency.js';
