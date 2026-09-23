@@ -57,6 +57,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build workspace packages
+        run: pnpm build
       - name: Exercise provider, queue and worker failure paths
         run: >-
           pnpm exec vitest run
@@ -84,6 +86,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build workspace packages
+        run: pnpm build
       - name: Run prompt injection, authority, citation, secret and scope regressions
         run: >-
           pnpm exec vitest run
