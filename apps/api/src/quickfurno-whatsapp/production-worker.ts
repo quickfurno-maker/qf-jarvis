@@ -169,6 +169,10 @@ export async function createQuickFurnoWhatsAppProductionWorker(
   const observedGatewayInvoker = Object.freeze({
     async invoke(request: Parameters<typeof baseGatewayInvoker.invoke>[0]) {
       const result = await baseGatewayInvoker.invoke(request);
+      observation.recordModelOutcome(
+        result.ok,
+        result.ok ? result.response.provenance.usedFallback : false,
+      );
       if (result.ok) {
         observation.recordModelLatency(result.response.latencyMs, systemInstant());
         observation.recordModelUsage(result.response.usage);
