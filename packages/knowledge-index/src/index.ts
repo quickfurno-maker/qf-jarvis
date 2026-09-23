@@ -37,3 +37,16 @@ export type { EmbeddingBatchOptions } from './embedding.js';
 export { fuseHybridCandidates } from './fusion.js';
 export { createDeterministicKnowledgeReranker } from './reranker.js';
 export { createHybridKnowledgeRetriever } from './retriever.js';
+export {
+  evaluateKnowledgeQuality,
+  compareKnowledgeQualityReports,
+} from './quality.js';
+export type {
+  KnowledgeQualityCase,
+  KnowledgeQualityThresholds,
+  KnowledgeQualityMetrics,
+  KnowledgeQualityFailure,
+  KnowledgeQualityReport,
+  KnowledgeQualityRegressionTolerance,
+  KnowledgeQualityRegressionReport,
+} from './quality.js';
