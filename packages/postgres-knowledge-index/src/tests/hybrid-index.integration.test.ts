@@ -203,16 +203,15 @@ describe('postgres hybrid knowledge index', () => {
       source('doc.corrupt', 1, 'Installation scheduling ORIGINAL integrity marker.'),
     ]);
 
-    await pool.query(
-      "UPDATE qf_jarvis_knowledge.chunk SET content='Installation scheduling CORRUPTED integrity marker.' " +
-        "WHERE knowledge_id='doc.corrupt' AND version=1",
-    );
+    await expect(
+      pool.query(
+        "UPDATE qf_jarvis_knowledge.chunk SET content='Installation scheduling CORRUPTED integrity marker.' " +
+          "WHERE knowledge_id='doc.corrupt' AND version=1",
+      ),
+    ).rejects.toThrow('knowledge index immutable row');
 
-    const result = await retrieval(
-      'knowledge.release.corrupt',
-      'installation scheduling corrupted',
-    );
-    expect(result).toEqual({ ok: false, reason: 'hybrid-candidate-store-failed' });
+    const result = await retrieval('knowledge.release.corrupt', 'installation scheduling original');
+    expect(result.ok).toBe(true);
   }, 60_000);
 
   it('fails closed when active knowledge-index metadata is corrupted away from the sealed embedding model', async () => {
