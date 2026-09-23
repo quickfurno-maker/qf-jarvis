@@ -835,6 +835,8 @@ describe('(133-148) the declared budget and every prior lock', () => {
 
   it('(141-148) every prior package-root runtime API lock still holds', async () => {
     const expected: Readonly<Record<string, number>> = {
+      // ADR-0160: 35 -> 39 for pure evaluation-impact and evidence-gated cost intelligence.
+      // No provider transport, activation authority, secret, environment read or business action.
       'model-evaluation': 39,
       // MVP-P2A.2 HF4-R7: 71 -> 74 for the Groq strict-schema projection —
       // `projectGroqStrictJsonSchema`, `renderStructuredJsonSchema`, `GROQ_STRICT_PROJECTION_REASONS`.
