@@ -92,7 +92,10 @@ export function assessJaoActionProposal(input: {
   readonly actionId: string;
   readonly actionVersion: number;
   readonly agentScope: 'RIYA' | 'ANISHA' | 'AAROHI';
-  readonly maturityReviewEligible: boolean;
+  readonly maturityDecision:
+    | 'KEEP_DEFAULT_OFF'
+    | 'SHADOW_EVIDENCE_SUFFICIENT'
+    | 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE';
   readonly authorityEvidenceRef?: string;
   readonly approvalEvidenceRef?: string;
 }): JaoActionProposalAssessment {
@@ -106,7 +109,7 @@ export function assessJaoActionProposal(input: {
   if (!action.allowedAgentScopes.includes(input.agentScope)) {
     return Object.freeze({ ...base, decision: 'AGENT_SCOPE_DENIED' as const });
   }
-  if (!input.maturityReviewEligible) {
+  if (input.maturityDecision !== 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE') {
     return Object.freeze({ ...base, decision: 'MATURITY_REVIEW_REQUIRED' as const });
   }
   if (
