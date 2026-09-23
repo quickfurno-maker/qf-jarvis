@@ -800,10 +800,11 @@ describe('(71-77) package API and dependency locks are untouched', () => {
 
   it('(73-77) every package-root runtime API count is unchanged', async () => {
     const expected: Readonly<Record<string, number>> = {
-      // ADR-0160: 35 -> 39. Production-intelligence adds four pure, authority-free root
-      // functions/constants: evaluation impact classification plus evidence-gated cost estimation/
-      // selection. No transport, secret, environment read, serving mutation or approval authority.
-      'model-evaluation': 39,
+      // ADR-0160: 35 -> 41. Production intelligence adds six pure, authority-free root
+      // functions/constants: evaluation-impact classification plus evidence-gated model, embedding
+      // and combined cost estimation/selection. No transport, secret, environment read, serving
+      // mutation or approval authority.
+      'model-evaluation': 41,
       // MVP-P2A.2 HF4-R7: 71 -> 74. The Groq strict-schema projection —
       // `projectGroqStrictJsonSchema`, `renderStructuredJsonSchema`, `GROQ_STRICT_PROJECTION_REASONS`.
       // RUN S9's nine ordinary safety requests were rejected HTTP 400 because the raw Zod rendering
