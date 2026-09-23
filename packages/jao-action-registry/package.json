@@ -1,0 +1,19 @@
+{
+  "name": "@qf-jarvis/jao-action-registry",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Proposal-only JAO action registry. It declares reviewed action metadata and proposal eligibility but has no executor, provider, transport, database or activation surface.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  }
+}
