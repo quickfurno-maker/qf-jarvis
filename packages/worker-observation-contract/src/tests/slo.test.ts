@@ -9,6 +9,7 @@ import {
 function observation(over: Record<string, unknown> = {}) {
   return {
     spool: { pending: 0, oldestPendingAgeMs: 0 },
+    modelGateway: { completed: 100, failed: 0, fallbackUsed: 0 },
     outcomes: {
       completedNoReply: 20,
       completedQueued: 80,
@@ -60,8 +61,12 @@ describe('worker SLO evaluation', () => {
       policyRef: 'test.slo.v1',
       minModelLatencySamples: 1,
       minKnowledgeLatencySamples: 1,
+      minModelOutcomeSamples: 1,
       maxModelP95Ms: 500,
       maxKnowledgeP95Ms: 100,
+      maxModelFailureRate: 0.01,
+      maxModelFallbackRate: 0,
+      minModelAvailability: 0.99,
       maxOldestPendingAgeMs: 1000,
       maxFailedIndeterminateRate: 0.01,
       maxKnowledgeTechnicalFailureRate: 0.01,
@@ -69,6 +74,7 @@ describe('worker SLO evaluation', () => {
     const result = evaluateWorkerSlo(
       {
         spool: { pending: 4, oldestPendingAgeMs: 5000 },
+        modelGateway: { completed: 8, failed: 2, fallbackUsed: 1 },
         outcomes: {
           completedNoReply: 0,
           completedQueued: 9,
@@ -94,6 +100,9 @@ describe('worker SLO evaluation', () => {
     expect(result.breaches).toEqual([
       'MODEL_P95_LATENCY',
       'KNOWLEDGE_P95_LATENCY',
+      'MODEL_FAILURE_RATE',
+      'MODEL_FALLBACK_RATE',
+      'MODEL_AVAILABILITY',
       'OLDEST_PENDING_AGE',
       'FAILED_INDETERMINATE_RATE',
       'KNOWLEDGE_TECHNICAL_FAILURE_RATE',
