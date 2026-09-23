@@ -69,6 +69,11 @@
     // package's OWN public parser rather than casting a hand-written object into its contract. One
     // edge, used only by the certification composition.
     { "path": "../../packages/core-service-availability-read/tsconfig.build.json" },
+    // RAG V2 production worker: both packages are direct runtime imports from
+    // quickfurno-whatsapp/production-worker.ts. Keep them explicit project references so a CLEAN
+    // checkout builds their declarations before the API rather than relying on stale local dist/.
+    { "path": "../../packages/openai-compatible-embedding-adapter/tsconfig.build.json" },
+    { "path": "../../packages/postgres-knowledge-index/tsconfig.build.json" },
     { "path": "../../packages/worker-observation-contract/tsconfig.build.json" },
     // JF-7 production WhatsApp worker consumes the exact same durable spool implementation the
     // QuickFurno ingress writes. Only the explicit durable-turn-spool subpath is importable.
