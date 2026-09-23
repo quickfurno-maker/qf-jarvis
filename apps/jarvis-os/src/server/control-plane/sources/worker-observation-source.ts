@@ -1,7 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 
-import { parseQuickFurnoWorkerObservation } from '@qf-jarvis/worker-observation-contract';
+import {
+  INITIAL_WORKER_SLO_POLICY_V1,
+  evaluateWorkerSlo,
+  parseQuickFurnoWorkerObservation,
+} from '@qf-jarvis/worker-observation-contract';
 
 import type { ReadSourceDescriptor, SectionContributions } from './read-source';
 
@@ -78,6 +82,30 @@ export function createWorkerObservationReadSource(filePath: string): ReadSourceD
       }
 
       const health = stateOf(observation.state);
+      const slo = evaluateWorkerSlo(observation, INITIAL_WORKER_SLO_POLICY_V1);
+      const usageItems =
+        observation.protocol === 'qfj.quickfurno-worker-observation.v2'
+          ? [
+              {
+                id: 'model-total-tokens',
+                label: 'Model tokens',
+                value: String(observation.modelUsage.totalTokens),
+                caption: 'Aggregate provider-reported tokens from successful validated model calls.',
+              },
+              {
+                id: 'embedding-requests',
+                label: 'Embedding requests',
+                value: String(observation.embeddingUsage.requests),
+                caption: 'Aggregate embedding requests issued by this production worker.',
+              },
+              {
+                id: 'embedding-characters',
+                label: 'Embedding characters',
+                value: String(observation.embeddingUsage.characters),
+                caption: 'Aggregate query characters submitted for embeddings; no query text retained.',
+              },
+            ]
+          : [];
       const sections: SectionContributions = Object.freeze({
         headlineMetrics: {
           items: [
@@ -131,6 +159,14 @@ export function createWorkerObservationReadSource(filePath: string): ReadSourceD
               ),
               caption: 'p95 hybrid retrieval latency across the bounded live sample ring (ms).',
             },
+            {
+              id: 'engineering-slo-state',
+              label: 'Engineering SLO',
+              value: slo.status,
+              caption:
+                'Initial engineering SLO assessment; production targets require review against measured traffic.',
+            },
+            ...usageItems,
           ],
         },
         workers: {
