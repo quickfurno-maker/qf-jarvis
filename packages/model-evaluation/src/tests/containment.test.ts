@@ -320,6 +320,8 @@ describe('containment', () => {
       'createProviderReleaseRef',
       'createSuiteThresholds',
       'dataClassRank',
+      'estimateConversationCostUsd',
+      'estimateEmbeddingCostUsd',
       'estimateModelCostUsd',
       'evaluateSuite',
       // RMB-A: the exactness predicate, shared so "exact identity" has one definition.
