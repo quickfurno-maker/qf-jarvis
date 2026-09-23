@@ -41,11 +41,11 @@ INSUFFICIENT_DATA is not a pass.
 
 ## 4. Cost intelligence
 
-Keep provider/model pricing outside code as an exact versioned price card. Record workload input/output tokens and the price-card ref.
+Keep model and embedding pricing outside code as exact versioned price cards. Record model input/output tokens plus aggregate embedding requests/texts/characters and their price-card refs.
 
 Only compare models with non-synthetic ACTIVE_MODEL_RELEASE evidence under the same evaluation context and case set. The permitted quality-drop band must be explicit.
 
-A cost-selector result is advisory. It cannot modify the gateway roster, seal or runtime configuration. Embedding cost analysis uses aggregate request/text/character counts and an external price card; query text is not retained for accounting.
+The cost layer can estimate model cost, embedding cost and their combined workload cost from those aggregates without a conversation identifier. A cost-selector result is advisory. It cannot modify the gateway roster, seal or runtime configuration; query text is not retained for accounting.
 
 ## 5. Resilience drills
 
