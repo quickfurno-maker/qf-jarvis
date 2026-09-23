@@ -74,6 +74,7 @@
     // ADR-0161 capability composition. These remain governed leaves: Core tools are read-only,
     // durable memory is owner-policy gated, and freshness may only build inactive candidates.
     { "path": "../../packages/core-data-tools/tsconfig.build.json" },
+    { "path": "../../packages/core-riya-intake/tsconfig.build.json" },
     { "path": "../../packages/knowledge-freshness/tsconfig.build.json" },
     { "path": "../../packages/knowledge-ingestion/tsconfig.build.json" },
     { "path": "../../packages/knowledge-index/tsconfig.build.json" },
