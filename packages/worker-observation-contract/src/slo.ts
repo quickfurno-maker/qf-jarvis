@@ -1,6 +1,9 @@
 export const WORKER_SLO_OBJECTIVES = Object.freeze([
   'MODEL_P95_LATENCY',
   'KNOWLEDGE_P95_LATENCY',
+  'MODEL_FAILURE_RATE',
+  'MODEL_FALLBACK_RATE',
+  'MODEL_AVAILABILITY',
   'OLDEST_PENDING_AGE',
   'FAILED_INDETERMINATE_RATE',
   'KNOWLEDGE_TECHNICAL_FAILURE_RATE',
@@ -12,8 +15,12 @@ export interface WorkerSloPolicyInput {
   readonly policyRef: string;
   readonly minModelLatencySamples: number;
   readonly minKnowledgeLatencySamples: number;
+  readonly minModelOutcomeSamples: number;
   readonly maxModelP95Ms: number;
   readonly maxKnowledgeP95Ms: number;
+  readonly maxModelFailureRate: number;
+  readonly maxModelFallbackRate: number;
+  readonly minModelAvailability: number;
   readonly maxOldestPendingAgeMs: number;
   readonly maxFailedIndeterminateRate: number;
   readonly maxKnowledgeTechnicalFailureRate: number;
@@ -25,6 +32,11 @@ export interface WorkerSloObservationInput {
   readonly spool: {
     readonly pending: number;
     readonly oldestPendingAgeMs: number | null;
+  };
+  readonly modelGateway?: {
+    readonly completed: number;
+    readonly failed: number;
+    readonly fallbackUsed: number;
   };
   readonly outcomes: {
     readonly completedNoReply: number;
@@ -54,6 +66,9 @@ export interface WorkerSloEvaluation {
   readonly measurements: {
     readonly modelP95Ms: number | null;
     readonly knowledgeP95Ms: number | null;
+    readonly modelFailureRate: number | null;
+    readonly modelFallbackRate: number | null;
+    readonly modelAvailability: number | null;
     readonly oldestPendingAgeMs: number;
     readonly failedIndeterminateRate: number;
     readonly knowledgeTechnicalFailureRate: number;
@@ -81,8 +96,12 @@ export function createWorkerSloPolicy(input: WorkerSloPolicyInput): WorkerSloPol
     !validRef(input.policyRef) ||
     !validSampleCount(input.minModelLatencySamples) ||
     !validSampleCount(input.minKnowledgeLatencySamples) ||
+    !validSampleCount(input.minModelOutcomeSamples) ||
     !validNonNegative(input.maxModelP95Ms) ||
     !validNonNegative(input.maxKnowledgeP95Ms) ||
+    !validRate(input.maxModelFailureRate) ||
+    !validRate(input.maxModelFallbackRate) ||
+    !validRate(input.minModelAvailability) ||
     !validNonNegative(input.maxOldestPendingAgeMs) ||
     !validRate(input.maxFailedIndeterminateRate) ||
     !validRate(input.maxKnowledgeTechnicalFailureRate)
@@ -100,8 +119,12 @@ export const INITIAL_WORKER_SLO_POLICY_V1 = createWorkerSloPolicy({
   policyRef: 'qfj.quickfurno-worker-slo.engineering.v1',
   minModelLatencySamples: 20,
   minKnowledgeLatencySamples: 20,
+  minModelOutcomeSamples: 20,
   maxModelP95Ms: 15_000,
   maxKnowledgeP95Ms: 500,
+  maxModelFailureRate: 0.02,
+  maxModelFallbackRate: 0,
+  minModelAvailability: 0.98,
   maxOldestPendingAgeMs: 30_000,
   maxFailedIndeterminateRate: 0.01,
   maxKnowledgeTechnicalFailureRate: 0.02,
@@ -129,6 +152,22 @@ export function evaluateWorkerSlo(
   const modelP95Ms = p95(observation.modelLatency);
   const knowledgeP95Ms = p95(observation.knowledgeRetrieval.latency);
   const oldestPendingAgeMs = observation.spool.oldestPendingAgeMs ?? 0;
+  const modelCompleted = observation.modelGateway?.completed ?? 0;
+  const modelFailed = observation.modelGateway?.failed ?? 0;
+  const modelFallbackUsed = observation.modelGateway?.fallbackUsed ?? 0;
+  const modelOutcomeTotal = modelCompleted + modelFailed;
+  const modelFailureRate =
+    observation.modelGateway === undefined || modelOutcomeTotal === 0
+      ? null
+      : ratio(modelFailed, modelOutcomeTotal);
+  const modelFallbackRate =
+    observation.modelGateway === undefined || modelCompleted === 0
+      ? null
+      : ratio(modelFallbackUsed, modelCompleted);
+  const modelAvailability =
+    observation.modelGateway === undefined || modelOutcomeTotal === 0
+      ? null
+      : ratio(modelCompleted, modelOutcomeTotal);
 
   const outcomeTotal =
     observation.outcomes.completedNoReply +
@@ -171,6 +210,20 @@ export function evaluateWorkerSlo(
     breaches.push('KNOWLEDGE_P95_LATENCY');
   }
 
+  if (
+    observation.modelGateway === undefined ||
+    modelOutcomeTotal < policy.minModelOutcomeSamples ||
+    modelFailureRate === null ||
+    modelFallbackRate === null ||
+    modelAvailability === null
+  ) {
+    insufficient.push('MODEL_FAILURE_RATE', 'MODEL_FALLBACK_RATE', 'MODEL_AVAILABILITY');
+  } else {
+    if (modelFailureRate > policy.maxModelFailureRate) breaches.push('MODEL_FAILURE_RATE');
+    if (modelFallbackRate > policy.maxModelFallbackRate) breaches.push('MODEL_FALLBACK_RATE');
+    if (modelAvailability < policy.minModelAvailability) breaches.push('MODEL_AVAILABILITY');
+  }
+
   if (oldestPendingAgeMs > policy.maxOldestPendingAgeMs) {
     breaches.push('OLDEST_PENDING_AGE');
   }
@@ -194,6 +247,9 @@ export function evaluateWorkerSlo(
     measurements: Object.freeze({
       modelP95Ms,
       knowledgeP95Ms,
+      modelFailureRate,
+      modelFallbackRate,
+      modelAvailability,
       oldestPendingAgeMs,
       failedIndeterminateRate,
       knowledgeTechnicalFailureRate,
