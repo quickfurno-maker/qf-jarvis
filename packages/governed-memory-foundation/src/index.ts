@@ -161,3 +161,37 @@ export function assessGovernedMemoryWrite(
     expiresAfterDays: policy.maxDurableRetentionDays,
   });
 }
+
+
+export interface GovernedMemoryReadQuery {
+  readonly subjectRef: string;
+  readonly factTypes?: readonly string[];
+  readonly limit: number;
+}
+
+export interface GovernedMemoryRecord extends GovernedMemoryFactInput {
+  readonly policyRef: string;
+  readonly retentionPolicyRef?: string;
+  readonly erasurePolicyRef?: string;
+}
+
+export interface GovernedMemoryErasureResult {
+  readonly subjectRef: string;
+  readonly erasedFactRefs: readonly string[];
+}
+
+/**
+ * Future persistence seam. This interface deliberately provides no implementation.
+ *
+ * A concrete store must sit behind the owner-approved lifecycle policy and must never accept a
+ * CORE_AUTHORITY_REFERENCE as durable memory. The erasure method is first-class so deletion is not
+ * retrofitted after persistence ships.
+ */
+export interface GovernedMemoryStorePort {
+  readActive(query: GovernedMemoryReadQuery): Promise<readonly GovernedMemoryRecord[]>;
+  write(record: GovernedMemoryRecord): Promise<void>;
+  eraseSubject(input: {
+    readonly subjectRef: string;
+    readonly erasurePolicyRef: string;
+  }): Promise<GovernedMemoryErasureResult>;
+}
