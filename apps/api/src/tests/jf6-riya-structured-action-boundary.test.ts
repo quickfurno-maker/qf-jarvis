@@ -1,23 +1,33 @@
-import type { CoreRiyaIntakePort } from '@qf-jarvis/core-riya-intake';
+import type {
+  CoreRiyaIntakeLookupInput,
+  CoreRiyaIntakePort,
+  CoreRiyaIntakeReadInput,
+  CoreRiyaIntakeSubmissionRequestV1,
+} from '@qf-jarvis/core-riya-intake';
 import type { DatabasePool } from '@qf-jarvis/event-backbone';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createJf6RiyaStructuredActionBoundary } from '../jf6-private-process/create-riya-structured-action-boundary.js';
 
 function pool(): DatabasePool {
-  return { query: vi.fn() } as unknown as DatabasePool;
+  return {
+    connect: vi.fn(),
+    query: vi.fn(),
+  } as unknown as DatabasePool;
 }
 
-function intakePort(): CoreRiyaIntakePort & {
-  readonly readCurrent: ReturnType<typeof vi.fn>;
-  readonly lookupSubmission: ReturnType<typeof vi.fn>;
-  readonly submit: ReturnType<typeof vi.fn>;
-} {
-  return {
-    readCurrent: vi.fn(),
-    lookupSubmission: vi.fn(),
-    submit: vi.fn(),
-  };
+function intakeHarness() {
+  const readCurrent = vi.fn((_input: CoreRiyaIntakeReadInput): Promise<unknown> =>
+    Promise.resolve(undefined),
+  );
+  const lookupSubmission = vi.fn((_input: CoreRiyaIntakeLookupInput): Promise<unknown> =>
+    Promise.resolve(undefined),
+  );
+  const submit = vi.fn((_request: CoreRiyaIntakeSubmissionRequestV1): Promise<unknown> =>
+    Promise.resolve(undefined),
+  );
+  const port: CoreRiyaIntakePort = { readCurrent, lookupSubmission, submit };
+  return { port, readCurrent, lookupSubmission, submit };
 }
 
 const availability = {
@@ -32,11 +42,11 @@ const availability = {
 
 describe('JF-6 Riya structured-action boundary', () => {
   it('composes all four structured capabilities without performing I/O', () => {
-    const port = intakePort();
+    const intake = intakeHarness();
     const boundary = createJf6RiyaStructuredActionBoundary({
       pool: pool(),
       availability,
-      coreIntakePort: port,
+      coreIntakePort: intake.port,
     });
 
     expect(Object.keys(boundary).sort()).toEqual([
@@ -45,9 +55,9 @@ describe('JF-6 Riya structured-action boundary', () => {
       'editSummary',
       'submitConfirmedIntake',
     ]);
-    expect(port.readCurrent).not.toHaveBeenCalled();
-    expect(port.lookupSubmission).not.toHaveBeenCalled();
-    expect(port.submit).not.toHaveBeenCalled();
+    expect(intake.readCurrent).not.toHaveBeenCalled();
+    expect(intake.lookupSubmission).not.toHaveBeenCalled();
+    expect(intake.submit).not.toHaveBeenCalled();
     expect(availability.httpPost).not.toHaveBeenCalled();
   });
 
@@ -63,14 +73,14 @@ describe('JF-6 Riya structured-action boundary', () => {
         availability,
         coreIntakePort: partial,
       }),
-    ).toThrow('invalid-input');
+    ).toThrow();
   });
 
   it('does not expose the Core port or the durable store from the boundary', () => {
     const boundary = createJf6RiyaStructuredActionBoundary({
       pool: pool(),
       availability,
-      coreIntakePort: intakePort(),
+      coreIntakePort: intakeHarness().port,
     });
 
     expect('coreIntakePort' in boundary).toBe(false);

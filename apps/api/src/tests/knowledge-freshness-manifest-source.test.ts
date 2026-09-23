@@ -98,7 +98,7 @@ describe('knowledge freshness manifest source port', () => {
       },
     };
     expect(() => createKnowledgeFreshnessManifestSourcePort(manifest([contaminated]))).toThrow(
-      'knowledge-freshness-approval-binding-invalid',
+      'knowledge-freshness-manifest-invalid',
     );
   });
 

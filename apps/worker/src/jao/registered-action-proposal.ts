@@ -74,9 +74,7 @@ export interface RegisteredJaoProposalInput {
   readonly actionVersion: number;
   readonly agentScope: JaoActionAgentScope;
   readonly maturityDecision:
-    | 'KEEP_DEFAULT_OFF'
-    | 'SHADOW_EVIDENCE_SUFFICIENT'
-    | 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE';
+    'KEEP_DEFAULT_OFF' | 'SHADOW_EVIDENCE_SUFFICIENT' | 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE';
   readonly authorityEvidenceRef?: string;
   readonly approvalEvidenceRef?: string;
   readonly proposalRequest: unknown;

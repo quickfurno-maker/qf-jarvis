@@ -62,6 +62,9 @@ importers:
       '@qf-jarvis/core-decision-http-transport':
         specifier: workspace:*
         version: link:../../packages/core-decision-http-transport
+      '@qf-jarvis/core-riya-intake':
+        specifier: workspace:*
+        version: link:../../packages/core-riya-intake
       '@qf-jarvis/core-service-availability-read':
         specifier: workspace:*
         version: link:../../packages/core-service-availability-read
@@ -74,6 +77,9 @@ importers:
       '@qf-jarvis/governed-knowledge':
         specifier: workspace:*
         version: link:../../packages/governed-knowledge
+      '@qf-jarvis/governed-memory-foundation':
+        specifier: workspace:*
+        version: link:../../packages/governed-memory-foundation
       '@qf-jarvis/groq-staging-smoke':
         specifier: workspace:*
         version: link:../../packages/groq-staging-smoke
@@ -119,6 +125,9 @@ importers:
       '@qf-jarvis/postgres-conversation-state':
         specifier: workspace:*
         version: link:../../packages/postgres-conversation-state
+      '@qf-jarvis/postgres-governed-memory-store':
+        specifier: workspace:*
+        version: link:../../packages/postgres-governed-memory-store
       '@qf-jarvis/postgres-knowledge-index':
         specifier: workspace:*
         version: link:../../packages/postgres-knowledge-index
@@ -234,6 +243,9 @@ importers:
       '@qf-jarvis/control-plane-read-contract':
         specifier: workspace:*
         version: link:../../packages/control-plane-read-contract
+      '@qf-jarvis/durable-orchestration-contracts':
+        specifier: workspace:*
+        version: link:../../packages/durable-orchestration-contracts
       '@qf-jarvis/event-backbone':
         specifier: workspace:*
         version: link:../../packages/event-backbone

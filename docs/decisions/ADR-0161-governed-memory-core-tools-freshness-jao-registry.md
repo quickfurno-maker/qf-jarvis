@@ -32,7 +32,7 @@ The admission/runtime layer requires all existing memory invariants, including:
 
 Durable reads and writes are default-OFF. Enabling them requires an exact owner approval reference, retention-policy reference, erasure-policy reference and a bounded maximum retention period. A record whose expiry exceeds that ceiling is refused.
 
-A private PostgreSQL adapter and reviewed schema source artifact may exist in `apps/api` so the implementation can be tested. The schema artifact is **not** added to the managed migration ledger and grants no role. Applying it to a managed database remains a separate governed deployment decision. Erasure/invalidation physically deletes memory payloads and returns only a bounded deletion receipt.
+A private PostgreSQL adapter and reviewed schema source artifact may exist in `apps/api` so the implementation can be tested. The schema artifact is **not** added to the managed migration ledger and grants no role. Applying it to a managed database remains a separate governed deployment decision. The API composes the memory runtime over the same caller-owned durable pool without changing the existing runtime lifecycle surface. Erasure/invalidation physically deletes memory payloads and returns only a bounded deletion receipt. Expired memory may be physically purged only through a bounded oldest-first batch using `FOR UPDATE SKIP LOCKED`; scheduling that maintenance remains external.
 
 The reusable foundation package remains free of database, environment, transport and model dependencies.
 
@@ -48,7 +48,7 @@ The current tool vocabulary is:
 
 Every result is re-proved through its canonical Core parser before it becomes tool data.
 
-The JF-6 serving composition binds service availability to the already-reviewed signed QuickFurno endpoint. The Riya intake read/lookup port remains injected because QuickFurno has not yet supplied a separately reviewed live source-of-truth mapping for that contract. No fallback or inferred mapping is permitted.
+The JF-6 serving composition binds service availability to the already-reviewed signed QuickFurno endpoint. A separate JF-6 structured-action composition now binds the durable continuity store and signed availability reader to the complete `CoreRiyaIntakePort`, but that port remains injected because QuickFurno has not yet supplied a separately reviewed live source-of-truth mapping from the opaque Riya customer reference to contact/consent/submission authority. No fallback or inferred mapping to lead or messaging consent is permitted.
 
 ### 3. Knowledge freshness
 
@@ -62,7 +62,7 @@ Freshness compares exact source identity using:
 
 A source is classified as `UNCHANGED`, `CHANGED`, `NEW` or `MISSING`. Approval/owner drift counts as change, and source disappearance blocks the cycle rather than silently shrinking the corpus.
 
-The application coordinator additionally proves each fingerprint is bound to the actual normalized document. A changed source set is evaluated before build. Only approved sources with passing evaluation may enter candidate construction.
+The application coordinator additionally proves each fingerprint is bound to the actual normalized document. An explicit manifest adapter validates a caller-supplied, bounded source set, rejects duplicate identities and digest drift, and performs no filesystem/network discovery. A changed source set is evaluated before build. Only approved sources with passing evaluation may enter candidate construction.
 
 Candidate construction reuses `buildStreamingKnowledgeRelease` with `activateAfterSeal: false` hard-pinned. The coordinator refuses any builder result that reports activation. Freshness can therefore prepare and seal an immutable **inactive** candidate, but cannot change the active serving revision.
 
@@ -80,7 +80,7 @@ The engineering registry ships every action disabled. Current definitions are:
 
 The strongest registry verdict remains `ELIGIBLE_FOR_PROPOSAL`. It never means approved, authorized, executed or sent.
 
-The first concrete binding reuses the existing JAO-6 governed business-action proposal path. It verifies the registry binding and exact JAO-6 policy identity, then may produce only the existing `RecommendationV1` plus powerless `ApprovalRequestV1`. It creates no approval decision, execution intent, Core mutation or provider action.
+All three engineering actions have concrete non-executing bindings. Vendor follow-up reuses the existing JAO-6 governed business-action proposal path and may produce only the existing `RecommendationV1` plus powerless `ApprovalRequestV1`. Human takeover may produce only a request artifact that deliberately lacks operator identity, command id, expected revision and issuance evidence, so it cannot become a `ConversationControlCommand`. Governed follow-up may produce only validated content-minimized Temporal journey/wake input with `workflowStarted: false`; the worker never receives a Temporal client. None creates an approval decision, execution intent, Core mutation, control transition, workflow start or provider action.
 
 The canonical runtime function uses the immutable engineering registry, so it remains fail-closed while those actions are disabled. Tests may use an internal, non-barrel seam to prove what a future separately reviewed enablement would enter.
 

@@ -1,4 +1,7 @@
-import { normalizeSourceDocument, type KnowledgeSourceDocumentInput } from '@qf-jarvis/knowledge-ingestion';
+import {
+  normalizeSourceDocument,
+  type KnowledgeSourceDocumentInput,
+} from '@qf-jarvis/knowledge-ingestion';
 import {
   assessKnowledgeFreshness,
   type KnowledgeSourceFingerprint,
@@ -32,7 +35,6 @@ function detachedJson<T>(value: T): T {
   } catch {
     throw new TypeError('knowledge-freshness-manifest-invalid');
   }
-  if (encoded === undefined) throw new TypeError('knowledge-freshness-manifest-invalid');
   try {
     return JSON.parse(encoded) as T;
   } catch {
@@ -129,13 +131,15 @@ export function createKnowledgeFreshnessManifestSourcePort(
   );
 
   return Object.freeze({
-    async readCurrent(): Promise<readonly KnowledgeFreshnessSourceBundle[]> {
-      return Object.freeze(
-        bundles.map((bundle) =>
-          Object.freeze({
-            fingerprint: Object.freeze({ ...bundle.fingerprint }),
-            document: detachedJson(bundle.document),
-          }),
+    readCurrent(): Promise<readonly KnowledgeFreshnessSourceBundle[]> {
+      return Promise.resolve(
+        Object.freeze(
+          bundles.map((bundle) =>
+            Object.freeze({
+              fingerprint: Object.freeze({ ...bundle.fingerprint }),
+              document: detachedJson(bundle.document),
+            }),
+          ),
         ),
       );
     },
