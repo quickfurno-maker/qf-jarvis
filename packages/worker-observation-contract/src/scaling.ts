@@ -72,10 +72,7 @@ export function evaluateScaleReadiness(
   let pressureObservationCount = 0;
   for (const observation of observations) {
     const oldest = observation.spool.oldestPendingAgeMs ?? 0;
-    const pending =
-      'pending' in observation.spool && typeof observation.spool.pending === 'number'
-        ? observation.spool.pending
-        : 0;
+    const pending = observation.spool.pending;
     if (pending >= policy.minPendingTurns && oldest >= policy.minOldestPendingAgeMs) {
       pressureObservationCount += 1;
     }
