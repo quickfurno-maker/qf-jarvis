@@ -164,6 +164,39 @@ describe('postgres hybrid knowledge index', () => {
     expect(current.ok).toBe(true);
   }, 60_000);
 
+  it('fails closed when PostgreSQL is unavailable during candidate retrieval', async () => {
+    const unavailablePool = new Pool({
+      connectionString: 'postgresql://qf_jarvis_ci:qf_jarvis_ci_only@127.0.0.1:1/qf_jarvis_test',
+      connectionTimeoutMillis: 200,
+      max: 1,
+    });
+    try {
+      const store = createPostgresHybridCandidateStore(
+        unavailablePool,
+        'knowledge.release.unavailable',
+      );
+      const retriever = createHybridKnowledgeRetriever({ embedding, store });
+      const result = await retriever.retrieve(
+        createHybridKnowledgeSearchRequest({
+          requestId: 'req.database.unavailable',
+          tenantId: 'quickfurno',
+          agentScope: 'CLIENT',
+          purpose: 'CLIENT_RESPONSE',
+          dataClass: 'HOSTED_ALLOWED',
+          asOf: '2026-09-22T00:00:00.000Z',
+          queryText: 'installation scheduling',
+          topicFilters: ['installation'],
+          candidatePool: 32,
+          maxResults: 4,
+          maxContentChars: 8000,
+        }),
+      );
+      expect(result).toEqual({ ok: false, reason: 'hybrid-candidate-store-failed' });
+    } finally {
+      await unavailablePool.end();
+    }
+  }, 60_000);
+
   it('fails closed when stored chunk content no longer matches its sealed digest', async () => {
     await publish('knowledge.release.corrupt', [
       source('doc.corrupt', 1, 'Installation scheduling ORIGINAL integrity marker.'),
