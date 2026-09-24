@@ -2,9 +2,11 @@ import {
   createModelCapabilityProfile,
   createModelCapabilityRequirement,
   createProviderReleaseRef,
+  type EvaluationEvidenceVerifier,
+  type EvidenceVerificationRequest,
   type ModelCapabilityProfile,
 } from '@qf-jarvis/model-gateway';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   createAdaptiveModelRoutingPolicy,
@@ -13,10 +15,13 @@ import {
   selectAdaptiveModelRelease,
 } from '../index.js';
 
+const FAST_DIGEST = 'a'.repeat(64);
+const STRONG_DIGEST = 'b'.repeat(64);
+
 function profile(
   releaseId: string,
   options: {
-    approved?: boolean;
+    approvedRef?: boolean;
     task?: 'RESPONSE_GENERATION' | 'STRUCTURED_EXTRACTION';
     maxInput?: number;
   } = {},
@@ -28,7 +33,7 @@ function profile(
       modelId: `model-${releaseId}`,
       modelVersion: 'v1',
       executionClass: 'HOSTED',
-      configDigest: `digest.${releaseId}`,
+      configDigest: releaseId === 'fast' ? FAST_DIGEST : STRONG_DIGEST,
     }),
     taskClasses: [options.task ?? 'RESPONSE_GENERATION'],
     resultModes: ['TEXT'],
@@ -37,7 +42,7 @@ function profile(
     maxCompletionTokens: 4_000,
     supportsTimeout: true,
     supportsCancellation: true,
-    ...(options.approved === false ? {} : { evaluationApprovalRef: `evaluation.${releaseId}` }),
+    ...(options.approvedRef === false ? {} : { evaluationApprovalRef: `evaluation.${releaseId}` }),
   });
 }
 
@@ -57,28 +62,99 @@ function policy(fallbackEnabled = false) {
       STANDARD: ['strong', 'fast'],
       COMPLEX: ['strong', 'fast'],
     },
+    activeCertificationByRelease: {
+      fast: {
+        evaluationRef: 'evaluation.fast',
+        evidenceDigest: 'c'.repeat(64),
+        capabilityProfileRef: 'cap.fast.v1',
+      },
+      strong: {
+        evaluationRef: 'evaluation.strong',
+        evidenceDigest: 'd'.repeat(64),
+        capabilityProfileRef: 'cap.strong.v1',
+      },
+    },
     fallbackEnabled,
     certifiedFallbackByPrimary: { strong: 'fast' },
   });
 }
 
+function verifier(options: { refuse?: readonly string[] } = {}): EvaluationEvidenceVerifier {
+  const refused = new Set(options.refuse ?? []);
+  return Object.freeze({
+    verify(request: EvidenceVerificationRequest) {
+      const expected =
+        request.release.releaseId === 'fast'
+          ? {
+              evaluationRef: 'evaluation.fast',
+              evidenceDigest: 'c'.repeat(64),
+              capabilityProfileRef: 'cap.fast.v1',
+            }
+          : request.release.releaseId === 'strong'
+            ? {
+                evaluationRef: 'evaluation.strong',
+                evidenceDigest: 'd'.repeat(64),
+                capabilityProfileRef: 'cap.strong.v1',
+              }
+            : undefined;
+      if (
+        expected === undefined ||
+        refused.has(request.release.releaseId) ||
+        request.mode !== 'ACTIVE' ||
+        request.approvalTarget !== 'ACTIVE_MODEL_RELEASE' ||
+        request.evaluationRef !== expected.evaluationRef ||
+        request.evidenceDigest !== expected.evidenceDigest ||
+        request.capabilityProfileRef !== expected.capabilityProfileRef
+      ) {
+        return Object.freeze({ ok: false as const, reason: 'evidence-missing' as const });
+      }
+      return Object.freeze({ ok: true as const });
+    },
+  });
+}
+
 describe('adaptive model intelligence control', () => {
-  it('selects the first certified capable release for the requested complexity', () => {
+  it('selects the first verifier-backed ACTIVE-certified capable release', () => {
     const result = selectAdaptiveModelRelease({
       profiles: [profile('fast'), profile('strong')],
       requirement,
       complexity: 'SIMPLE',
       policy: policy(),
+      evidenceVerifier: verifier(),
     });
     expect(result).toMatchObject({ decision: 'PRIMARY_SELECTED', release: { releaseId: 'fast' } });
   });
 
-  it('skips an uncertified release rather than treating policy order as approval', () => {
+  it('does not treat an opaque profile approval ref as certification when verification refuses', () => {
+    const rejectingVerifier = verifier({ refuse: ['fast'] });
+    const spy = vi.fn((request: EvidenceVerificationRequest) => rejectingVerifier.verify(request));
     const result = selectAdaptiveModelRelease({
-      profiles: [profile('fast', { approved: false }), profile('strong')],
+      profiles: [profile('fast'), profile('strong')],
       requirement,
       complexity: 'SIMPLE',
       policy: policy(),
+      evidenceVerifier: { verify: spy },
+    });
+    expect(result).toMatchObject({
+      decision: 'PRIMARY_SELECTED',
+      release: { releaseId: 'strong' },
+    });
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evaluationRef: 'evaluation.fast',
+        approvalTarget: 'ACTIVE_MODEL_RELEASE',
+        mode: 'ACTIVE',
+      }),
+    );
+  });
+
+  it('skips a release whose capability profile carries no approval reference', () => {
+    const result = selectAdaptiveModelRelease({
+      profiles: [profile('fast', { approvedRef: false }), profile('strong')],
+      requirement,
+      complexity: 'SIMPLE',
+      policy: policy(),
+      evidenceVerifier: verifier(),
     });
     expect(result).toMatchObject({
       decision: 'PRIMARY_SELECTED',
@@ -86,23 +162,28 @@ describe('adaptive model intelligence control', () => {
     });
   });
 
-  it('fails closed when every known release is uncertified', () => {
+  it('fails closed when every known release lacks verified ACTIVE evidence', () => {
     expect(
       selectAdaptiveModelRelease({
-        profiles: [profile('fast', { approved: false }), profile('strong', { approved: false })],
+        profiles: [profile('fast'), profile('strong')],
         requirement,
         complexity: 'COMPLEX',
         policy: policy(),
+        evidenceVerifier: verifier({ refuse: ['fast', 'strong'] }),
       }),
-    ).toEqual({ decision: 'NO_CERTIFIED_RELEASE', policyRef: 'qfj.adaptive-routing.test.v1' });
+    ).toEqual({
+      decision: 'NO_CERTIFIED_RELEASE',
+      policyRef: 'qfj.adaptive-routing.test.v1',
+    });
   });
 
-  it('prepares fallback only when both exact releases are certified and capable', () => {
+  it('prepares fallback only when both exact releases verify as ACTIVE and are capable', () => {
     const result = planCertifiedProviderFallback({
       profiles: [profile('fast'), profile('strong')],
       requirement,
       primaryReleaseId: 'strong',
       policy: policy(true),
+      evidenceVerifier: verifier(),
     });
     expect(result).toMatchObject({
       decision: 'FALLBACK_READY',
@@ -119,17 +200,31 @@ describe('adaptive model intelligence control', () => {
         requirement,
         primaryReleaseId: 'strong',
         policy: policy(false),
+        evidenceVerifier: verifier(),
       }),
     ).toMatchObject({ decision: 'FALLBACK_DISABLED' });
   });
 
-  it('does not use a certified fallback that fails the capability requirement', () => {
+  it('refuses fallback when either exact release fails evidence verification', () => {
+    expect(
+      planCertifiedProviderFallback({
+        profiles: [profile('fast'), profile('strong')],
+        requirement,
+        primaryReleaseId: 'strong',
+        policy: policy(true),
+        evidenceVerifier: verifier({ refuse: ['fast'] }),
+      }),
+    ).toMatchObject({ decision: 'FALLBACK_NOT_CERTIFIED' });
+  });
+
+  it('does not use a verified fallback that fails the capability requirement', () => {
     expect(
       planCertifiedProviderFallback({
         profiles: [profile('fast', { task: 'STRUCTURED_EXTRACTION' }), profile('strong')],
         requirement,
         primaryReleaseId: 'strong',
         policy: policy(true),
+        evidenceVerifier: verifier(),
       }),
     ).toMatchObject({ decision: 'FALLBACK_NOT_CAPABLE' });
   });

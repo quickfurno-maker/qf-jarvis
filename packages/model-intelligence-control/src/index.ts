@@ -1,18 +1,27 @@
 import {
   createModelCapabilityRegistry,
+  type EvaluationEvidenceVerifier,
   type ModelCapabilityProfile,
   type ModelCapabilityProfileSummary,
   type ModelCapabilityRequirement,
 } from '@qf-jarvis/model-gateway';
 
 const REF = /^[A-Za-z0-9._:/-]{1,256}$/u;
+const EVIDENCE_DIGEST = /^[0-9a-f]{8,64}$/u;
 
 export const ADAPTIVE_COMPLEXITIES = ['SIMPLE', 'STANDARD', 'COMPLEX'] as const;
 export type AdaptiveComplexity = (typeof ADAPTIVE_COMPLEXITIES)[number];
 
+export interface ActiveReleaseCertificationClaim {
+  readonly evaluationRef: string;
+  readonly evidenceDigest: string;
+  readonly capabilityProfileRef: string;
+}
+
 export interface AdaptiveModelRoutingPolicy {
   readonly policyRef: string;
   readonly releaseOrderByComplexity: Readonly<Record<AdaptiveComplexity, readonly string[]>>;
+  readonly activeCertificationByRelease: Readonly<Record<string, ActiveReleaseCertificationClaim>>;
   readonly fallbackEnabled: boolean;
   readonly certifiedFallbackByPrimary: Readonly<Record<string, string>>;
 }
@@ -44,6 +53,19 @@ export function createAdaptiveModelRoutingPolicy(
     }
     normalized[complexity] = Object.freeze([...order]);
   }
+  const certifications: Record<string, ActiveReleaseCertificationClaim> = {};
+  for (const [releaseId, claim] of Object.entries(input.activeCertificationByRelease)) {
+    if (
+      !seen.has(releaseId) ||
+      !REF.test(claim.evaluationRef) ||
+      !EVIDENCE_DIGEST.test(claim.evidenceDigest) ||
+      !REF.test(claim.capabilityProfileRef)
+    ) {
+      throw new TypeError('adaptive-model-routing-policy-invalid');
+    }
+    certifications[releaseId] = Object.freeze({ ...claim });
+  }
+
   const fallbacks: Record<string, string> = {};
   for (const [primary, fallback] of Object.entries(input.certifiedFallbackByPrimary)) {
     if (!REF.test(primary) || !REF.test(fallback) || primary === fallback) {
@@ -57,9 +79,37 @@ export function createAdaptiveModelRoutingPolicy(
   return Object.freeze({
     policyRef: input.policyRef,
     releaseOrderByComplexity: Object.freeze(normalized),
+    activeCertificationByRelease: Object.freeze(certifications),
     fallbackEnabled: input.fallbackEnabled,
     certifiedFallbackByPrimary: Object.freeze(fallbacks),
   });
+}
+
+function hasVerifiedActiveCertification(input: {
+  readonly profile: ModelCapabilityProfile;
+  readonly policy: AdaptiveModelRoutingPolicy;
+  readonly verifier: EvaluationEvidenceVerifier;
+}): boolean {
+  const claim = input.policy.activeCertificationByRelease[input.profile.release.releaseId];
+  if (
+    claim === undefined ||
+    input.profile.evaluationApprovalRef === undefined ||
+    input.profile.evaluationApprovalRef !== claim.evaluationRef
+  ) {
+    return false;
+  }
+  try {
+    return input.verifier.verify({
+      evaluationRef: claim.evaluationRef,
+      evidenceDigest: claim.evidenceDigest,
+      approvalTarget: 'ACTIVE_MODEL_RELEASE',
+      release: input.profile.release,
+      capabilityProfileRef: claim.capabilityProfileRef,
+      mode: 'ACTIVE',
+    }).ok;
+  } catch {
+    return false;
+  }
 }
 
 export type AdaptiveRouteDecision =
@@ -78,6 +128,7 @@ export function selectAdaptiveModelRelease(input: {
   readonly requirement: ModelCapabilityRequirement;
   readonly complexity: AdaptiveComplexity;
   readonly policy: AdaptiveModelRoutingPolicy;
+  readonly evidenceVerifier: EvaluationEvidenceVerifier;
 }): AdaptiveRouteDecision {
   const registry = createModelCapabilityRegistry(input.profiles);
   let sawKnown = false;
@@ -87,7 +138,15 @@ export function selectAdaptiveModelRelease(input: {
     const profile = registry.getByReleaseId(releaseId);
     if (profile === undefined) continue;
     sawKnown = true;
-    if (profile.evaluationApprovalRef === undefined) continue;
+    if (
+      !hasVerifiedActiveCertification({
+        profile,
+        policy: input.policy,
+        verifier: input.evidenceVerifier,
+      })
+    ) {
+      continue;
+    }
     sawCertified = true;
     const resolved = registry.resolveRelease(profile.release, input.requirement);
     if (resolved.ok) {
@@ -139,6 +198,7 @@ export function planCertifiedProviderFallback(input: {
   readonly requirement: ModelCapabilityRequirement;
   readonly primaryReleaseId: string;
   readonly policy: AdaptiveModelRoutingPolicy;
+  readonly evidenceVerifier: EvaluationEvidenceVerifier;
 }): CertifiedFallbackDecision {
   if (!input.policy.fallbackEnabled) {
     return Object.freeze({
@@ -162,7 +222,18 @@ export function planCertifiedProviderFallback(input: {
       policyRef: input.policy.policyRef,
     });
   }
-  if (primary.evaluationApprovalRef === undefined || fallback.evaluationApprovalRef === undefined) {
+  if (
+    !hasVerifiedActiveCertification({
+      profile: primary,
+      policy: input.policy,
+      verifier: input.evidenceVerifier,
+    }) ||
+    !hasVerifiedActiveCertification({
+      profile: fallback,
+      policy: input.policy,
+      verifier: input.evidenceVerifier,
+    })
+  ) {
     return Object.freeze({
       decision: 'FALLBACK_NOT_CERTIFIED' as const,
       policyRef: input.policy.policyRef,

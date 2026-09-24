@@ -3,6 +3,8 @@ import {
   createModelCapabilityProfile,
   createModelCapabilityRequirement,
   createProviderReleaseRef,
+  type EvaluationEvidenceVerifier,
+  type EvidenceVerificationRequest,
 } from '@qf-jarvis/model-gateway';
 import {
   createAdaptiveModelRoutingPolicy,
@@ -30,7 +32,7 @@ const fast = createModelCapabilityProfile({
     modelId: 'model-fast',
     modelVersion: 'v1',
     executionClass: 'HOSTED',
-    configDigest: 'digest.fast',
+    configDigest: 'a'.repeat(64),
   }),
   taskClasses: ['RESPONSE_GENERATION'],
   resultModes: ['TEXT'],
@@ -48,7 +50,7 @@ const strong = createModelCapabilityProfile({
     modelId: 'model-strong',
     modelVersion: 'v1',
     executionClass: 'HOSTED',
-    configDigest: 'digest.strong',
+    configDigest: 'b'.repeat(64),
   }),
   taskClasses: ['RESPONSE_GENERATION'],
   resultModes: ['TEXT'],
@@ -67,8 +69,50 @@ const routingPolicy = createAdaptiveModelRoutingPolicy({
     STANDARD: ['strong', 'fast'],
     COMPLEX: ['strong', 'fast'],
   },
+  activeCertificationByRelease: {
+    fast: {
+      evaluationRef: 'evaluation.fast',
+      evidenceDigest: 'c'.repeat(64),
+      capabilityProfileRef: 'cap.fast.v1',
+    },
+    strong: {
+      evaluationRef: 'evaluation.strong',
+      evidenceDigest: 'd'.repeat(64),
+      capabilityProfileRef: 'cap.strong.v1',
+    },
+  },
   fallbackEnabled: false,
   certifiedFallbackByPrimary: { strong: 'fast' },
+});
+
+const evidenceVerifier: EvaluationEvidenceVerifier = Object.freeze({
+  verify(request: EvidenceVerificationRequest) {
+    const expected =
+      request.release.releaseId === 'fast'
+        ? {
+            evaluationRef: 'evaluation.fast',
+            evidenceDigest: 'c'.repeat(64),
+            capabilityProfileRef: 'cap.fast.v1',
+          }
+        : request.release.releaseId === 'strong'
+          ? {
+              evaluationRef: 'evaluation.strong',
+              evidenceDigest: 'd'.repeat(64),
+              capabilityProfileRef: 'cap.strong.v1',
+            }
+          : undefined;
+    if (
+      expected === undefined ||
+      request.mode !== 'ACTIVE' ||
+      request.approvalTarget !== 'ACTIVE_MODEL_RELEASE' ||
+      request.evaluationRef !== expected.evaluationRef ||
+      request.evidenceDigest !== expected.evidenceDigest ||
+      request.capabilityProfileRef !== expected.capabilityProfileRef
+    ) {
+      return Object.freeze({ ok: false as const, reason: 'evidence-missing' as const });
+    }
+    return Object.freeze({ ok: true as const });
+  },
 });
 
 const promptDigest = 'b'.repeat(64);
@@ -140,6 +184,7 @@ describe('QF capability digital twin', () => {
               }),
               complexity: 'SIMPLE',
               policy: routingPolicy,
+              evidenceVerifier,
             });
             return Promise.resolve({
               decision: route.decision,

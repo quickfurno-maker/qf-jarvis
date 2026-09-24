@@ -24,7 +24,7 @@ Several of these can be implemented immediately as deterministic policy or simul
 
 ### 1. Adaptive model routing is a certified-release selector, not a second gateway
 
-`@qf-jarvis/model-intelligence-control` may select an exact release id from an explicit per-complexity policy only after the existing model-gateway capability registry proves that release capable and the release profile carries evaluation approval evidence.
+`@qf-jarvis/model-intelligence-control` may select an exact release id from an explicit per-complexity policy only after the existing model-gateway capability registry proves that release capable **and** the existing frozen `EvaluationEvidenceVerifier` verifies an exact `ACTIVE_MODEL_RELEASE` certification claim for that release and capability profile. The capability profile's optional `evaluationApprovalRef` is only an opaque forward reference and is never treated as certification by itself.
 
 It owns no provider, transport, credential, endpoint, rollout controller or invocation loop. Selection does not activate inference.
 
@@ -37,7 +37,9 @@ A fallback may be prepared only when:
 - the adaptive policy explicitly enables fallback;
 - it contains an exact primary -> fallback release mapping;
 - both releases are present in the existing capability registry;
-- both carry evaluation approval evidence;
+- each release has an explicit evaluation ref, evidence digest and capability-profile ref in the adaptive policy;
+- the existing evidence verifier accepts each exact claim for `ACTIVE_MODEL_RELEASE` / `ACTIVE`;
+- an opaque capability-profile approval ref without verifier-backed evidence is insufficient;
 - both satisfy the same technical capability requirement.
 
 The strongest result is `FALLBACK_READY` with `executionAuthorized: false`.
