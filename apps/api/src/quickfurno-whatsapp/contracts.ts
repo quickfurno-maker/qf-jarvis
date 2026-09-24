@@ -4,6 +4,19 @@ export const QFJ_WHATSAPP_TURN_MATERIAL_PATH =
   '/api/internal/jarvis/whatsapp-turn-material' as const;
 export const QFJ_WHATSAPP_TURN_MATERIAL_SIGNING_DOMAIN =
   'qfj.whatsapp.turn-material.http.sig.v2' as const;
+export const QFJ_WHATSAPP_MEDIA_CONTENT_PROTOCOL = 'qfj.whatsapp.media-content' as const;
+export const QFJ_WHATSAPP_MEDIA_CONTENT_VERSION = 1 as const;
+export const QFJ_WHATSAPP_MEDIA_CONTENT_PATH =
+  '/api/internal/jarvis/whatsapp-media-content' as const;
+export const QFJ_WHATSAPP_MEDIA_CONTENT_SIGNING_DOMAIN =
+  'qfj.whatsapp.media-content.http.sig.v1' as const;
+export const QFJ_WHATSAPP_MEDIA_REQUEST_ID_HEADER = 'x-qfj-media-request-id' as const;
+export const QFJ_WHATSAPP_MEDIA_CONVERSATION_ID_HEADER = 'x-qfj-media-conversation-id' as const;
+export const QFJ_WHATSAPP_MEDIA_INBOUND_ID_HEADER = 'x-qfj-media-inbound-id' as const;
+export const QFJ_WHATSAPP_MEDIA_REVISION_HEADER = 'x-qfj-media-revision' as const;
+export const QFJ_WHATSAPP_MEDIA_ID_HEADER = 'x-qfj-media-id' as const;
+export const QFJ_WHATSAPP_MEDIA_KIND_HEADER = 'x-qfj-media-kind' as const;
+export const QFJ_WHATSAPP_MEDIA_SHA256_HEADER = 'x-qfj-media-sha256' as const;
 export const QFJ_WHATSAPP_REPLY_PROTOCOL = 'qfj.whatsapp.reply' as const;
 export const QFJ_WHATSAPP_REPLY_VERSION = 2 as const;
 export const QFJ_WHATSAPP_REPLY_PATH = '/api/internal/jarvis/whatsapp-reply' as const;
@@ -17,6 +30,8 @@ export type QuickFurnoWhatsAppConversationState = 'OPEN' | 'PAUSED' | 'HUMAN' | 
 export type QuickFurnoWhatsAppDataClass = 'HOSTED_ALLOWED' | 'LOCAL_ONLY' | 'HUMAN_ONLY';
 export type QuickFurnoWhatsAppSubjectStatus =
   'clear' | 'erased' | 'anonymised' | 'tombstoned' | 'in-progress';
+
+export type QuickFurnoWhatsAppMediaKind = 'image' | 'document' | 'audio' | 'video' | 'sticker';
 
 export type QuickFurnoWhatsAppInboundMessageType =
   | 'text'

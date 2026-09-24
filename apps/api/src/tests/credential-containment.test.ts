@@ -558,7 +558,7 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     }
   });
 
-  it('exactly five reviewed modules arm timers, and every arm has its clear', () => {
+  it('exactly six reviewed modules arm timers, and every arm has its clear', () => {
     // The second is the certification composition (JF-5B-R1, ADR-0152): the bounded discovery GET needs
     // one abort deadline, or a hung provider would hang an owner's terminal indefinitely. JF-5B-R6 adds
     // the evaluation-only pacing sleep in the same file. The RULE is unchanged -- every arm matched by a
@@ -572,6 +572,9 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       [JF5B_COMPOSITION]: 1,
       'src/jf6-private-process/create-core-service-availability-reader.ts': 1,
       'src/quickfurno-whatsapp/quickfurno-http.ts': 1,
+      // Signed media content reads use the same one-shot abort deadline. The reader receives
+      // bounded QuickFurno-owned bytes only; it has no retry loop, provider credential or URL.
+      'src/quickfurno-whatsapp/media-content-http.ts': 1,
       [JF7_WORKER]: 1,
     });
     const timerFiles = productionFiles().filter((file) =>

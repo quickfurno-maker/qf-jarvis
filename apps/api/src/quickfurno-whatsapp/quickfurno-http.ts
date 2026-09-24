@@ -438,7 +438,7 @@ function parseAuthorityState(
       value['humanTakeover'] ||
       value['aiPaused'] ||
       value['cancelled'] ||
-      dataClass !== 'HOSTED_ALLOWED' ||
+      dataClass === 'HUMAN_ONLY' ||
       subjectStatus !== 'clear' ||
       subjectRef === undefined)
   ) {
@@ -545,6 +545,17 @@ function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTur
     return null;
   const inbound = parseInboundMaterial(value['inbound']);
   if (!inbound) return null;
+  const hostedTextTypes = ['text', 'button_reply', 'list_reply'];
+  const localMediaTypes = ['image', 'document', 'audio', 'video', 'sticker'];
+  if (
+    (parsedAuthority.dataClass === 'HOSTED_ALLOWED' &&
+      !hostedTextTypes.includes(inbound.messageType)) ||
+    (parsedAuthority.dataClass === 'LOCAL_ONLY' &&
+      (!localMediaTypes.includes(inbound.messageType) || inbound.attachment === undefined)) ||
+    parsedAuthority.dataClass === 'HUMAN_ONLY'
+  ) {
+    return null;
+  }
   const normalizedTextRaw = value['normalizedText'];
   const normalizedText =
     normalizedTextRaw === undefined

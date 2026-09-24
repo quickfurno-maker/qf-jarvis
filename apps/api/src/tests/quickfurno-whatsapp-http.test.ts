@@ -102,7 +102,7 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
         ),
       ).toBe(true);
       const responseBody = {
-        ...authorityResponse(request),
+        ...authorityResponse(request, { dataClass: 'LOCAL_ONLY' }),
         inboundMessageId: request['inboundMessageId'],
         receivedAt: '2026-09-18T12:00:00.000Z',
         inbound: {
