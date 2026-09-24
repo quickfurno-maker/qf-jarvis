@@ -88,7 +88,7 @@ function deriveAttention(observation: QuickFurnoOperatorObservation): AttentionI
     items.push({
       id: 'core-approvals-awaiting',
       kind: 'governance',
-      title: awaiting + ' approval request' + (awaiting === 1 ? '' : 's') + ' need attention',
+      title: `${String(awaiting)} approval request${awaiting === 1 ? '' : 's'} need attention`,
       context: 'QuickFurno Core reports operator decisions waiting in the governed approval queue.',
       severity: 'warning',
     });
@@ -97,7 +97,7 @@ function deriveAttention(observation: QuickFurnoOperatorObservation): AttentionI
     items.push({
       id: 'core-human-takeovers',
       kind: 'capability',
-      title: takeovers + ' conversation' + (takeovers === 1 ? '' : 's') + ' under human control',
+      title: `${String(takeovers)} conversation${takeovers === 1 ? '' : 's'} under human control`,
       context: 'QuickFurno Core reports active human takeover state on tracked conversations.',
       severity: 'warning',
     });
@@ -106,7 +106,7 @@ function deriveAttention(observation: QuickFurnoOperatorObservation): AttentionI
     items.push({
       id: 'core-ai-paused',
       kind: 'capability',
-      title: paused + ' AI conversation' + (paused === 1 ? '' : 's') + ' paused',
+      title: `${String(paused)} AI conversation${paused === 1 ? '' : 's'} paused`,
       context: 'QuickFurno Core reports AI handling paused on tracked conversations.',
       severity: 'info',
     });
@@ -115,7 +115,7 @@ function deriveAttention(observation: QuickFurnoOperatorObservation): AttentionI
     items.push({
       id: 'core-automation-failed',
       kind: 'integration',
-      title: failed24h + ' automation job' + (failed24h === 1 ? '' : 's') + ' failed in 24h',
+      title: `${String(failed24h)} automation job${failed24h === 1 ? '' : 's'} failed in 24h`,
       context:
         'QuickFurno Core reports failed, dead-lettered or cancelled automation work in the last 24 hours.',
       severity: 'critical',
@@ -125,11 +125,7 @@ function deriveAttention(observation: QuickFurnoOperatorObservation): AttentionI
     items.push({
       id: 'core-automation-uncertain',
       kind: 'integration',
-      title:
-        uncertain24h +
-        ' automation outcome' +
-        (uncertain24h === 1 ? '' : 's') +
-        ' uncertain in 24h',
+      title: `${String(uncertain24h)} automation outcome${uncertain24h === 1 ? '' : 's'} uncertain in 24h`,
       context:
         'QuickFurno Core reports automation outcomes requiring reconciliation in the last 24 hours.',
       severity: 'critical',
