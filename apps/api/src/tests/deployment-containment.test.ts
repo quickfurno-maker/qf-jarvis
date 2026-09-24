@@ -111,9 +111,7 @@ describe('the production image', () => {
       expect(DOCKERFILE_CODE, workspace).toContain(
         `COPY packages/${workspace} packages/${workspace}`,
       );
-      expect(DOCKERFILE_CODE, workspace).toContain(
-        `pnpm --filter @qf-jarvis/${workspace} build`,
-      );
+      expect(DOCKERFILE_CODE, workspace).toContain(`pnpm --filter @qf-jarvis/${workspace} build`);
     }
   });
 
