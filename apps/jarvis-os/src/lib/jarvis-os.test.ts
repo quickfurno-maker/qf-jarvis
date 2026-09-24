@@ -471,19 +471,27 @@ describe('the default read model is the repository baseline, and read-only', () 
   });
 });
 
-describe('no live action capability is exposed', () => {
-  it('performs no network, storage or backend access anywhere in the app', () => {
+describe('live operator capability remains contained behind reviewed seams', () => {
+  it('permits network only in the reviewed operator/read adapters and nowhere else', () => {
     for (const file of sourceFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8'));
       const label = file.replace(/\\/g, '/').split('/apps/jarvis-os/')[1] ?? file;
-      const networkAllowed =
-        label === 'src/server/control-plane/sources/quickfurno-operator-source.ts';
+      const networkAllowed = new Set([
+        'src/server/control-plane/sources/quickfurno-operator-source.ts',
+        'src/server/operator/quickfurno-command.ts',
+        'src/components/operator/OperatorCommandProvider.tsx',
+      ]).has(label);
       if (!networkAllowed) {
         expect(code, `${label}: fetch`).not.toMatch(/\bfetch\s*\(/);
       }
       expect(code, `${label}: XHR`).not.toMatch(/XMLHttpRequest|WebSocket|EventSource/);
       if (!networkAllowed) {
         expect(code, `${label}: url`).not.toMatch(/https?:\/\//);
+      }
+      if (label === 'src/components/operator/OperatorCommandProvider.tsx') {
+        expect(code, `${label}: transport fetch`).toContain('fetch(input.path');
+        expect(code, `${label}: shared client`).toContain('@qf-jarvis/operator-client-core');
+        expect(code, `${label}: absolute URL`).not.toMatch(/https?:\/\//);
       }
       // JOS-01C NARROWS this rather than removing it. `process.env` is permitted in exactly two
       // reviewed places -- the auth config-path boundary and the proxy's NODE_ENV check for
@@ -550,6 +558,8 @@ describe('no live action capability is exposed', () => {
     const ALLOWED = new Set([
       '@qf-jarvis/control-plane-read-contract',
       '@qf-jarvis/operator-api-contract',
+      '@qf-jarvis/operator-client-core',
+      '@qf-jarvis/quickfurno-operator-command-contract',
       '@qf-jarvis/quickfurno-operator-observation-contract',
       '@qf-jarvis/worker-observation-contract',
     ]);
@@ -563,33 +573,28 @@ describe('no live action capability is exposed', () => {
     }
   });
 
-  it('disables every control-looking action, with a stated reason', () => {
+  it('allows enabled business controls only through the reviewed operator command surface', () => {
     const source = allSource();
-    // Each action control in this release is disabled and labelled.
     for (const marker of [
-      'Backend unavailable',
-      'no control-plane API',
-      'disabled, backend unavailable',
-      'no control authority in Jarvis OS',
+      'QuickFurno Core',
+      'APPLIED_BY_AUTHORITY',
+      'jarvisAuthorized: false',
+      'Confirm within 6 seconds.',
+      'Authority bridge not connected',
     ]) {
       expect(source, marker).toContain(marker);
     }
-    // Every <button> in the application must carry `disabled`, EXCEPT an explicit allowlist.
-    //
-    // The allowlist is by FILE rather than by attribute pattern, deliberately. An attribute regex
-    // over concatenated source is fragile -- a `>` inside an `onClick={() => ...}` truncates the
-    // match -- and, worse, a pattern silently exempts any future button that happens to match it.
-    // Naming the three files that may hold an enabled control means a fourth one fails this test.
-    //
-    // JOS-01C adds exactly two enabled controls: the login submit and the sign-out submit. Both
-    // mutate browser authentication state alone (a cookie); neither approves, sends or executes
-    // anything, and neither confers any QuickFurno business authority.
+
+    // Enabled controls remain file-allowlisted. Business actions may exist only in OperatorControls,
+    // which constructs the strict operator command DTO and never calls QuickFurno or a provider.
     const ENABLED_CONTROL_FILES: readonly string[] = Object.freeze([
       'src/components/shell/AppShell.tsx', // drawer open/close: navigation only
       'src/components/shell/CommandPalette.tsx', // local route navigation only
       'src/components/shell/MobileDock.tsx', // route navigation only
+      'src/components/shell/NotificationCenter.tsx', // local attention drawer only
       'src/components/shell/OperatorMenu.tsx', // menu toggle + sign-out submit
       'src/components/auth/LoginForm.tsx', // sign-in submit
+      'src/components/operator/OperatorControls.tsx', // versioned commands only; Core authorizes
     ]);
 
     for (const file of sourceFiles()) {

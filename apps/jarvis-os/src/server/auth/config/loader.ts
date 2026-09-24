@@ -34,6 +34,7 @@ import type { AuthConfigV1 } from './schema';
 export const AUTH_CONFIG_PATH_VAR = 'QFJ_JOS_AUTH_CONFIG_FILE';
 export const WORKER_OBSERVATION_PATH_VAR = 'QFJ_WORKER_OBSERVATION_FILE';
 export const CORE_READ_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_READ_CONFIG_FILE';
+export const CORE_COMMAND_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_COMMAND_CONFIG_FILE';
 
 /**
  * Read the optional content-free worker observation path through the same reviewed environment
@@ -50,6 +51,11 @@ export function readCoreReadConfigPathFromEnvironment(): string | undefined {
   return value === undefined || value.trim() === '' ? undefined : value;
 }
 
+export function readCoreCommandConfigPathFromEnvironment(): string | undefined {
+  const value = process.env[CORE_COMMAND_CONFIG_PATH_VAR];
+  return value === undefined || value.trim() === '' ? undefined : value;
+}
+
 export interface LoaderOptions {
   /** Injected for tests. Production passes nothing and the real environment is read. */
   readonly path?: string | undefined;
@@ -59,19 +65,32 @@ export interface LoaderOptions {
 
 export function loadCoreReadConfig(options: LoaderOptions = {}): CoreReadConfigV1 {
   const path = options.path ?? readCoreReadConfigPathFromEnvironment();
+  return loadCoreTransportConfig(path, options.platform, 'core-read');
+}
+
+export function loadCoreCommandConfig(options: LoaderOptions = {}): CoreReadConfigV1 {
+  const path = options.path ?? readCoreCommandConfigPathFromEnvironment();
+  return loadCoreTransportConfig(path, options.platform, 'core-command');
+}
+
+function loadCoreTransportConfig(
+  path: string | undefined,
+  platform: NodeJS.Platform | undefined,
+  kind: 'core-read' | 'core-command',
+): CoreReadConfigV1 {
   if (path === undefined || path.trim() === '') {
-    throw new TypeError('core-read-config-path-unset');
+    throw new TypeError(kind + '-config-path-unset');
   }
-  const raw = readBoundedRegularFile(path, options.platform ?? process.platform);
+  const raw = readBoundedRegularFile(path, platform ?? process.platform);
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new TypeError('core-read-config-malformed');
+    throw new TypeError(kind + '-config-malformed');
   }
   const result = coreReadConfigV1Schema.safeParse(parsed);
   if (!result.success) {
-    throw new TypeError('core-read-config-invalid');
+    throw new TypeError(kind + '-config-invalid');
   }
   return result.data;
 }

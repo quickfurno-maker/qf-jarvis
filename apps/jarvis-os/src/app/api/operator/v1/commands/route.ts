@@ -6,6 +6,7 @@ import {
 
 import { requireApiOperatorSession } from '@/server/auth/dal';
 import { operatorBootstrap } from '@/server/operator/bootstrap';
+import { submitQuickFurnoOperatorCommand } from '@/server/operator/quickfurno-command';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,13 +47,13 @@ export async function POST(request: Request): Promise<Response> {
 
   const issuedAt = Date.parse(parsed.data.issuedAt);
   if (!Number.isFinite(issuedAt) || Math.abs(Date.now() - issuedAt) > 60_000) {
-    return reply(409, {
+    return reply(409, operatorCommandResultSchema.parse({
       protocol: OPERATOR_COMMAND_PROTOCOL,
       commandId: parsed.data.commandId,
       status: 'CONFLICT',
-      authorized: false,
+      jarvisAuthorized: false,
       reasonCode: 'COMMAND_STALE',
-    });
+    }));
   }
 
   const capability = operatorBootstrap().capabilities.find(
@@ -63,18 +64,40 @@ export async function POST(request: Request): Promise<Response> {
       protocol: OPERATOR_COMMAND_PROTOCOL,
       commandId: parsed.data.commandId,
       status: capability?.state === 'LOCKED' ? 'REFUSED' : 'UNAVAILABLE',
-      authorized: false,
+      jarvisAuthorized: false,
       reasonCode: capability?.state === 'LOCKED' ? 'AUTHORITY_LOCKED' : 'BRIDGE_NOT_CONNECTED',
     });
     return reply(capability?.state === 'LOCKED' ? 403 : 503, result);
   }
 
-  const result = operatorCommandResultSchema.parse({
-    protocol: OPERATOR_COMMAND_PROTOCOL,
-    commandId: parsed.data.commandId,
-    status: 'UNAVAILABLE',
-    authorized: false,
-    reasonCode: 'COMMAND_BRIDGE_NOT_IMPLEMENTED',
-  });
-  return reply(503, result);
+  const controller = new AbortController();
+  const timer = setTimeout(() => { controller.abort(); }, 5_000);
+  try {
+    const result = await submitQuickFurnoOperatorCommand(
+      parsed.data,
+      session.view.operatorId,
+      controller.signal,
+    );
+    const status =
+      result.status === 'APPLIED_BY_AUTHORITY'
+        ? 200
+        : result.status === 'SUBMITTED_TO_AUTHORITY'
+          ? 202
+          : result.status === 'CONFLICT'
+            ? 409
+            : result.status === 'REFUSED'
+              ? 403
+              : 503;
+    return reply(status, result);
+  } catch {
+    return reply(503, operatorCommandResultSchema.parse({
+      protocol: OPERATOR_COMMAND_PROTOCOL,
+      commandId: parsed.data.commandId,
+      status: 'UNAVAILABLE',
+      jarvisAuthorized: false,
+      reasonCode: 'COMMAND_BRIDGE_UNAVAILABLE',
+    }));
+  } finally {
+    clearTimeout(timer);
+  }
 }

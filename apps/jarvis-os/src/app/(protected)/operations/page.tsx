@@ -1,19 +1,19 @@
+import { ConversationCommandControls } from '@/components/operator/OperatorControls';
 import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
 import { ActivityFeed } from '@/components/operations/ActivityFeed';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
-import { CapabilityBadge, Tag } from '@/components/system/StatusPill';
+import { Tag } from '@/components/system/StatusPill';
 import { SectionBody, SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
 import { isReadable } from '@/lib/control-plane/types';
 
 /**
- * Operations Center (JOS-01A).
+ * Operations Center.
  *
- * Human control state: who has taken over, where the AI is paused, and what an operator last
- * did. In this release it is a read surface — the takeover and resume controls are rendered
- * disabled, because `conversation.control.write` is deliberately DISABLED in Jarvis OS and a
- * control that appeared to work would be the single most dangerous thing on this screen.
+ * Reads durable conversation-control state through the governed snapshot and submits only
+ * versioned operator commands. QuickFurno Core owns the compare-and-set mutation and may refuse
+ * any stale or ineligible request; the UI never carries an authorization bit.
  */
 export default async function OperationsPage() {
   const plane = await controlPlane();
@@ -32,15 +32,18 @@ export default async function OperationsPage() {
       <PageHeader
         breadcrumb={['Operate', 'Operations Center']}
         title="Operations center"
-        purpose="Human takeover, AI pause state and recent operator activity across conversations. Read-only in this release."
-        status={<CapabilityBadge lifecycle="DISABLED" />}
+        purpose="Human takeover, AI pause/resume and recent operator activity across conversations. QuickFurno Core remains authoritative for every state change."
+        status={<SourceBadge availability={control.availability} />}
       />
 
       <div className="space-y-5">
-        <Notice tone="offline" title="Control actions are disabled in Jarvis OS">
-          Human takeover and pause/resume are durable, merged capabilities of the backend. This
-          surface can read them once a control-plane API exists; it will never hold the authority
-          itself. Every control below is disabled and labelled.
+        <Notice
+          tone={control.availability === 'AVAILABLE' ? 'info' : 'offline'}
+          title={control.availability === 'AVAILABLE' ? 'Conversation control connected' : 'Conversation control not connected'}
+        >
+          Jarvis OS submits signed, revision-bound operator commands. QuickFurno Core validates the
+          current conversation state and may refuse a stale or ineligible command; Jarvis OS never
+          grants itself conversation authority.
         </Notice>
 
         <div className="grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-panel)] border border-[var(--color-line)] bg-[var(--color-line)] sm:grid-cols-3">
@@ -110,10 +113,12 @@ export default async function OperationsPage() {
                         <span className="tabular">{row.revision}</span>
                       </Cell>
                       <Cell nowrap>
-                        <span className="flex gap-1.5">
-                          <DisabledControl label="Take over" />
-                          <DisabledControl label="Resume" />
-                        </span>
+                        <ConversationCommandControls
+                          conversationId={row.id}
+                          revision={row.revision}
+                          humanTakeover={row.humanTakeover}
+                          aiPaused={row.aiPaused}
+                        />
                       </Cell>
                     </Row>
                   ))}
@@ -167,19 +172,5 @@ function Summary({
       </p>
       <p className="mt-2 text-[11px] text-[var(--color-ink-faint)]">{caption}</p>
     </div>
-  );
-}
-
-function DisabledControl({ label }: { readonly label: string }) {
-  return (
-    <button
-      type="button"
-      disabled
-      title="Disabled — Jarvis OS holds no conversation-control authority"
-      className="rounded-[var(--radius-control)] border border-[var(--color-line)] px-2 py-[3px] text-[11px] text-[var(--color-ink-faint)] disabled:cursor-not-allowed"
-    >
-      {label}
-      <span className="sr-only"> — disabled, no control authority in Jarvis OS</span>
-    </button>
   );
 }

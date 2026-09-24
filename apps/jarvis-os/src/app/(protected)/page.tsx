@@ -19,6 +19,7 @@ import {
   SourceBadge,
 } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
+import { operationalAttention } from '@/lib/control-plane/operational-attention';
 import { operatorBootstrap } from '@/server/operator/bootstrap';
 
 /**
@@ -37,8 +38,19 @@ import { operatorBootstrap } from '@/server/operator/bootstrap';
 export default async function OverviewPage() {
   const plane = await controlPlane();
   const health = plane.systemHealth();
-  const attention = plane.attention();
   const provenance = plane.provenance();
+  const baseAttention = plane.attention();
+  const attention = {
+    ...baseAttention,
+    availability: provenance.liveOperationalData ? ('AVAILABLE' as const) : baseAttention.availability,
+    reason: provenance.liveOperationalData
+      ? 'Repository notices plus live operational attention derived from governed snapshot sections.'
+      : baseAttention.reason,
+    expectedSource: provenance.liveOperationalData
+      ? 'Governed control-plane sections observed in this request.'
+      : baseAttention.expectedSource,
+    items: operationalAttention(plane),
+  };
   const bootstrap = operatorBootstrap();
 
   return (

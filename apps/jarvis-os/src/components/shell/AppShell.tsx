@@ -3,11 +3,14 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 
+import { NotificationCenter } from '@/components/shell/NotificationCenter';
 import { OperatorMenu } from '@/components/shell/OperatorMenu';
+import { OperatorCommandProvider } from '@/components/operator/OperatorCommandProvider';
 import { CommandPalette } from '@/components/shell/CommandPalette';
 import { MobileDock } from '@/components/shell/MobileDock';
 import { SideNav } from '@/components/navigation/SideNav';
 import { BrandLockup } from '@/components/shell/Brand';
+import type { AttentionItem } from '@/lib/control-plane/types';
 import { ENVIRONMENT_LABEL } from '@/lib/environment';
 import type { OperatorSessionView } from '@/server/auth/dal';
 
@@ -25,9 +28,11 @@ export function AppShell({
   children,
   operator,
   csrfToken,
+  attention,
 }: {
   readonly children: ReactNode;
   readonly operator: OperatorSessionView;
+  readonly attention: readonly AttentionItem[];
   /**
    * Passed straight into the logout form's hidden input and nowhere else.
    *
@@ -61,7 +66,8 @@ export function AppShell({
   }, [drawerOpen]);
 
   return (
-    <div className="flex min-h-screen bg-[var(--color-base-950)]">
+    <OperatorCommandProvider csrfToken={csrfToken}>
+      <div className="flex min-h-screen bg-[var(--color-base-950)]">
       <a
         href="#jos-main"
         className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-[var(--radius-control)] focus:bg-[var(--color-base-800)] focus:px-3 focus:py-2 focus:text-[12px] focus:text-[var(--color-ink)]"
@@ -104,6 +110,7 @@ export function AppShell({
           }}
           operator={operator}
           csrfToken={csrfToken}
+          attention={attention}
         />
         <main id="jos-main" className="min-w-0 flex-1 px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:py-7 lg:pb-7">
           <div className="mx-auto w-full max-w-[1600px]">{children}</div>
@@ -111,6 +118,7 @@ export function AppShell({
         <MobileDock />
       </div>
     </div>
+    </OperatorCommandProvider>
   );
 }
 
@@ -118,10 +126,12 @@ function TopBar({
   onOpenDrawer,
   operator,
   csrfToken,
+  attention,
 }: {
   readonly onOpenDrawer: () => void;
   readonly operator: OperatorSessionView;
   readonly csrfToken: string;
+  readonly attention: readonly AttentionItem[];
 }) {
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--color-line)] bg-[var(--color-base-950)]/92 backdrop-blur">
@@ -158,35 +168,7 @@ function TopBar({
             {ENVIRONMENT_LABEL}
           </span>
 
-          <button
-            type="button"
-            disabled
-            aria-label="Notifications — available in a later JOS phase"
-            title="Notifications — available in a later JOS phase"
-            className="rounded-[var(--radius-control)] border border-[var(--color-line)] p-2 text-[var(--color-ink-faint)] disabled:cursor-not-allowed"
-          >
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path
-                d="M8 2.5a3.5 3.5 0 0 0-3.5 3.5v2.2L3.4 10.3a.6.6 0 0 0 .5.9h8.2a.6.6 0 0 0 .5-.9L11.5 8.2V6A3.5 3.5 0 0 0 8 2.5Z"
-                stroke="currentColor"
-                strokeWidth="1.3"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M6.6 13a1.5 1.5 0 0 0 2.8 0"
-                stroke="currentColor"
-                strokeWidth="1.3"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
+          <NotificationCenter items={attention} />
 
           <OperatorMenu operator={operator} csrfToken={csrfToken} />
         </div>

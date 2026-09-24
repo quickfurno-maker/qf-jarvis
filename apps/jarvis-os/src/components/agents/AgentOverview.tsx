@@ -36,9 +36,11 @@ function fixtureMetrics(metrics: readonly MetricSummary[]): Section<MetricSummar
 
 export function AgentOverview({
   agent,
+  metricsSection,
   children,
 }: {
   readonly agent: AgentSummary;
+  readonly metricsSection?: Section<MetricSummary> | undefined;
   readonly children?: ReactNode;
 }) {
   const entry = capability(agent.capabilityId);
@@ -77,7 +79,11 @@ export function AgentOverview({
           </Notice>
         )}
 
-        {agent.metrics.length > 0 ? <MetricStrip section={fixtureMetrics(agent.metrics)} /> : null}
+        {metricsSection !== undefined ? (
+          <MetricStrip section={metricsSection} />
+        ) : agent.metrics.length > 0 ? (
+          <MetricStrip section={fixtureMetrics(agent.metrics)} />
+        ) : null}
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Panel title="Scope and boundary" subtitle="What this agent may and may not do">

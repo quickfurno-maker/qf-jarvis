@@ -99,13 +99,12 @@ const approval = z.object({
   ...base,
   action: z.literal('APPROVAL_DECIDE'),
   payload: z.object({
-    approvalId: ref,
-    expectedRevision: z.number().int().nonnegative().max(1_000_000),
+    approvalId: uuid,
     decision: z.enum(['APPROVE', 'REJECT']),
   }).strict(),
 }).strict();
 
-const conversation = (action: 'CONVERSATION_TAKEOVER'|'CONVERSATION_RESUME_AI'|'CONVERSATION_PAUSE_AI') =>
+const conversation = <T extends 'CONVERSATION_TAKEOVER'|'CONVERSATION_RESUME_AI'|'CONVERSATION_PAUSE_AI'>(action: T) =>
   z.object({
     ...base,
     action: z.literal(action),
@@ -156,8 +155,14 @@ export const operatorCommandSchema = z.discriminatedUnion('action', [
 export const operatorCommandResultSchema = z.object({
   protocol: z.literal(OPERATOR_COMMAND_PROTOCOL),
   commandId: uuid,
-  status: z.enum(['ACCEPTED_FOR_AUTHORITY_VALIDATION', 'REFUSED', 'UNAVAILABLE', 'CONFLICT']),
-  authorized: z.literal(false),
+  status: z.enum([
+    'SUBMITTED_TO_AUTHORITY',
+    'APPLIED_BY_AUTHORITY',
+    'REFUSED',
+    'UNAVAILABLE',
+    'CONFLICT',
+  ]),
+  jarvisAuthorized: z.literal(false),
   reasonCode: ref,
 }).strict();
 

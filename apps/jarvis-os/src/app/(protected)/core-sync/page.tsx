@@ -1,9 +1,11 @@
 import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
-import { CapabilityBadge, Tag } from '@/components/system/StatusPill';
+import { StatusPill, Tag } from '@/components/system/StatusPill';
 import { SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
+import { isReadable } from '@/lib/control-plane/types';
+import type { SectionAvailability } from '@/lib/control-plane/types';
 
 /**
  * QuickFurno Core Sync (JOS-01A).
@@ -17,7 +19,15 @@ import { controlPlane } from '@/lib/control-plane';
  * are stated as headings rather than buried in a paragraph.
  */
 export default async function CoreSyncPage() {
-  const rowsSection = (await controlPlane()).ownership();
+  const plane = await controlPlane();
+  const rowsSection = plane.ownership();
+  const approvals = plane.approvalQueue();
+  const conversations = plane.conversationControl();
+  const analytics = plane.businessAnalytics();
+  const coreConnected =
+    isReadable(approvals.availability) ||
+    isReadable(conversations.availability) ||
+    isReadable(analytics.availability);
   // Ownership is STATIC_BASELINE: declared by governance, not read from Core. It genuinely has
   // rows, so it renders normally -- with a badge saying where they came from.
   const rows = rowsSection.items;
@@ -30,7 +40,7 @@ export default async function CoreSyncPage() {
         breadcrumb={['Boundary', 'QuickFurno Core Sync']}
         title="QuickFurno Core boundary"
         purpose="What Core owns, what Jarvis derives, and what happens when they disagree. Jarvis never creates a second business truth."
-        status={<CapabilityBadge lifecycle="NOT_CONNECTED" />}
+        status={<StatusPill state={coreConnected ? 'CONNECTED' : 'NOT_CONNECTED'} />}
       />
 
       <div className="space-y-5">
@@ -49,10 +59,20 @@ export default async function CoreSyncPage() {
           </Rule>
         </div>
 
-        <Notice tone="offline" title="No Jarvis↔Core transport has been adopted">
-          Core remains authoritative regardless. This surface shows the boundary, not a live
-          connection, and no endpoint, credential format or auth protocol has been invented here.
+        <Notice
+          tone={coreConnected ? 'healthy' : 'offline'}
+          title={coreConnected ? 'Signed QuickFurno Core observation is connected' : 'QuickFurno Core observation is not connected'}
+        >
+          {coreConnected
+            ? 'Jarvis OS is reading bounded operational truth through the dedicated signed Core snapshot. QuickFurno Core remains the only authority for business state and command validation.'
+            : 'Core remains authoritative regardless. No missing connection is interpreted as permission or as a zero-valued business fact.'}
         </Notice>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <ConnectionState label="Approval queue" availability={approvals.availability} />
+          <ConnectionState label="Conversation control" availability={conversations.availability} />
+          <ConnectionState label="Business analytics" availability={analytics.availability} />
+        </div>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <Panel
@@ -123,6 +143,21 @@ export default async function CoreSyncPage() {
         </Panel>
       </div>
     </>
+  );
+}
+
+function ConnectionState({
+  label,
+  availability,
+}: {
+  readonly label: string;
+  readonly availability: SectionAvailability;
+}) {
+  return (
+    <div className="surface-lift flex items-center justify-between gap-3 rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-base-900)] px-3.5 py-3">
+      <span className="text-[11.5px] text-[var(--color-ink-muted)]">{label}</span>
+      <SourceBadge availability={availability} />
+    </div>
   );
 }
 

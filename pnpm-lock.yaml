@@ -180,6 +180,12 @@ importers:
       '@qf-jarvis/operator-api-contract':
         specifier: workspace:*
         version: link:../../packages/operator-api-contract
+      '@qf-jarvis/operator-client-core':
+        specifier: workspace:*
+        version: link:../../packages/operator-client-core
+      '@qf-jarvis/quickfurno-operator-command-contract':
+        specifier: workspace:*
+        version: link:../../packages/quickfurno-operator-command-contract
       '@qf-jarvis/quickfurno-operator-observation-contract':
         specifier: workspace:*
         version: link:../../packages/quickfurno-operator-observation-contract
@@ -732,6 +738,15 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/operator-client-core:
+    dependencies:
+      '@qf-jarvis/control-plane-read-contract':
+        specifier: workspace:*
+        version: link:../control-plane-read-contract
+      '@qf-jarvis/operator-api-contract':
+        specifier: workspace:*
+        version: link:../operator-api-contract
+
   packages/postgres-approval-queue:
     dependencies:
       '@qf-jarvis/approval-runtime':
@@ -876,6 +891,15 @@ importers:
 
   packages/prompt-registry:
     dependencies:
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  packages/quickfurno-operator-command-contract:
+    dependencies:
+      '@qf-jarvis/operator-api-contract':
+        specifier: workspace:*
+        version: link:../operator-api-contract
       zod:
         specifier: 4.4.3
         version: 4.4.3

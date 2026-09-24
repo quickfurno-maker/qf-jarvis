@@ -8,7 +8,7 @@ import { createWorkerObservationReadSource } from './worker-observation-source';
 
 export function createAdoptedReadSources(
   workerObservationFile: string | undefined,
-  coreReadConfigFile: string | undefined = undefined,
+  coreReadConfigFile?: string  ,
 ): readonly ReadSourceDescriptor[] {
   const sources: ReadSourceDescriptor[] = [];
   if (workerObservationFile !== undefined) {

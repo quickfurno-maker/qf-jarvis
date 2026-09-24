@@ -60,6 +60,7 @@
     { "path": "./packages/operator-api-contract/tsconfig.build.json" },
     { "path": "./packages/operator-client-core/tsconfig.build.json" },
     { "path": "./packages/quickfurno-operator-observation-contract/tsconfig.build.json" },
+    { "path": "./packages/quickfurno-operator-command-contract/tsconfig.build.json" },
     { "path": "./packages/worker-observation-contract/tsconfig.build.json" },
     { "path": "./packages/core-service-availability-read/tsconfig.build.json" },
     { "path": "./packages/core-riya-intake/tsconfig.build.json" },

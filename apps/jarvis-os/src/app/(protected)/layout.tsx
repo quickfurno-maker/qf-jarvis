@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 
 import { AppShell } from '@/components/shell/AppShell';
+import { controlPlane } from '@/lib/control-plane';
+import { operationalAttention } from '@/lib/control-plane/operational-attention';
 import { requireOperatorSession } from '@/server/auth/dal';
 
 /**
@@ -49,8 +51,11 @@ export default async function ProtectedLayout({
     redirect('/login');
   }
 
+  const plane = await controlPlane();
+  const attention = operationalAttention(plane);
+
   return (
-    <AppShell operator={session.view} csrfToken={session.csrfToken}>
+    <AppShell operator={session.view} csrfToken={session.csrfToken} attention={attention}>
       {children}
     </AppShell>
   );

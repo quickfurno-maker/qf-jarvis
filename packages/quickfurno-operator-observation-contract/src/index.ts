@@ -20,7 +20,7 @@ export const quickFurnoOperatorRequestSchema = z.object({
 }).strict();
 
 const approval = z.object({
-  id: identifier,
+  id: z.string().uuid(),
   requestedAction: label,
   risk: z.enum([
     'informational',

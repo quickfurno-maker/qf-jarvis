@@ -1,6 +1,6 @@
 # Jarvis OS — the operator control plane
 
-**Status:** **JOS-01E is the current Jarvis OS slice** in this build ([ADR-0089](../decisions/ADR-0089-jos-01e-progressive-backend-read-source-composition-boundary.md)) — the progressive backend read-source composition boundary, and the **final slice of the bounded Jarvis OS foundation track**. JOS-01A, JOS-01B, JOS-01C and JOS-01D are **merged**. **No read source is adopted yet:** nothing in merged `main` is reachable from Jarvis OS without managed-database credentials or a protocol Core and QuickFurno Core Automation have not adopted, so the control plane still renders the repository baseline and both remain `NOT_CONNECTED`. **After this slice the JOS track closes and main Jarvis work resumes at QFJ-P09.02.** Whether a deployment is running is an operational fact this repository does not assert.
+**Status:** JOS-01A through JOS-01E form the merged bounded foundation. This operator-platform extension keeps those boundaries and adds optional adopted live sources, a versioned web/mobile operator API, and a separately signed QuickFurno Core command bridge. A source is shown as live only when it is actually observed for the current request; otherwise the same sections fail closed to `NOT_CONNECTED`. Certification-sensitive Jarvis governance actions remain locked. Whether a deployment is running, which optional sources are mounted, and whether the Core command bridge is enabled are operational facts, not repository claims.
 
 > **Why this reads as "current" and not as a branch status.** An architecture document that says a
 > slice is "on a feature branch, not merged" is false the instant that branch merges, and nobody
@@ -22,25 +22,34 @@ Jarvis OS is that surface. It is a premium, systematic web control plane for an 
 the system is doing, what needs a person, where each boundary sits, and what is deliberately
 switched off.
 
-## It is powerless, and that is a design constraint rather than a phase
+## It has no business authority — even when it can submit operator commands
 
-Jarvis OS holds **no business authority**, and holds no backend connection at all. QuickFurno Core
-and QuickFurno Core Automation are both `NOT_CONNECTED`: no live read protocol has been adopted in this repository, and
-neither is contacted from here.
+Jarvis OS is an **operator client**, not a business authority and not an execution engine. It can
+observe bounded live state and, for a small closed set of Core-owned controls, submit an authenticated
+operator request to QuickFurno Core. Core performs the current-state validation and is the component
+that actually applies or refuses the change.
 
-It creates no approval and answers none. It sends no communication and reaches no provider.
-It invokes no QuickFurno Core Automation workflow and calls no Meta API. It mutates no QuickFurno Core record and no
-Jarvis durable state. It reaches no database and performs no network access whatsoever — a
-source-level test asserts the absence of `fetch`, `XMLHttpRequest`, `WebSocket`, any URL literal,
-browser storage, `'use server'`, and any import of a backend workspace package or a database,
-provider, QuickFurno Core Automation or Meta client.
+The split is deliberate:
 
-JOS-01C **narrowed** two of those rules rather than dropping them, and the tests enforce the narrow
-version. `process.env` is permitted in exactly two reviewed places — the auth config-path boundary
-(one variable, holding a PATH and never secret material) and the proxy's `NODE_ENV` check for
-development-only CSP relaxations — and `node:fs` in exactly one, the auth config loader. Everywhere
-else, including every page, component and control-plane module, both remain forbidden. The one
-mutation the application performs is setting or clearing its own session cookie.
+- **Read path:** adopted, bounded observation adapters populate versioned snapshot sections. Jarvis OS
+  receives no database credential and no provider credential.
+- **Command path:** a separate Ed25519 identity signs a closed operator command vocabulary. QuickFurno
+  Core verifies the signature, freshness, operator identity, idempotency and current revision/state
+  before applying anything.
+- **Execution/provider path:** Jarvis OS never calls QuickFurno Core Automation, Meta, Groq or another
+  delivery provider directly.
+- **Governance path:** certification-sensitive settings such as agent enablement, knowledge mode and
+  production rollout remain `LOCKED` until a separate governed command path is certified.
+
+The command result deliberately says `jarvisAuthorized: false` even when Core applies a request.
+That field is a permanent reminder that the UI did not authorize the action; it asked the authority
+to decide.
+
+Ambient configuration remains narrow. Environment variables contain **paths**, never secret key
+material. Authentication, Core-read and Core-command key material are loaded from separate bounded
+read-only files. Operational adapters may perform only the reviewed network/file reads required by
+their contracts; React components never receive credentials and never import database/provider
+clients.
 
 The permanent boundary is unchanged and is stated on the surfaces themselves:
 
@@ -54,29 +63,41 @@ payments, consent and opt-out, assignments, registration and activation, commerc
 and every authorization decision. Jarvis OS displays that split on a dedicated screen rather
 than assuming a reader knows it.
 
-## Web now, Android later — one set of contracts
+## Web now, native mobile next — one operator platform
 
-Android is **not** built in this track, and no React Native or Expo file exists. What this
-release does instead is put every meaningful fact behind a governed boundary so a future
-Android client can reuse it without a second business-logic stack:
+No React Native or Expo application is shipped by this repository yet. The platform boundary for
+that app **is** shipped, and the web UI is now its first client rather than a special case.
+
+Three framework-neutral packages define the shared surface:
 
 ```
-apps/jarvis-os/src/lib/control-plane/
-  types.ts          the read-model DTOs — SystemHealth, AgentSummary, ApprovalQueueRow, …
-  demo-provider.ts  a READ-ONLY adapter over a local synthetic snapshot
-  index.ts          controlPlane() — the one seam every surface reads through
+@qf-jarvis/control-plane-read-contract   versioned snapshot DTOs and parsers
+@qf-jarvis/operator-api-contract         modules, capabilities, commands and outcomes
+@qf-jarvis/operator-client-core          transport-injected client used by web and future iOS/Android
 ```
 
-**No business decision lives in a React component.** A component receives a `SystemHealth`
-and paints it; it does not decide what healthy means, which agent owns which vendor, or
-whether anything may be sent. JOS-01B replaced the demo provider with a repository baseline and no
-screen changes. A later Android client consumes that same API — the conceptual contracts
-travel, the transport does not, and Next.js internals are never a dependency of anything but
-the web app.
+The authenticated application exposes the same versioned API the native client will consume:
 
-The read model interface has **only readers**. There is no writer on it and no place to add
-one without editing that file — which is exactly the friction that should exist before a
-surface acquires the ability to change something.
+```
+GET  /api/operator/v1/bootstrap
+GET  /api/operator/v1/snapshot
+POST /api/operator/v1/commands
+```
+
+Commands carry an explicit `WEB | IOS | ANDROID` platform field. The shared client core owns
+response parsing, protocol correlation and command-outcome semantics; platform adapters own only
+transport and secure session storage. A future Expo/React Native client therefore does **not**
+reimplement authorization rules, snapshot parsing, idempotency semantics or Core outcomes.
+
+**No business decision lives in a React component.** Components render a versioned read model and
+submit versioned operator commands. QuickFurno Core still decides whether a Core-owned action may be
+applied. Jarvis-governance actions such as knowledge-mode or rollout changes remain explicitly
+`LOCKED` until their separate certified command path exists.
+
+Read trust and command trust are deliberately separate. Jarvis OS uses distinct Ed25519 identities
+for the QuickFurno read snapshot and the QuickFurno command bridge, so a credential that can observe
+business state cannot automatically mutate it. This separation is preserved for the future mobile
+device-session design.
 
 ## Authentication and the operator session (JOS-01C)
 
@@ -91,22 +112,23 @@ boundary sections would otherwise be readable by anyone who can load the page.
 | Session | AES-256-GCM, random IV per token, 1-hour server-enforced absolute expiry |
 | Cookie | `__Host-qfj-jos-session`, `Secure`, `HttpOnly`, `SameSite=Strict`, no `Max-Age` |
 | CSRF | Exact-origin check on every mutation, plus a session-bound token for sign-out |
-| Secrets | ONE read-only JSON file outside the repository; one env var holding a PATH |
+| Secrets | Separate read-only auth, Core-read and Core-command files; env vars contain paths only |
 
-**Authentication is not authority.** A signed-in OWNER may view Jarvis OS. It implies no approval,
-no communication authorization, no dispatch, no consent, no payment or activation right and no Core
-mutation. The only state this phase mutates anywhere is a browser cookie.
+**Authentication is not authority.** A signed-in OWNER may view Jarvis OS and may submit only
+those operator commands the bootstrap marks `AVAILABLE`. Authentication by itself grants no approval,
+communication authorization, dispatch, consent, payment or activation right. For Core-owned commands,
+QuickFurno Core still validates current state and either applies or refuses the request.
 
 **Proxy is optimistic; the DAL is the authority.** `src/proxy.ts` mints the CSP nonce and checks
 whether a session cookie is present. The protected layout and the snapshot route each verify
 properly, close to the data. Delete the proxy and every protected surface stays closed — the tests
 prove it by calling the route handlers directly.
 
-**Known limitation, stated rather than implied.** This stateless model has no per-session
-revocation: a stolen token is valid until it expires or the configuration file is rotated.
-Revocation is global — bump `session.revision` or remove a key and every session dies at the next
-request. A durable identity/session provider MUST be adopted before multi-operator use or any
-write-capable control-plane feature.
+**Known limitation, stated rather than implied.** The current web session model is intentionally
+single-operator and stateless: a stolen token is valid until it expires or the configuration file is
+rotated. Revocation is global — bump `session.revision` or remove a key and every web session dies at
+the next request. A durable identity/device-session provider with per-device revocation and step-up
+authentication MUST be adopted before multi-operator use or native mobile command access.
 
 ## Capability-aware UI
 
@@ -154,10 +176,12 @@ The retained fixture still obeys the JOS-01A rules:
   rather than showing a plausible number. A dashboard that invents a healthy reading for a
   system it cannot see is worse than one that shows nothing.
 
-Control-looking actions — Approve, Reject, Take over, Resume — are rendered so the layout is
-proved at real width, and every one is `disabled` with a stated reason. A test asserts that
-every `<button>` in the application except the navigation drawer's open/close controls carries
-`disabled`.
+Operator controls are capability-driven. Approve, Reject, Take over, Pause AI and Resume AI
+become interactive only when the separate Core-command secret is mounted and the bootstrap reports
+their capability as `AVAILABLE`. The browser submits a versioned command with CSRF protection; Jarvis
+OS signs it with the command-only Ed25519 identity; QuickFurno Core then validates state and returns
+`APPLIED_BY_AUTHORITY`, `REFUSED`, `CONFLICT` or `UNAVAILABLE`. Certification-sensitive Jarvis
+governance controls remain visibly `LOCKED` rather than being rendered as fake switches.
 
 ## Agents — and the separation that matters
 
@@ -210,6 +234,35 @@ nothing, and there is no QFJ-P13.
 | **JOS-01C** | Owner authentication, TOTP MFA and the operator session boundary. |
 | **JOS-01D** | Isolated Docker image, immutable exact-SHA release topology, Traefik TLS, authenticated operator boundary. |
 | **JOS-01E** | Progressive backend read wiring: a governed source-composition boundary, adopted one source at a time. |
+| **JOS-01F** | Live command-center layer: worker observation, signed QuickFurno operator observation, attention synthesis, notifications and premium responsive shell. |
+| **JOS-01G** | Shared web/mobile operator platform boundary: versioned bootstrap/snapshot/command APIs, framework-neutral client core, split read/command trust lanes and mobile-primary navigation metadata. |
+
+### Mobile-next architecture
+
+Jarvis OS is implemented as the first client of a versioned operator platform, not as the platform
+itself. Web-specific code is restricted to rendering, cookie-session adaptation and browser
+navigation. The following packages are framework-neutral and are the foundation for the next
+React Native / Expo client:
+
+- `@qf-jarvis/control-plane-read-contract` — strict V2 snapshot and provenance.
+- `@qf-jarvis/operator-api-contract` — module catalog, platform identity, capabilities, commands
+  and results shared by WEB, IOS and ANDROID.
+- `@qf-jarvis/operator-client-core` — injected-transport client with no React, Next, DOM,
+  filesystem, cookie or Node dependency.
+- `@qf-jarvis/quickfurno-operator-observation-contract` — bounded QuickFurno/Core observation
+  transport.
+- `@qf-jarvis/quickfurno-operator-command-contract` — a separate signed command lane for
+  Core-owned operator actions.
+
+The native application must not embed a Jarvis-to-Core signing key. Native authentication will
+mint a revocable device session at the Jarvis OS API boundary; Jarvis OS remains the confidential
+client that signs QuickFurno transport requests. The current bootstrap therefore reports
+`mobileDeviceSession: false` until that device-session boundary is implemented and reviewed.
+
+Read credentials and command credentials are deliberately separate. Compromise of the observation
+lane cannot enable a command, and a future mobile read-only role can be issued without any command
+capability. QuickFurno remains the authority for approval and conversation state changes; Jarvis OS
+submits attributed, idempotent requests and renders the authoritative result.
 
 **After the Jarvis OS foundation track, main Jarvis backend work resumes at QFJ-P09.02** — the
 test-only authorized dispatch envelope and QuickFurno Core Automation bridge validation. That marker is rendered on

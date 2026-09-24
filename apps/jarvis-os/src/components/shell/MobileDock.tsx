@@ -3,12 +3,26 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const ITEMS = [
-  { href: '/', label: 'Overview', icon: '◈' },
-  { href: '/operations', label: 'Operate', icon: '⌁' },
-  { href: '/approvals', label: 'Approve', icon: '✓' },
-  { href: '/analytics', label: 'Analytics', icon: '⌇' },
-] as const;
+import { OPERATOR_MODULES } from '@qf-jarvis/operator-api-contract';
+
+const ICON: Readonly<Record<string, string>> = Object.freeze({
+  overview: '◈',
+  operations: '⌁',
+  approvals: '✓',
+  analytics: '⌇',
+});
+
+const ITEMS = Object.freeze(
+  OPERATOR_MODULES
+    .filter((module) => module.mobilePrimary)
+    .map((module) => Object.freeze({
+      href: module.webPath,
+      label: module.id === 'operations' ? 'Operate'
+        : module.id === 'approvals' ? 'Approve'
+          : module.label,
+      icon: ICON[module.id] ?? '·',
+    })),
+);
 
 export function MobileDock() {
   const pathname = usePathname();
