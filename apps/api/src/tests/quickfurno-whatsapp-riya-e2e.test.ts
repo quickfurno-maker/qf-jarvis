@@ -1,7 +1,6 @@
 import { createHash, generateKeyPairSync, verify } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createRiyaCustomerRuntimeComposition } from '../riya-customer-orchestration/create-riya-customer-runtime.js';
 import {
   createQuickFurnoWhatsAppMaterialReader,
   createQuickFurnoWhatsAppReplyWriter,
@@ -197,20 +196,30 @@ describe('Riya complete QuickFurno WhatsApp flow', () => {
       httpPost,
     };
 
-    const handleChannelTurn = vi.fn((turn: unknown) => {
-      expect(turn).toMatchObject({
-        version: 1,
+    const processInboundForProposedReply = vi.fn((envelope: unknown) => {
+      expect(envelope).toMatchObject({
+        runtimeId: 'qfj.whatsapp.riya.e2e',
         channel: 'WHATSAPP',
         tenantId: 'quickfurno',
         conversationId,
         messageId: inboundMessageId,
+        partyType: 'CLIENT',
+        direction: 'INBOUND',
         receivedAt: now,
-        channelTurnRef: `qf.inbound:${inboundMessageId}`,
+        providerMessageRef: `qf.inbound:${inboundMessageId}`,
         dataClass: 'HOSTED_ALLOWED',
         subjectRef,
         normalizedText: clientText,
       });
       return Promise.resolve({
+        runtimeResult: {
+          outcome: 'MODEL_DRAFTED',
+          conversationId,
+          boundRevision: revision,
+          proposalId: 'riya.e2e.reply.1',
+          modelDrafted: true,
+          coreConsulted: false,
+        },
         proposedReply: {
           version: 1,
           proposalId: 'riya.e2e.reply.1',
@@ -221,22 +230,10 @@ describe('Riya complete QuickFurno WhatsApp flow', () => {
         },
       });
     });
-    const conversationService = {
-      handleTurn: vi.fn(),
-      handleChannelTurn,
-    };
-    const riya = createRiyaCustomerRuntimeComposition({
-      conversationService: conversationService as never,
-    }).customerTurnRunner;
-
-    const nonRiyaRuntime = vi.fn(() => {
-      throw new Error('Anisha/Aarohi runtime must not run for an exact client');
-    });
     const specialistRuntime = createQuickFurnoWhatsAppSpecialistRuntime({
       runtimeId: 'qfj.whatsapp.riya.e2e',
-      riya,
       jarvisRuntime: {
-        processInboundForProposedReply: nonRiyaRuntime,
+        processInboundForProposedReply,
       } as never,
     });
 
@@ -270,8 +267,7 @@ describe('Riya complete QuickFurno WhatsApp flow', () => {
 
     expect(await processor.processOne()).toBe('completed-queued');
     expect(await processor.processOne()).toBe('idle');
-    expect(handleChannelTurn).toHaveBeenCalledOnce();
-    expect(nonRiyaRuntime).not.toHaveBeenCalled();
+    expect(processInboundForProposedReply).toHaveBeenCalledOnce();
     expect(callbackBodies).toHaveLength(1);
     expect(complete).toHaveBeenCalledExactlyOnceWith(inboundMessageId);
     expect(fail).not.toHaveBeenCalled();

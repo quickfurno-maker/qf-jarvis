@@ -1,6 +1,5 @@
 import { createInboundEnvelope } from '@qf-jarvis/agent-runtime';
 import type { ProposedReplyJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
-import type { RiyaCustomerTurnRunner } from '../riya-customer-orchestration/create-riya-customer-runtime.js';
 import { runCustomerTurnWorkflow } from '../riya-customer-orchestration/mastra-customer-turn-runner.js';
 import type {
   QuickFurnoWhatsAppAgent,
@@ -16,7 +15,6 @@ export interface QuickFurnoWhatsAppSpecialistRuntime {
 
 export interface QuickFurnoWhatsAppSpecialistRuntimeConfig {
   readonly runtimeId: string;
-  readonly riya: RiyaCustomerTurnRunner;
   readonly jarvisRuntime: ProposedReplyJarvisRuntime;
 }
 
@@ -63,29 +61,22 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         return null;
       }
 
-      if (material.assignedActor === 'RIYA') {
-        const result = await config.riya.handleConversationTurn({
-          version: 1,
-          channel: 'WHATSAPP',
-          tenantId: material.tenantId,
-          conversationId: material.conversationId,
-          messageId: material.inboundMessageId,
-          receivedAt: material.receivedAt,
-          channelTurnRef: `qf.inbound:${material.inboundMessageId}`,
-          dataClass: material.dataClass,
-          ...(material.subjectRef === undefined ? {} : { subjectRef: material.subjectRef }),
-          normalizedText: material.normalizedText,
-        });
-        return proposalFrom(material, result.proposedReply);
-      }
-
+      // Production WhatsApp deliberately keeps Riya stateless inside Jarvis. QuickFurno owns the
+      // durable turn, revision, consent and takeover evidence; this boundary must not create a second
+      // store of client discovery state while its retention/erasure policy is unresolved. The richer
+      // Riya continuity service remains available to separately governed surfaces.
       const envelope = createInboundEnvelope({
         runtimeId: config.runtimeId,
         conversationId: material.conversationId,
         messageId: material.inboundMessageId,
         tenantId: material.tenantId,
         channel: 'WHATSAPP',
-        partyType: material.assignedActor === 'ANISHA' ? 'VENDOR' : 'PROSPECT',
+        partyType:
+          material.assignedActor === 'RIYA'
+            ? 'CLIENT'
+            : material.assignedActor === 'ANISHA'
+              ? 'VENDOR'
+              : 'PROSPECT',
         direction: 'INBOUND',
         receivedAt: material.receivedAt,
         providerMessageRef: `qf.inbound:${material.inboundMessageId}`,

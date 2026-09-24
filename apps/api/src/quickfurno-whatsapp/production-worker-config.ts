@@ -14,7 +14,6 @@ const MAX_SEAL_BYTES = 512 * 1024;
 const MAX_CA_BYTES = 256 * 1024;
 const MAX_PRIVATE_KEY_BYTES = 32 * 1024;
 const MAX_EMBEDDING_CREDENTIAL_BYTES = 16 * 1024;
-const MAX_RIYA_PERSISTENCE_DECISION_BYTES = 64 * 1024;
 const SHA40 = /^[0-9a-f]{40}$/u;
 const REF = /^[A-Za-z0-9._:-]{1,128}$/u;
 const KEY_ID = /^[A-Za-z0-9._:-]{1,64}$/u;
@@ -62,24 +61,11 @@ const embeddingSchema = z.discriminatedUnion('executionClass', [
     .strict(),
 ]);
 
-const riyaPersistenceDecisionSchema = z
-  .object({
-    protocol: z.literal('qfj.riya-managed-persistence-owner-decision.v1'),
-    status: z.literal('APPROVED'),
-    jarvisRevision: z.string().regex(SHA40),
-    decisionRef: z.string().regex(REF),
-    continuityPolicyRef: z.string().regex(REF),
-    logicalTurnPolicyRef: z.string().regex(REF),
-    approvedAt: z.iso.datetime(),
-  })
-  .strict();
-
 const schema = z
   .object({
     revision: z.string().regex(SHA40),
     deploymentMode: z.literal('SINGLE_OWNER'),
     sealFile: absolutePath,
-    riyaPersistenceDecisionFile: absolutePath,
     groqCredentialReference: z.string().regex(REF),
     groqCredentialFile: absolutePath,
     database: z
@@ -123,7 +109,6 @@ const schema = z
     policyRevision: z.string().regex(REF),
     idlePollMs: z.number().int().min(50).max(60_000).default(500),
     staleProcessingMs: z.number().int().min(1000).max(86_400_000).default(300_000),
-    maxConcurrentTextTurns: z.number().int().min(1).max(8).default(1),
   })
   .strict();
 
@@ -131,15 +116,6 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
   readonly revision: string;
   readonly deploymentMode: 'SINGLE_OWNER';
   readonly seal: unknown;
-  readonly riyaPersistenceDecision: Readonly<{
-    protocol: 'qfj.riya-managed-persistence-owner-decision.v1';
-    status: 'APPROVED';
-    jarvisRevision: string;
-    decisionRef: string;
-    continuityPolicyRef: string;
-    logicalTurnPolicyRef: string;
-    approvedAt: string;
-  }>;
   readonly groqCredentialReference: string;
   readonly groqCredentialFile: string;
   readonly database: DatabaseConfig;
@@ -169,7 +145,6 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
   readonly policyRevision: string;
   readonly idlePollMs: number;
   readonly staleProcessingMs: number;
-  readonly maxConcurrentTextTurns: number;
 }
 
 function boundedFile(path: string, maxBytes: number): Buffer {
@@ -246,18 +221,11 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
   }
 
   const seal = parseJsonFile(input.sealFile, MAX_SEAL_BYTES);
-  const decision = riyaPersistenceDecisionSchema.safeParse(
-    parseJsonFile(input.riyaPersistenceDecisionFile, MAX_RIYA_PERSISTENCE_DECISION_BYTES),
-  );
-  if (!decision.success || decision.data.jarvisRevision !== input.revision) {
-    throw new Error('production-worker-config-invalid');
-  }
   const embedding = input.knowledge.embedding;
   return Object.freeze({
     revision: input.revision,
     deploymentMode: input.deploymentMode,
     seal,
-    riyaPersistenceDecision: Object.freeze({ ...decision.data }),
     groqCredentialReference: input.groqCredentialReference,
     groqCredentialFile: input.groqCredentialFile,
     database,
@@ -291,6 +259,5 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
     policyRevision: input.policyRevision,
     idlePollMs: input.idlePollMs,
     staleProcessingMs: input.staleProcessingMs,
-    maxConcurrentTextTurns: input.maxConcurrentTextTurns,
   });
 }
