@@ -14,10 +14,10 @@ export default async function ExecutionPage() {
   const models = plane.models();
   const readable = isReadable(execution.availability);
   const failed = readable
-    ? execution.items.find((item) => item.id === 'failed-24h')?.value ?? 0
+    ? (execution.items.find((item) => item.id === 'failed-24h')?.value ?? 0)
     : null;
   const uncertain = readable
-    ? execution.items.find((item) => item.id === 'uncertain-24h')?.value ?? 0
+    ? (execution.items.find((item) => item.id === 'uncertain-24h')?.value ?? 0)
     : null;
   const state = !readable
     ? 'NOT_CONNECTED'
@@ -39,7 +39,11 @@ export default async function ExecutionPage() {
       <div className="space-y-5">
         <Notice
           tone={readable ? (state === 'CONNECTED' ? 'healthy' : 'warning') : 'offline'}
-          title={readable ? 'QuickFurno execution telemetry connected' : 'Execution telemetry not connected'}
+          title={
+            readable
+              ? 'QuickFurno execution telemetry connected'
+              : 'Execution telemetry not connected'
+          }
         >
           This page reports execution state only from governed observations. A successful UI command
           is never rendered as delivered: delivery appears only after the authoritative execution
@@ -66,7 +70,10 @@ export default async function ExecutionPage() {
                 ['4', 'Provider', 'Delivers and returns an outcome.'],
                 ['5', 'Core ledger', 'Records the authoritative result.'],
               ].map(([index, title, detail]) => (
-                <li key={index} className="flex gap-3 rounded-[var(--radius-control)] border border-[var(--color-line)] px-3 py-2.5">
+                <li
+                  key={index}
+                  className="flex gap-3 rounded-[var(--radius-control)] border border-[var(--color-line)] px-3 py-2.5"
+                >
                   <span className="font-mono text-[var(--color-accent)]">{index}</span>
                   <span>
                     <b className="block text-[var(--color-ink)]">{title}</b>
@@ -86,16 +93,29 @@ export default async function ExecutionPage() {
           >
             <SectionBody section={workers}>
               {(items) => (
-                <DataTable caption="Execution worker readiness." head={['Worker', 'State', 'Capacity', 'Detail']}>
+                <DataTable
+                  caption="Execution worker readiness."
+                  head={['Worker', 'State', 'Capacity', 'Detail']}
+                >
                   {items.map((item) => (
                     <Row key={item.id}>
                       <Cell>{item.label}</Cell>
                       <Cell nowrap>
-                        <Tag tone={item.state === 'HEALTHY' || item.state === 'CONNECTED' ? 'healthy' : item.state === 'DEGRADED' ? 'warning' : 'offline'}>
+                        <Tag
+                          tone={
+                            item.state === 'HEALTHY' || item.state === 'CONNECTED'
+                              ? 'healthy'
+                              : item.state === 'DEGRADED'
+                                ? 'warning'
+                                : 'offline'
+                          }
+                        >
                           {item.state.replaceAll('_', ' ')}
                         </Tag>
                       </Cell>
-                      <Cell muted nowrap>{item.capacity}</Cell>
+                      <Cell muted nowrap>
+                        {item.capacity}
+                      </Cell>
                       <Cell muted>{item.detail}</Cell>
                     </Row>
                   ))}
@@ -111,13 +131,26 @@ export default async function ExecutionPage() {
           >
             <SectionBody section={models}>
               {(items) => (
-                <DataTable caption="Model and provider readiness." head={['Profile', 'Provider', 'State', 'Detail']}>
+                <DataTable
+                  caption="Model and provider readiness."
+                  head={['Profile', 'Provider', 'State', 'Detail']}
+                >
                   {items.map((item) => (
                     <Row key={item.id}>
                       <Cell>{item.label}</Cell>
-                      <Cell muted nowrap>{item.provider}</Cell>
+                      <Cell muted nowrap>
+                        {item.provider}
+                      </Cell>
                       <Cell nowrap>
-                        <Tag tone={item.state === 'HEALTHY' || item.state === 'AVAILABLE' ? 'healthy' : item.state === 'DEGRADED' ? 'warning' : 'offline'}>
+                        <Tag
+                          tone={
+                            item.state === 'HEALTHY' || item.state === 'AVAILABLE'
+                              ? 'healthy'
+                              : item.state === 'DEGRADED'
+                                ? 'warning'
+                                : 'offline'
+                          }
+                        >
                           {item.state.replaceAll('_', ' ')}
                         </Tag>
                       </Cell>

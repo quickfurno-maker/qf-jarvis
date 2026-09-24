@@ -22,11 +22,15 @@ export default async function ConversationsPage() {
       <div className="space-y-5">
         <Notice
           tone={rowsSection.availability === 'AVAILABLE' ? 'healthy' : 'offline'}
-          title={rowsSection.availability === 'AVAILABLE' ? 'Conversation inventory connected' : 'Conversation inventory not connected'}
+          title={
+            rowsSection.availability === 'AVAILABLE'
+              ? 'Conversation inventory connected'
+              : 'Conversation inventory not connected'
+          }
         >
-          Only minimized identity and durable control state are shown. Takeover, pause and resume are
-          submitted as signed operator commands; QuickFurno Core validates the current revision before
-          any state change is applied.
+          Only minimized identity and durable control state are shown. Takeover, pause and resume
+          are submitted as signed operator commands; QuickFurno Core validates the current revision
+          before any state change is applied.
         </Notice>
 
         <Panel
@@ -45,8 +49,12 @@ export default async function ConversationsPage() {
                     <Cell nowrap>
                       <span className="tabular font-mono text-[10.5px]">{row.id}</span>
                     </Cell>
-                    <Cell muted nowrap>{row.subject}</Cell>
-                    <Cell muted nowrap>{row.agent}</Cell>
+                    <Cell muted nowrap>
+                      {row.subject}
+                    </Cell>
+                    <Cell muted nowrap>
+                      {row.agent}
+                    </Cell>
                     <Cell nowrap>
                       <span className="flex gap-1.5">
                         <Tag tone={row.humanTakeover ? 'warning' : 'info'}>

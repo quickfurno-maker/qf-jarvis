@@ -25,7 +25,11 @@ export default async function AnalyticsPage() {
       <div className="space-y-5">
         <Notice
           tone={provenance.liveOperationalData ? 'healthy' : 'warning'}
-          title={provenance.liveOperationalData ? 'Live analytics sources connected' : 'Analytics sources are partially connected'}
+          title={
+            provenance.liveOperationalData
+              ? 'Live analytics sources connected'
+              : 'Analytics sources are partially connected'
+          }
         >
           Jarvis telemetry explains system behavior. QuickFurno Core aggregates describe business
           outcomes. They are rendered together for decision support but never merged into one

@@ -233,10 +233,10 @@ describe('QFJ-P12 (ADR-0085) canonical governance consistency', () => {
       // asserts a live service.
       const jarvisOs = flat(read(JARVIS_OS));
 
-      const current = /JOS-01([A-E]) is the current[^.]*Jarvis OS slice/u.exec(jarvisOs);
+      const current = /JOS-01([A-G]) is the current[^.]*Jarvis OS slice/u.exec(jarvisOs);
       expect(current, 'a current JOS slice must be named').not.toBeNull();
 
-      const next = /JOS-01([A-E])[^.]*is next/u.exec(jarvisOs);
+      const next = /JOS-01([A-G])[^.]*is next/u.exec(jarvisOs);
       expect(next, 'the JOS track is closed: no slice may be named next').toBeNull();
 
       // Whether a deployment is RUNNING is an operational fact. The repository may say the

@@ -158,8 +158,14 @@ describe('JF-2A provider containment', () => {
     expect(roots).not.toContain('quickfurno');
     expect(roots).not.toContain('onedecore');
     const packages = readdirSync(join(REPO_ROOT, 'packages')).map((one) => one.toLowerCase());
+    const reviewedCoreBoundaryContracts = new Set([
+      'quickfurno-operator-command-contract',
+      'quickfurno-operator-observation-contract',
+    ]);
     for (const one of packages) {
-      expect(one).not.toContain('quickfurno');
+      if (!reviewedCoreBoundaryContracts.has(one)) {
+        expect(one).not.toContain('quickfurno');
+      }
       expect(one).not.toContain('onedecore');
     }
   });

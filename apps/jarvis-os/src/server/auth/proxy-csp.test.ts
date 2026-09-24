@@ -192,8 +192,9 @@ describe('secret containment in application source', () => {
     expect(loader).toContain("AUTH_CONFIG_PATH_VAR = 'QFJ_JOS_AUTH_CONFIG_FILE'");
     expect(loader).toContain("WORKER_OBSERVATION_PATH_VAR = 'QFJ_WORKER_OBSERVATION_FILE'");
     expect(loader).toContain("CORE_READ_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_READ_CONFIG_FILE'");
+    expect(loader).toContain("CORE_COMMAND_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_COMMAND_CONFIG_FILE'");
     const envReads = loader.match(/process\.env\[/gu) ?? [];
-    expect(envReads).toHaveLength(3);
+    expect(envReads).toHaveLength(4);
   });
 
   it('imports node:fs only in the auth config loader', () => {

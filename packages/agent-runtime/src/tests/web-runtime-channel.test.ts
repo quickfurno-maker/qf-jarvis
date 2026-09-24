@@ -453,8 +453,11 @@ describe('(10) no application consumes the web channel', () => {
       // AVG-11 / ADR-0129: a second CONTRACT VERSION of the same read-only snapshot, not a second
       // capability. GET only, the same session check, the same loader, the same composed core --
       // and V1 is served unchanged beside it, because ADR-0086 forbids editing a shipped shape in
-      // place. Four operator-plane routes; still no route that can write anything.
+      // place. Seven reviewed operator-plane routes, including the versioned command submission boundary.
       'api/control-plane/v2/snapshot/route.ts',
+      'api/operator/v1/bootstrap/route.ts',
+      'api/operator/v1/commands/route.ts',
+      'api/operator/v1/snapshot/route.ts',
     ]);
   });
 });
