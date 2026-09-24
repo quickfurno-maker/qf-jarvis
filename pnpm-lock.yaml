@@ -429,6 +429,8 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/digital-twin-simulation: {}
+
   packages/durable-orchestration-contracts:
     dependencies:
       zod:
@@ -497,6 +499,8 @@ importers:
       '@qf-jarvis/recommendation-runtime':
         specifier: workspace:*
         version: link:../recommendation-runtime
+
+  packages/governed-agent-handoff: {}
 
   packages/governed-knowledge:
     dependencies:
@@ -671,6 +675,8 @@ importers:
         specifier: workspace:*
         version: link:../model-reply-adapter
 
+  packages/model-intelligence-control: {}
+
   packages/model-reply-adapter:
     dependencies:
       '@qf-jarvis/agent-runtime':
@@ -685,6 +691,8 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/multimodal-turn-planning: {}
 
   packages/openai-compatible-embedding-adapter:
     dependencies:
@@ -1109,6 +1117,8 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/semantic-context-engine: {}
 
   packages/worker-observation-contract:
     dependencies:

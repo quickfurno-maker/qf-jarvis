@@ -580,6 +580,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // neither ClientConfirmationV1 nor CommunicationAuthorizationV1.
       'core-riya-intake',
       'core-service-availability-read',
+      // ADR-0162: offline simulation-only baseline/candidate comparison. It has no provider, Core,
+      // WhatsApp, database or activation client and treats every observed production effect as failure.
+      'digital-twin-simulation',
       // ADR-0154: content-minimized contracts for native Temporal orchestration. Contract-only;
       // execution authority stays with QuickFurno Core and Core Automation.
       'durable-orchestration-contracts',
@@ -600,6 +603,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-P09.01 (ADR-0084): the execution intent correlation runtime -- Core issues, QuickFurno Core Automation executes,
       // this only correlates. Still an EXACT set match; it records an authorised addition.
       'execution-intent-runtime',
+      // ADR-0162: reference-only handoff proposals that can only follow authoritative assignment;
+      // they create no control transition and every context reference must allow the receiver.
+      'governed-agent-handoff',
       'governed-knowledge',
       // ADR-0161: policy/runtime governed long-term-memory foundation. Durable memory is default-OFF,
       // canonical ADR-0016 contracts stay authoritative, and the package itself has no database I/O.
@@ -632,7 +638,13 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'model-evaluation',
       'model-gateway',
       'model-gateway-composition',
+      // ADR-0162: pure adaptive route intent and evidence-derived confidence. It invokes no
+      // provider and actual routing/rollout authority remains exclusively in Model Gateway.
+      'model-intelligence-control',
       'model-reply-adapter',
+      // ADR-0162: provider-neutral media capability planning over metadata only. QuickFurno keeps
+      // media-fetch authority; this package has no Meta credential, provider call or send path.
+      'multimodal-turn-planning',
       // ADR-0158: bounded OpenAI-compatible embedding transport. Policy remains in knowledge-index.
       'openai-compatible-embedding-adapter',
       // QFJ-P08 (ADR-0081): the durable approval queue and audit. Still an EXACT set match -- this
@@ -782,6 +794,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // service with no ingress: no HTTP server, route, public endpoint, browser reachability,
       // database, migration, provider or live send, and nothing imports it.
       'riya-web-conversation-service',
+      // ADR-0162: revision/policy/scope-bound context reuse plus extractive-only compression.
+      // It never caches final replies or Core authority and preserves citation references.
+      'semantic-context-engine',
       // ADR-0159: pure content-free wire contract for read-only worker observations.
       'worker-observation-contract',
     ]);

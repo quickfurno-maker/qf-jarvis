@@ -1,0 +1,19 @@
+{
+  "name": "@qf-jarvis/multimodal-turn-planning",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Provider-neutral WhatsApp media-understanding planning. Never fetches Meta media, calls a model, or sends a message.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  }
+}

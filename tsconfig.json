@@ -78,6 +78,11 @@
     { "path": "./packages/jarvis-v1-provider-certification-live/tsconfig.build.json" },
     { "path": "./packages/jarvis-v1-production-seal/tsconfig.build.json" },
     { "path": "./packages/riya-prompts/tsconfig.build.json" },
-    { "path": "./packages/riya-candidate-evidence-live/tsconfig.build.json" }
+    { "path": "./packages/riya-candidate-evidence-live/tsconfig.build.json" },
+    { "path": "./packages/model-intelligence-control/tsconfig.build.json" },
+    { "path": "./packages/semantic-context-engine/tsconfig.build.json" },
+    { "path": "./packages/multimodal-turn-planning/tsconfig.build.json" },
+    { "path": "./packages/governed-agent-handoff/tsconfig.build.json" },
+    { "path": "./packages/digital-twin-simulation/tsconfig.build.json" }
   ]
 }
