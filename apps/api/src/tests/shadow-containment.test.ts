@@ -281,6 +281,10 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     // contains none of these tokens, so their own forbidden-token lists have to name them.
     'src/tests/jf4-customer-containment.test.ts',
     'src/tests/jf4-negative-controls.test.ts',
+    // ADR-0162. This spec asserts that the five new pure packages contain none of the forbidden
+    // provider, WhatsApp, workflow, database or execution vocabulary, so the spec must name those
+    // tokens while production sources remain subject to the unchanged scanner.
+    'src/tests/adaptive-intelligence-containment.test.ts',
   ]);
 
   /**
