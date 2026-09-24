@@ -110,9 +110,17 @@ export function createOperatorClient(args: {
         result = parseOperatorCommandResult(response.body);
       } catch {
         if (response.status === 401) {
-          throw new OperatorClientError('UNAUTHENTICATED', 'Operator session is not authenticated.', 401);
+          throw new OperatorClientError(
+            'UNAUTHENTICATED',
+            'Operator session is not authenticated.',
+            401,
+          );
         }
-        throw new OperatorClientError('INVALID_RESPONSE', 'Operator command result was invalid.', response.status);
+        throw new OperatorClientError(
+          'INVALID_RESPONSE',
+          'Operator command result was invalid.',
+          response.status,
+        );
       }
       // Command results are authoritative protocol outcomes even when HTTP carries 403/409/503.
       // Return the parsed outcome so every client renders REFUSED, CONFLICT and UNAVAILABLE

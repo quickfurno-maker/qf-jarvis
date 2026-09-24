@@ -30,16 +30,20 @@ export default async function KnowledgePage() {
       <div className="space-y-5">
         {isReadable(namespacesSection.availability) ? (
           <Notice
-            tone={namespacesSection.items.some((item) => item.state === 'DISABLED') ? 'offline' : 'healthy'}
+            tone={
+              namespacesSection.items.some((item) => item.state === 'DISABLED')
+                ? 'offline'
+                : 'healthy'
+            }
             title="Knowledge posture observed"
           >
-            This surface reports the worker&rsquo;s governed knowledge mode and exact runtime posture.
-            It cannot enable retrieval or change a corpus revision.
+            This surface reports the worker&rsquo;s governed knowledge mode and exact runtime
+            posture. It cannot enable retrieval or change a corpus revision.
           </Notice>
         ) : (
           <Notice tone="offline" title="Knowledge observation is not connected">
-            Jarvis OS will not infer whether retrieval is enabled. A governed worker observation must
-            state the active mode before this page reports it.
+            Jarvis OS will not infer whether retrieval is enabled. A governed worker observation
+            must state the active mode before this page reports it.
           </Notice>
         )}
 

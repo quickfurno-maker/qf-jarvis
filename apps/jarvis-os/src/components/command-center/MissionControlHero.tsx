@@ -23,8 +23,10 @@ export function MissionControlHero({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="eyebrow">JARVIS OS / MISSION CONTROL</span>
-            <span className={"live-chip " + (live ? 'is-live' : 'is-static')}>
-              <span className={live ? 'pulse-live' : ''} aria-hidden="true">●</span>
+            <span className={'live-chip ' + (live ? 'is-live' : 'is-static')}>
+              <span className={live ? 'pulse-live' : ''} aria-hidden="true">
+                ●
+              </span>
               {live ? 'Live telemetry' : 'Governed baseline'}
             </span>
           </div>
@@ -32,8 +34,8 @@ export function MissionControlHero({
             One operating surface for Jarvis intelligence, safety and execution readiness.
           </h2>
           <p className="mt-4 max-w-[76ch] text-[12.5px] leading-relaxed text-[var(--color-ink-muted)]">
-            Web today, native mobile next. Every metric carries provenance; every control declares its
-            authority boundary before it can become actionable.
+            Web today, native mobile next. Every metric carries provenance; every control declares
+            its authority boundary before it can become actionable.
           </p>
         </div>
 
@@ -41,7 +43,7 @@ export function MissionControlHero({
           <HeroStat label="Observed now" value={live ? 'YES' : 'NO'} />
           <HeroStat label="Healthy/connected" value={String(connected)} />
           <HeroStat label="System components" value={String(health.components.length)} />
-          <HeroStat label="Rollout" value={health.rolloutEnabled ? 'ON' : 'OFF'} />
+          <HeroStat label="Rollout" value="OFF" />
         </div>
       </div>
     </section>

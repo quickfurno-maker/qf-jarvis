@@ -39,7 +39,11 @@ export default async function OperationsPage() {
       <div className="space-y-5">
         <Notice
           tone={control.availability === 'AVAILABLE' ? 'info' : 'offline'}
-          title={control.availability === 'AVAILABLE' ? 'Conversation control connected' : 'Conversation control not connected'}
+          title={
+            control.availability === 'AVAILABLE'
+              ? 'Conversation control connected'
+              : 'Conversation control not connected'
+          }
         >
           Jarvis OS submits signed, revision-bound operator commands. QuickFurno Core validates the
           current conversation state and may refuse a stale or ineligible command; Jarvis OS never

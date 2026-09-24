@@ -1,7 +1,4 @@
-import { z } from 'zod';
-
 import {
-  OPERATOR_COMMAND_PROTOCOL,
   operatorCommandResultSchema,
   operatorCommandSchema,
   type OperatorCommand,
@@ -39,13 +36,11 @@ export type QuickFurnoOperatorCommand = OperatorCommand & {
 export type QuickFurnoOperatorCommandResult = OperatorCommandResult;
 
 export function parseQuickFurnoOperatorCommand(value: unknown): QuickFurnoOperatorCommand {
-  const parsed = quickFurnoOperatorCommandSchema.parse(value);
-  if (parsed.protocol !== OPERATOR_COMMAND_PROTOCOL) {
-    throw new z.ZodError([]);
-  }
-  return parsed as QuickFurnoOperatorCommand;
+  return quickFurnoOperatorCommandSchema.parse(value) as QuickFurnoOperatorCommand;
 }
 
-export function parseQuickFurnoOperatorCommandResult(value: unknown): QuickFurnoOperatorCommandResult {
+export function parseQuickFurnoOperatorCommandResult(
+  value: unknown,
+): QuickFurnoOperatorCommandResult {
   return quickFurnoOperatorCommandResultSchema.parse(value);
 }

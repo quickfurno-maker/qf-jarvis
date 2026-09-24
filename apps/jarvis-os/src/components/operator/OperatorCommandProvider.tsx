@@ -17,10 +17,7 @@ import {
   type OperatorCommand,
   type OperatorCommandResult,
 } from '@qf-jarvis/operator-api-contract';
-import {
-  createOperatorClient,
-  type OperatorTransport,
-} from '@qf-jarvis/operator-client-core';
+import { createOperatorClient, type OperatorTransport } from '@qf-jarvis/operator-client-core';
 
 interface OperatorCommandContextValue {
   readonly bootstrap: OperatorBootstrap | null;
@@ -34,6 +31,7 @@ const OperatorCommandContext = createContext<OperatorCommandContextValue | null>
 function browserTransport(): OperatorTransport {
   return Object.freeze({
     async request(input: Parameters<OperatorTransport['request']>[0]) {
+      // eslint-disable-next-line no-restricted-globals -- same-origin browser transport to Jarvis OS only.
       const response = await fetch(input.path, {
         method: input.method,
         credentials: 'same-origin',
@@ -44,7 +42,7 @@ function browserTransport(): OperatorTransport {
         },
         ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
       });
-      let body: unknown = {};
+      let body: unknown;
       try {
         body = await response.json();
       } catch {
@@ -77,20 +75,15 @@ export function OperatorCommandProvider({
   );
 
   useEffect(() => {
-    let cancelled = false;
     void (async () => {
       try {
-        const nextBootstrap = await client.bootstrap();
-        if (!cancelled) setBootstrap(nextBootstrap);
+        setBootstrap(await client.bootstrap());
       } catch {
         // Fail closed: missing bootstrap keeps every command unavailable.
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [client]);
 
   const capabilityState = useCallback(
@@ -115,7 +108,9 @@ export function OperatorCommandProvider({
     [bootstrap, loading, capabilityState, execute],
   );
 
-  return <OperatorCommandContext.Provider value={value}>{children}</OperatorCommandContext.Provider>;
+  return (
+    <OperatorCommandContext.Provider value={value}>{children}</OperatorCommandContext.Provider>
+  );
 }
 
 export function useOperatorCommands(): OperatorCommandContextValue {

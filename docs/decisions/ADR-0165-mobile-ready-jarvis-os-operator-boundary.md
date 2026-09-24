@@ -16,6 +16,7 @@ The next product step is a native mobile application. Duplicating business logic
 Jarvis OS web and future iOS/Android clients SHALL share a framework-neutral Operator API contract. The contract defines client platforms, module catalog, bootstrap capabilities, command envelopes, and command results. React/Next and future React Native code remain presentation/transport adapters only.
 
 The shared operator surface uses versioned endpoints:
+
 - `GET /api/operator/v1/bootstrap` — module catalog, client capability, and command readiness.
 - `GET /api/operator/v1/snapshot` — the same governed Control Plane Snapshot V2 used by server-rendered web pages.
 - `POST /api/operator/v1/commands` — command requests only; a request is never an authorization.
@@ -28,7 +29,7 @@ Jarvis OS receives no QuickFurno database credential, Meta credential, provider 
 
 QuickFurno Core remains authoritative for business truth, approvals, conversation control, consent, commercial state, and execution eligibility. Jarvis governance remains authoritative for agent configuration, knowledge mode, and rollout certification.
 
-A command capability is `AVAILABLE`, `LOCKED`, or `NOT_CONNECTED`. The UI MUST NOT render a functional command simply because a button exists. Until an authority bridge is reviewed and connected, the shared command endpoint fails closed with `authorized:false`.
+A command capability is `AVAILABLE`, `LOCKED`, or `NOT_CONNECTED`. The UI MUST NOT render a functional command simply because a button exists. Until an authority bridge is reviewed and connected, the shared command endpoint fails closed with `jarvisAuthorized:false`. Even when QuickFurno applies a command, Jarvis never represents itself as the authorizing authority.
 
 Knowledge-mode changes remain certification-lineage changes. Production rollout remains separately owner-authorized and certification-gated.
 
@@ -40,9 +41,9 @@ The mobile application may add offline presentation caches later, but cached val
 
 ## Security consequences
 
-The only reviewed outbound HTTPS source inside Jarvis OS is the signed QuickFurno operator-read adapter. All database/provider clients remain forbidden. Read-source ownership is section-bounded, freshness-window checked, response-size bounded, and fail-closed.
+The only reviewed outbound HTTPS transports inside Jarvis OS are the signed QuickFurno operator-read adapter and the separately keyed QuickFurno operator-command adapter. All database/provider clients remain forbidden. Read-source ownership is section-bounded, freshness-window checked, response-size bounded, and fail-closed; command transport is independently keyed, freshness checked, idempotent, operator-attributed, and authority-preserving.
 
-Production deployment mounts operator auth, operator-read identity, and worker observations read-only. Worker observation uses a directory bind because atomic rename would make a single-file bind stale.
+Production deployment mounts operator auth, operator-read identity, operator-command identity, and worker observations read-only. Worker observation uses a directory bind because atomic rename would make a single-file bind stale.
 
 ## Result
 

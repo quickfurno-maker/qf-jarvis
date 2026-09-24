@@ -45,7 +45,10 @@ export function CommandDeck({ bootstrap }: { readonly bootstrap: OperatorBootstr
                 {LABEL[capability.action]}
               </p>
               <span
-                className={"text-[9.5px] font-semibold tracking-[0.08em] uppercase " + stateClass(capability.state)}
+                className={
+                  'text-[9.5px] font-semibold tracking-[0.08em] uppercase ' +
+                  stateClass(capability.state)
+                }
               >
                 {capability.state.replace('_', ' ')}
               </span>

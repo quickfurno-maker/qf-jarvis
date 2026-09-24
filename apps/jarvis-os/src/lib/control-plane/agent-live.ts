@@ -1,9 +1,4 @@
-import type {
-  AgentId,
-  ControlPlaneReadModel,
-  MetricSummary,
-  Section,
-} from './types';
+import type { AgentId, ControlPlaneReadModel, MetricSummary, Section } from './types';
 import { isReadable } from './types';
 
 const WORKLOAD_ID: Readonly<Partial<Record<AgentId, string>>> = Object.freeze({
@@ -45,7 +40,9 @@ export function agentOperationalMetrics(
   ];
 
   if (isReadable(control.availability)) {
-    const owned = control.items.filter((row) => row.agent.toUpperCase() === agentLabel.toUpperCase());
+    const owned = control.items.filter(
+      (row) => row.agent.toUpperCase() === agentLabel.toUpperCase(),
+    );
     metrics.push(
       {
         id: agentId + '-paused',

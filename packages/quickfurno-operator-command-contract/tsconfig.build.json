@@ -8,5 +8,5 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "references": [{"path": "../operator-api-contract/tsconfig.build.json"}]
+  "references": [{ "path": "../operator-api-contract/tsconfig.build.json" }]
 }

@@ -78,7 +78,11 @@ export default async function ApprovalsPage() {
       <div className="space-y-5">
         <Notice
           tone={queue.availability === 'AVAILABLE' ? 'info' : 'offline'}
-          title={queue.availability === 'AVAILABLE' ? 'QuickFurno Core approval queue connected' : 'Approval queue not connected'}
+          title={
+            queue.availability === 'AVAILABLE'
+              ? 'QuickFurno Core approval queue connected'
+              : 'Approval queue not connected'
+          }
         >
           Decisions from this desk are signed operator requests to QuickFurno Core. Jarvis OS never
           authorizes an action itself, and a decision button stays locked unless the separate

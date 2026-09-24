@@ -4,11 +4,7 @@ import { useState } from 'react';
 
 import type { AttentionItem } from '@/lib/control-plane/types';
 
-export function NotificationCenter({
-  items,
-}: {
-  readonly items: readonly AttentionItem[];
-}) {
+export function NotificationCenter({ items }: { readonly items: readonly AttentionItem[] }) {
   const [open, setOpen] = useState(false);
   const critical = items.filter((item) => item.severity === 'critical').length;
   const warning = items.filter((item) => item.severity === 'warning').length;
@@ -17,9 +13,11 @@ export function NotificationCenter({
     <div className="relative">
       <button
         type="button"
-        aria-label={`Notifications — ${items.length} items`}
+        aria-label={`Notifications — ${String(items.length)} items`}
         aria-expanded={open}
-        onClick={() => { setOpen((value) => !value); }}
+        onClick={() => {
+          setOpen((value) => !value);
+        }}
         className="relative rounded-[var(--radius-control)] border border-[var(--color-line)] p-2 text-[var(--color-ink-muted)] transition-colors hover:border-[var(--color-line-strong)] hover:text-[var(--color-ink)]"
       >
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -29,7 +27,12 @@ export function NotificationCenter({
             strokeWidth="1.3"
             strokeLinejoin="round"
           />
-          <path d="M6.6 13a1.5 1.5 0 0 0 2.8 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <path
+            d="M6.6 13a1.5 1.5 0 0 0 2.8 0"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            strokeLinecap="round"
+          />
         </svg>
         {items.length > 0 ? (
           <span className="absolute -right-1.5 -top-1.5 min-w-[16px] rounded-full border border-[var(--color-base-950)] bg-[var(--color-critical)] px-1 text-center text-[9px] font-bold leading-[15px] text-white">
@@ -44,7 +47,9 @@ export function NotificationCenter({
             type="button"
             aria-label="Close notifications"
             className="fixed inset-0 z-40 bg-black/20"
-            onClick={() => { setOpen(false); }}
+            onClick={() => {
+              setOpen(false);
+            }}
           />
           <section
             aria-label="Operator notifications"
@@ -53,7 +58,9 @@ export function NotificationCenter({
             <div className="border-b border-[var(--color-line)] px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[12.5px] font-semibold text-[var(--color-ink)]">Attention center</p>
+                  <p className="text-[12.5px] font-semibold text-[var(--color-ink)]">
+                    Attention center
+                  </p>
                   <p className="mt-0.5 text-[10.5px] text-[var(--color-ink-faint)]">
                     {critical} critical · {warning} warning · {items.length} total
                   </p>
@@ -73,7 +80,9 @@ export function NotificationCenter({
                     className="rounded-[11px] border border-[var(--color-line)] px-3.5 py-3 [&+&]:mt-2"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="text-[12px] font-semibold text-[var(--color-ink)]">{item.title}</p>
+                      <p className="text-[12px] font-semibold text-[var(--color-ink)]">
+                        {item.title}
+                      </p>
                       <span
                         className={
                           'text-[9px] font-bold uppercase tracking-[0.08em] ' +

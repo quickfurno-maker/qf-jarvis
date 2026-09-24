@@ -5,7 +5,12 @@
   "type": "module",
   "sideEffects": false,
   "description": "Signed Jarvis OS to QuickFurno operator command transport contract.",
-  "exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.js"}},
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "typecheck": "tsc --build tsconfig.build.json",

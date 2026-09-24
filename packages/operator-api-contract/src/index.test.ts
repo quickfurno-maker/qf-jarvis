@@ -29,12 +29,14 @@ describe('operator api contract', () => {
         mobileDeviceSession: false,
       },
       modules: OPERATOR_MODULES,
-      capabilities: [{
-        action: 'APPROVAL_DECIDE',
-        state: 'LOCKED',
-        reason: 'Authority bridge is not connected.',
-        authority: 'QUICKFURNO_CORE',
-      }],
+      capabilities: [
+        {
+          action: 'APPROVAL_DECIDE',
+          state: 'LOCKED',
+          reason: 'Authority bridge is not connected.',
+          authority: 'QUICKFURNO_CORE',
+        },
+      ],
     });
     expect(value.capabilities[0]?.state).toBe('LOCKED');
   });

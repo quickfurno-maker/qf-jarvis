@@ -21,7 +21,9 @@ export function CommandPalette() {
       }
     };
     window.addEventListener('keydown', onKey);
-    return () => { window.removeEventListener('keydown', onKey); };
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
   }, []);
 
   useEffect(() => {
@@ -49,7 +51,9 @@ export function CommandPalette() {
     <>
       <button
         type="button"
-        onClick={() => { setOpen(true); }}
+        onClick={() => {
+          setOpen(true);
+        }}
         className="command-trigger flex w-full max-w-[460px] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-line)] px-3 py-2 text-left text-[12px] text-[var(--color-ink-faint)]"
       >
         <span aria-hidden="true">⌕</span>
@@ -65,7 +69,9 @@ export function CommandPalette() {
             type="button"
             aria-label="Close command palette"
             className="absolute inset-0"
-            onClick={() => { setOpen(false); }}
+            onClick={() => {
+              setOpen(false);
+            }}
           />
           <div
             role="dialog"
@@ -77,7 +83,9 @@ export function CommandPalette() {
               <input
                 ref={inputRef}
                 value={query}
-                onChange={(event) => { setQuery(event.target.value); }}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                }}
                 placeholder="Search modules, agents, analytics, controls…"
                 className="w-full rounded-[10px] border border-[var(--color-line)] bg-[var(--color-base-850)] px-3 py-3 text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"
               />
@@ -92,7 +100,9 @@ export function CommandPalette() {
                   <button
                     key={item.href}
                     type="button"
-                    onClick={() => { navigate(item.href); }}
+                    onClick={() => {
+                      navigate(item.href);
+                    }}
                     className="group flex w-full items-center justify-between gap-4 rounded-[10px] px-3 py-2.5 text-left hover:bg-[var(--color-base-800)]"
                   >
                     <span className="min-w-0">

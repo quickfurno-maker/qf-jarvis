@@ -2,7 +2,6 @@ import { createHash, createPrivateKey, randomUUID, sign } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 
 import {
-  QUICKFURNO_OPERATOR_OBSERVATION_PROTOCOL,
   QUICKFURNO_OPERATOR_PATH,
   QUICKFURNO_OPERATOR_REQUEST_PROTOCOL,
   QUICKFURNO_OPERATOR_SIGNING_DOMAIN,
@@ -66,26 +65,35 @@ export function createQuickFurnoOperatorReadSource(configPath: string): ReadSour
         const config = loadCoreReadConfig({ path: configPath });
         const requestId = randomUUID();
         const issuedAt = new Date().toISOString();
-        const body = new TextEncoder().encode(JSON.stringify({
-          protocol: QUICKFURNO_OPERATOR_REQUEST_PROTOCOL,
-          requestId,
-          issuedAt,
-        }));
+        const body = new TextEncoder().encode(
+          JSON.stringify({
+            protocol: QUICKFURNO_OPERATOR_REQUEST_PROTOCOL,
+            requestId,
+            issuedAt,
+          }),
+        );
         const privateKey = createPrivateKey(config.privateKeyPem);
         if (privateKey.type !== 'private' || privateKey.asymmetricKeyType !== 'ed25519') {
-          return Object.freeze({ status: 'UNAVAILABLE' as const, reason: 'SOURCE_REJECTED_REQUEST' as const });
+          return Object.freeze({
+            status: 'UNAVAILABLE' as const,
+            reason: 'SOURCE_REJECTED_REQUEST' as const,
+          });
         }
         const signature = sign(
           null,
-          Buffer.from(signingInput({
-            requestId,
-            issuedAt,
-            keyId: config.keyId,
-            bodyDigest: digest(body),
-          }), 'utf8'),
+          Buffer.from(
+            signingInput({
+              requestId,
+              issuedAt,
+              keyId: config.keyId,
+              bodyDigest: digest(body),
+            }),
+            'utf8',
+          ),
           privateKey,
         ).toString('base64url');
 
+        // eslint-disable-next-line no-restricted-globals -- reviewed server-only QuickFurno read transport.
         const response = await fetch(new URL(QUICKFURNO_OPERATOR_PATH, config.baseUrl), {
           method: 'POST',
           signal,
@@ -98,26 +106,35 @@ export function createQuickFurnoOperatorReadSource(configPath: string): ReadSour
           cache: 'no-store',
         });
         if (!response.ok) {
-          return Object.freeze({ status: 'UNAVAILABLE' as const, reason: 'SOURCE_REJECTED_REQUEST' as const });
+          return Object.freeze({
+            status: 'UNAVAILABLE' as const,
+            reason: 'SOURCE_REJECTED_REQUEST' as const,
+          });
         }
         const bytes = new Uint8Array(await response.arrayBuffer());
         if (bytes.byteLength < 2 || bytes.byteLength > MAX_RESPONSE_BYTES) {
-          return Object.freeze({ status: 'UNAVAILABLE' as const, reason: 'SOURCE_RETURNED_UNUSABLE_DATA' as const });
+          return Object.freeze({
+            status: 'UNAVAILABLE' as const,
+            reason: 'SOURCE_RETURNED_UNUSABLE_DATA' as const,
+          });
         }
         let json: unknown;
         try {
           json = JSON.parse(new TextDecoder().decode(bytes));
         } catch {
-          return Object.freeze({ status: 'UNAVAILABLE' as const, reason: 'SOURCE_RETURNED_UNUSABLE_DATA' as const });
+          return Object.freeze({
+            status: 'UNAVAILABLE' as const,
+            reason: 'SOURCE_RETURNED_UNUSABLE_DATA' as const,
+          });
         }
         const observation = parseQuickFurnoOperatorObservation(json);
-        if (observation.protocol !== QUICKFURNO_OPERATOR_OBSERVATION_PROTOCOL) {
-          return Object.freeze({ status: 'UNAVAILABLE' as const, reason: 'SOURCE_RETURNED_UNUSABLE_DATA' as const });
-        }
         const emitted = Date.parse(observation.emittedAt);
         const now = Date.now();
         if (!Number.isFinite(emitted) || emitted > now + 1_000 || now - emitted > 30_000) {
-          return Object.freeze({ status: 'UNAVAILABLE' as const, reason: 'SOURCE_RETURNED_UNUSABLE_DATA' as const });
+          return Object.freeze({
+            status: 'UNAVAILABLE' as const,
+            reason: 'SOURCE_RETURNED_UNUSABLE_DATA' as const,
+          });
         }
 
         const sections: SectionContributions = Object.freeze({
@@ -137,7 +154,10 @@ export function createQuickFurnoOperatorReadSource(configPath: string): ReadSour
           sections,
         });
       } catch {
-        return Object.freeze({ status: 'UNAVAILABLE' as const, reason: 'SOURCE_UNREACHABLE' as const });
+        return Object.freeze({
+          status: 'UNAVAILABLE' as const,
+          reason: 'SOURCE_UNREACHABLE' as const,
+        });
       }
     },
   });

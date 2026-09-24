@@ -53,16 +53,20 @@ export async function submitQuickFurnoOperatorCommand(
   }
   const signature = sign(
     null,
-    Buffer.from(signingInput({
-      commandId: parsed.commandId,
-      issuedAt: parsed.issuedAt,
-      keyId: config.keyId,
-      operatorId,
-      digest: bodyDigest(body),
-    }), 'utf8'),
+    Buffer.from(
+      signingInput({
+        commandId: parsed.commandId,
+        issuedAt: parsed.issuedAt,
+        keyId: config.keyId,
+        operatorId,
+        digest: bodyDigest(body),
+      }),
+      'utf8',
+    ),
     key,
   ).toString('base64url');
 
+  // eslint-disable-next-line no-restricted-globals -- reviewed server-only QuickFurno command transport.
   const response = await fetch(new URL(QUICKFURNO_OPERATOR_COMMAND_PATH, config.baseUrl), {
     method: 'POST',
     ...(signal === undefined ? {} : { signal }),

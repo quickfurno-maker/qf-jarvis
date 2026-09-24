@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  parseQuickFurnoOperatorObservation,
-  parseQuickFurnoOperatorRequest,
-} from './index.js';
+import { parseQuickFurnoOperatorObservation, parseQuickFurnoOperatorRequest } from './index.js';
 
 describe('QuickFurno operator observation contract', () => {
   it('accepts a bounded content-free operational snapshot', () => {
@@ -12,7 +9,10 @@ describe('QuickFurno operator observation contract', () => {
       approvalQueue: [],
       approvalBreakdown: [{ id: 'proposable', label: 'Awaiting operator', value: 2 }],
       conversationControl: [],
-      conversationActivity: [{ label: '11:00', value: 4 }, { label: '12:00', value: 6 }],
+      conversationActivity: [
+        { label: '11:00', value: 4 },
+        { label: '12:00', value: 6 },
+      ],
       agentWorkload: [{ id: 'riya', label: 'Riya', value: 5 }],
       businessAnalytics: [{ id: 'vendors-active', label: 'Active vendors', value: 12 }],
       coreAutomationExecution: [{ id: 'jobs-succeeded', label: 'Succeeded', value: 31 }],

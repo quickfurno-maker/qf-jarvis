@@ -44,8 +44,12 @@ function CommandButton({
 
   useEffect(() => {
     if (!armed) return;
-    const timer = setTimeout(() => { setArmed(false); }, 6_000);
-    return () => { clearTimeout(timer); };
+    const timer = setTimeout(() => {
+      setArmed(false);
+    }, 6_000);
+    return () => {
+      clearTimeout(timer);
+    };
   }, [armed]);
 
   async function run(): Promise<void> {
@@ -110,7 +114,10 @@ function CommandButton({
         disabled={!available}
         title={disabledReason}
         onClick={() => void run()}
-        className={'rounded-[var(--radius-control)] border px-2.5 py-1.5 text-[11px] font-semibold transition-all ' + visualClass}
+        className={
+          'rounded-[var(--radius-control)] border px-2.5 py-1.5 text-[11px] font-semibold transition-all ' +
+          visualClass
+        }
       >
         {busy ? 'Working…' : armed ? (confirmLabel ?? 'Confirm ' + label) : label}
       </button>
@@ -174,17 +181,17 @@ export function ConversationCommandControls({
   readonly humanTakeover: boolean;
   readonly aiPaused: boolean;
 }) {
-  const build = (
-    action: 'CONVERSATION_TAKEOVER' | 'CONVERSATION_RESUME_AI' | 'CONVERSATION_PAUSE_AI',
-  ) => (commandId: string) => ({
-    protocol: 'qfj.operator.command.v1' as const,
-    commandId,
-    issuedAt: new Date().toISOString(),
-    idempotencyKey: 'web:' + commandId,
-    clientPlatform: 'WEB' as const,
-    action,
-    payload: { conversationId, expectedRevision: revision },
-  });
+  const build =
+    (action: 'CONVERSATION_TAKEOVER' | 'CONVERSATION_RESUME_AI' | 'CONVERSATION_PAUSE_AI') =>
+    (commandId: string) => ({
+      protocol: 'qfj.operator.command.v1' as const,
+      commandId,
+      issuedAt: new Date().toISOString(),
+      idempotencyKey: 'web:' + commandId,
+      clientPlatform: 'WEB' as const,
+      action,
+      payload: { conversationId, expectedRevision: revision },
+    });
 
   if (humanTakeover || aiPaused) {
     return (

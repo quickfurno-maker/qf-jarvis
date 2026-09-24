@@ -9,7 +9,7 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
-    {"path": "../control-plane-read-contract/tsconfig.build.json"},
-    {"path": "../operator-api-contract/tsconfig.build.json"}
+    { "path": "../control-plane-read-contract/tsconfig.build.json" },
+    { "path": "../operator-api-contract/tsconfig.build.json" }
   ]
 }

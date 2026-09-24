@@ -29,13 +29,13 @@ export default async function AnalyticsPage() {
       <div className="space-y-5">
         {provenance.liveOperationalData ? (
           <Notice tone="healthy" title="Live operational analytics">
-            Connected sections are request-time observations. Business and commercial outcomes remain
-            QuickFurno Core facts and are never inferred from Jarvis telemetry.
+            Connected sections are request-time observations. Business and commercial outcomes
+            remain QuickFurno Core facts and are never inferred from Jarvis telemetry.
           </Notice>
         ) : (
           <Notice tone="info" title="Operational analytics — source-aware">
-            Sections render only the data they have earned. Missing sources remain unavailable rather
-            than being replaced with synthetic traffic or zero-value charts.
+            Sections render only the data they have earned. Missing sources remain unavailable
+            rather than being replaced with synthetic traffic or zero-value charts.
           </Notice>
         )}
 

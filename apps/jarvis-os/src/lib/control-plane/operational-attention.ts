@@ -22,7 +22,7 @@ export function operationalAttention(plane: ControlPlaneReadModel): readonly Att
         item(
           'live-pending-approvals',
           'approval',
-          pending + ' approval' + (pending === 1 ? '' : 's') + ' awaiting operator',
+          String(pending) + ' approval' + (pending === 1 ? '' : 's') + ' awaiting operator',
           'QuickFurno Core is waiting for an operator decision on the signed approval queue.',
           pending >= 10 ? 'critical' : 'warning',
         ),
@@ -39,7 +39,10 @@ export function operationalAttention(plane: ControlPlaneReadModel): readonly Att
         item(
           'live-human-takeovers',
           'escalation',
-          takeovers + ' conversation' + (takeovers === 1 ? '' : 's') + ' under human control',
+          String(takeovers) +
+            ' conversation' +
+            (takeovers === 1 ? '' : 's') +
+            ' under human control',
           'These conversations are currently held by a human operator in QuickFurno Core.',
           'warning',
         ),
@@ -50,7 +53,7 @@ export function operationalAttention(plane: ControlPlaneReadModel): readonly Att
         item(
           'live-ai-paused',
           'warning',
-          paused + ' AI conversation' + (paused === 1 ? '' : 's') + ' paused',
+          String(paused) + ' AI conversation' + (paused === 1 ? '' : 's') + ' paused',
           'Automation is suspended for these observed conversations until Core state changes.',
           'warning',
         ),
@@ -106,17 +109,18 @@ export function operationalAttention(plane: ControlPlaneReadModel): readonly Att
 
   const execution = plane.coreAutomationExecution();
   if (isReadable(execution.availability)) {
-    const failed =
-      execution.items.find((slice) => slice.id === 'failed-24h')?.value ?? 0;
-    const uncertain =
-      execution.items.find((slice) => slice.id === 'uncertain-24h')?.value ?? 0;
+    const failed = execution.items.find((slice) => slice.id === 'failed-24h')?.value ?? 0;
+    const uncertain = execution.items.find((slice) => slice.id === 'uncertain-24h')?.value ?? 0;
     if (failed > 0 || uncertain > 0) {
       merged.unshift(
         item(
           'live-execution-attention',
           'blocked',
           'Automation execution needs attention',
-          String(failed) + ' failed and ' + String(uncertain) + ' uncertain jobs were observed in the last 24 hours.',
+          String(failed) +
+            ' failed and ' +
+            String(uncertain) +
+            ' uncertain jobs were observed in the last 24 hours.',
           uncertain > 0 ? 'critical' : 'warning',
         ),
       );
@@ -124,9 +128,11 @@ export function operationalAttention(plane: ControlPlaneReadModel): readonly Att
   }
 
   const seen = new Set<string>();
-  return merged.filter((entry) => {
-    if (seen.has(entry.id)) return false;
-    seen.add(entry.id);
-    return true;
-  }).slice(0, 24);
+  return merged
+    .filter((entry) => {
+      if (seen.has(entry.id)) return false;
+      seen.add(entry.id);
+      return true;
+    })
+    .slice(0, 24);
 }

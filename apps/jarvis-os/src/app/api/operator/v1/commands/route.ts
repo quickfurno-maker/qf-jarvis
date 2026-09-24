@@ -47,19 +47,22 @@ export async function POST(request: Request): Promise<Response> {
 
   const issuedAt = Date.parse(parsed.data.issuedAt);
   if (!Number.isFinite(issuedAt) || Math.abs(Date.now() - issuedAt) > 60_000) {
-    return reply(409, operatorCommandResultSchema.parse({
-      protocol: OPERATOR_COMMAND_PROTOCOL,
-      commandId: parsed.data.commandId,
-      status: 'CONFLICT',
-      jarvisAuthorized: false,
-      reasonCode: 'COMMAND_STALE',
-    }));
+    return reply(
+      409,
+      operatorCommandResultSchema.parse({
+        protocol: OPERATOR_COMMAND_PROTOCOL,
+        commandId: parsed.data.commandId,
+        status: 'CONFLICT',
+        jarvisAuthorized: false,
+        reasonCode: 'COMMAND_STALE',
+      }),
+    );
   }
 
   const capability = operatorBootstrap().capabilities.find(
     (item) => item.action === parsed.data.action,
   );
-  if (!capability || capability.state !== 'AVAILABLE') {
+  if (capability?.state !== 'AVAILABLE') {
     const result = operatorCommandResultSchema.parse({
       protocol: OPERATOR_COMMAND_PROTOCOL,
       commandId: parsed.data.commandId,
@@ -71,7 +74,9 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => { controller.abort(); }, 5_000);
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, 5_000);
   try {
     const result = await submitQuickFurnoOperatorCommand(
       parsed.data,
@@ -90,13 +95,16 @@ export async function POST(request: Request): Promise<Response> {
               : 503;
     return reply(status, result);
   } catch {
-    return reply(503, operatorCommandResultSchema.parse({
-      protocol: OPERATOR_COMMAND_PROTOCOL,
-      commandId: parsed.data.commandId,
-      status: 'UNAVAILABLE',
-      jarvisAuthorized: false,
-      reasonCode: 'COMMAND_BRIDGE_UNAVAILABLE',
-    }));
+    return reply(
+      503,
+      operatorCommandResultSchema.parse({
+        protocol: OPERATOR_COMMAND_PROTOCOL,
+        commandId: parsed.data.commandId,
+        status: 'UNAVAILABLE',
+        jarvisAuthorized: false,
+        reasonCode: 'COMMAND_BRIDGE_UNAVAILABLE',
+      }),
+    );
   } finally {
     clearTimeout(timer);
   }

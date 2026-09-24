@@ -27,19 +27,21 @@ const GROUPS = [
 ] as const;
 
 export const NAV_GROUPS: readonly NavGroup[] = Object.freeze(
-  GROUPS.map(([contractGroup, id, label]) => Object.freeze({
-    id,
-    label,
-    items: Object.freeze(
-      OPERATOR_MODULES
-        .filter((module) => module.group === contractGroup)
-        .map((module) => Object.freeze({
-          href: module.webPath,
-          label: module.label,
-          scope: module.scope,
-        })),
-    ),
-  })),
+  GROUPS.map(([contractGroup, id, label]) =>
+    Object.freeze({
+      id,
+      label,
+      items: Object.freeze(
+        OPERATOR_MODULES.filter((module) => module.group === contractGroup).map((module) =>
+          Object.freeze({
+            href: module.webPath,
+            label: module.label,
+            scope: module.scope,
+          }),
+        ),
+      ),
+    }),
+  ),
 );
 
 export const NAV_ITEMS: readonly NavItem[] = Object.freeze(

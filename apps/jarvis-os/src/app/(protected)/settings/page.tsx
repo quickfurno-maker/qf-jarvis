@@ -10,7 +10,9 @@ export default async function SettingsPage() {
   const plane = await controlPlane();
   const bootstrap = operatorBootstrap();
   const provenance = plane.provenance();
-  const commandReady = bootstrap.capabilities.some((capability) => capability.state === 'AVAILABLE');
+  const commandReady = bootstrap.capabilities.some(
+    (capability) => capability.state === 'AVAILABLE',
+  );
 
   return (
     <>
@@ -34,27 +36,54 @@ export default async function SettingsPage() {
           <Panel title="Runtime provenance" subtitle="What this client is actually connected to">
             <dl className="divide-y divide-[var(--color-line)]">
               <Entry label="Operator API" value={'v' + bootstrap.apiVersion} />
-              <Entry label="Snapshot contract" value={'v' + String(bootstrap.client.minimumSnapshotVersion)} />
+              <Entry
+                label="Snapshot contract"
+                value={'v' + String(bootstrap.client.minimumSnapshotVersion)}
+              />
               <Entry label="Environment" value={ENVIRONMENT_LABEL} />
               <Entry label="Source" value={provenance.kind.replaceAll('_', ' ')} />
-              <Entry label="Live operational data" value={provenance.liveOperationalData ? 'YES' : 'NO'} />
+              <Entry
+                label="Live operational data"
+                value={provenance.liveOperationalData ? 'YES' : 'NO'}
+              />
               <Entry label="Web session" value="ACTIVE" />
-              <Entry label="Native mobile session" value={bootstrap.client.mobileDeviceSession ? 'ACTIVE' : 'NEXT'} />
+              <Entry
+                label="Native mobile session"
+                value={bootstrap.client.mobileDeviceSession ? 'ACTIVE' : 'NEXT'}
+              />
             </dl>
           </Panel>
 
-          <Panel title="Governed configuration" subtitle="Visible now; mutable only after its authority path is certified">
+          <Panel
+            title="Governed configuration"
+            subtitle="Visible now; mutable only after its authority path is certified"
+          >
             <div className="space-y-3 text-[12px] text-[var(--color-ink-muted)]">
               <SettingRow label="Agent enablement" authority="Jarvis governance" state="LOCKED" />
               <SettingRow label="Knowledge mode" authority="Jarvis governance" state="LOCKED" />
-              <SettingRow label="Production rollout" authority="Jarvis governance + owner" state="LOCKED" />
-              <SettingRow label="Conversation takeover / pause" authority="QuickFurno Core" state={commandReady ? 'AVAILABLE' : 'NOT CONNECTED'} />
-              <SettingRow label="Approval decisions" authority="QuickFurno Core" state={commandReady ? 'AVAILABLE' : 'NOT CONNECTED'} />
+              <SettingRow
+                label="Production rollout"
+                authority="Jarvis governance + owner"
+                state="LOCKED"
+              />
+              <SettingRow
+                label="Conversation takeover / pause"
+                authority="QuickFurno Core"
+                state={commandReady ? 'AVAILABLE' : 'NOT CONNECTED'}
+              />
+              <SettingRow
+                label="Approval decisions"
+                authority="QuickFurno Core"
+                state={commandReady ? 'AVAILABLE' : 'NOT CONNECTED'}
+              />
             </div>
           </Panel>
         </div>
 
-        <Panel title="Mobile-ready contract" subtitle="No web business logic is required by the future app">
+        <Panel
+          title="Mobile-ready contract"
+          subtitle="No web business logic is required by the future app"
+        >
           <ul className="grid gap-3 text-[12px] leading-relaxed text-[var(--color-ink-muted)] sm:grid-cols-2">
             <li>Bootstrap, snapshot and command APIs are versioned independently from React.</li>
             <li>Commands carry an explicit WEB / IOS / ANDROID client platform.</li>

@@ -132,14 +132,16 @@ describe('the adopted registry', () => {
     const worker = descriptor('quickfurno-whatsapp-worker-observation', ['workers'], () =>
       observed(OBSERVED, {
         workers: {
-          items: [{
-            id: 'worker',
-            label: 'WhatsApp worker',
-            kind: 'local-node',
-            state: 'HEALTHY',
-            capacity: 'single-owner',
-            detail: 'Observed worker.',
-          }],
+          items: [
+            {
+              id: 'worker',
+              label: 'WhatsApp worker',
+              kind: 'local-node',
+              state: 'HEALTHY',
+              capacity: 'single-owner',
+              detail: 'Observed worker.',
+            },
+          ],
         },
       }),
     );

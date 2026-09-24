@@ -42,7 +42,9 @@ export default async function OverviewPage() {
   const baseAttention = plane.attention();
   const attention = {
     ...baseAttention,
-    availability: provenance.liveOperationalData ? ('AVAILABLE' as const) : baseAttention.availability,
+    availability: provenance.liveOperationalData
+      ? ('AVAILABLE' as const)
+      : baseAttention.availability,
     reason: provenance.liveOperationalData
       ? 'Repository notices plus live operational attention derived from governed snapshot sections.'
       : baseAttention.reason,

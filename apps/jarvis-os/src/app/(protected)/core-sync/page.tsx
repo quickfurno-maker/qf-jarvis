@@ -61,7 +61,11 @@ export default async function CoreSyncPage() {
 
         <Notice
           tone={coreConnected ? 'healthy' : 'offline'}
-          title={coreConnected ? 'Signed QuickFurno Core observation is connected' : 'QuickFurno Core observation is not connected'}
+          title={
+            coreConnected
+              ? 'Signed QuickFurno Core observation is connected'
+              : 'QuickFurno Core observation is not connected'
+          }
         >
           {coreConnected
             ? 'Jarvis OS is reading bounded operational truth through the dedicated signed Core snapshot. QuickFurno Core remains the only authority for business state and command validation.'

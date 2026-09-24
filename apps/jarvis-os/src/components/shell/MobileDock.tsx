@@ -13,15 +13,18 @@ const ICON: Readonly<Record<string, string>> = Object.freeze({
 });
 
 const ITEMS = Object.freeze(
-  OPERATOR_MODULES
-    .filter((module) => module.mobilePrimary)
-    .map((module) => Object.freeze({
+  OPERATOR_MODULES.filter((module) => module.mobilePrimary).map((module) =>
+    Object.freeze({
       href: module.webPath,
-      label: module.id === 'operations' ? 'Operate'
-        : module.id === 'approvals' ? 'Approve'
-          : module.label,
+      label:
+        module.id === 'operations'
+          ? 'Operate'
+          : module.id === 'approvals'
+            ? 'Approve'
+            : module.label,
       icon: ICON[module.id] ?? '·',
-    })),
+    }),
+  ),
 );
 
 export function MobileDock() {
@@ -45,7 +48,9 @@ export function MobileDock() {
                 : 'text-[var(--color-ink-faint)]')
             }
           >
-            <span className="text-[15px]" aria-hidden="true">{item.icon}</span>
+            <span className="text-[15px]" aria-hidden="true">
+              {item.icon}
+            </span>
             <span className="truncate">{item.label}</span>
           </Link>
         );

@@ -5,7 +5,12 @@
   "type": "module",
   "sideEffects": false,
   "description": "Framework-neutral Jarvis OS operator client core shared by web and future native mobile clients.",
-  "exports": {".": {"types": "./dist/index.d.ts", "default": "./dist/index.js"}},
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "typecheck": "tsc --build tsconfig.build.json",
