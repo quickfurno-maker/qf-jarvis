@@ -179,8 +179,8 @@ prove "observation mount source" "$OBSERVABILITY" \
   "$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/observability"}}{{.Source}}{{end}}{{end}}')"
 prove "observation mounted read-only" "true" \
   "$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/observability"}}{{not .RW}}{{end}}{{end}}')"
-GROUPS="$(docker exec qf-jarvis-os id -G)"
-if [[ " $GROUPS " == *" 10002 "* ]]; then OBS_GROUP_VISIBLE=true; else OBS_GROUP_VISIBLE=false; fi
+CONTAINER_GROUPS="$(docker exec qf-jarvis-os id -G)"
+if [[ " $CONTAINER_GROUPS " == *" 10002 "* ]]; then OBS_GROUP_VISIBLE=true; else OBS_GROUP_VISIBLE=false; fi
 prove "observation supplementary group" "true" "$OBS_GROUP_VISIBLE"
 
 # Internal HTTP, from inside the container: the application is not reachable any other way yet.
