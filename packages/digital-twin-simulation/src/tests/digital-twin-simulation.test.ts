@@ -23,6 +23,8 @@ function observation(overrides: Partial<DigitalTwinObservation> = {}): DigitalTw
     latencyMs: 100,
     costUnits: 1,
     decisionRef: 'decision.1',
+    simulationMode: 'SIMULATION_ONLY',
+    effectIsolationRef: 'isolation.test.1',
     ...overrides,
   };
 }
@@ -57,6 +59,19 @@ describe('digital twin simulation', () => {
       expect.arrayContaining(['provider-send-observed', 'business-effect-observed']),
     );
   });
+  it('rejects an observation without an isolation reference', async () => {
+    await expect(
+      runDigitalTwinSuite({
+        scenarios: [scenario],
+        baseline: { simulate: vi.fn().mockResolvedValue(observation()) },
+        candidate: {
+          simulate: vi.fn().mockResolvedValue({ ...observation(), effectIsolationRef: 'bad ref' }),
+        },
+        policy,
+      }),
+    ).rejects.toThrow('digital-twin-observation-invalid');
+  });
+
   it('detects grounding, latency and cost regressions', async () => {
     const report = await runDigitalTwinSuite({
       scenarios: [scenario],
