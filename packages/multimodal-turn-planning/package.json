@@ -1,0 +1,14 @@
+{
+  "name": "@qf-jarvis/multimodal-turn-planning",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Certified multimodal capability planning for WhatsApp turns. Produces media-processing intent but grants no provider fetch or send authority.",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  }
+}
