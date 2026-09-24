@@ -662,6 +662,10 @@ describe('the staging smoke stays out of the production boundary', () => {
       // JF-6 prep: the private process composes the signed QuickFurno Core transport through the
       // existing adapter. Workspace-only dependency; no new third-party resolution and no provider.
       '@qf-jarvis/core-decision-http-transport',
+      // ADR-0161: the structured Riya application boundary accepts the canonical Core-owned intake
+      // port as a TYPE. The business mapping remains injected; this dependency grants no endpoint,
+      // credential or Core mutation authority.
+      '@qf-jarvis/core-riya-intake',
       '@qf-jarvis/core-service-availability-read',
       // ADR-0154: the API owns only the content-minimized Temporal client contract. Workflow state
       // and execution authority remain outside this app boundary.
@@ -674,6 +678,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       // are workspace packages already in this repository, and neither is a knowledge authority
       // here -- the authority stays inside governed-knowledge, reached through JF-3.
       '@qf-jarvis/governed-knowledge',
+      // ADR-0161: the durable composition can construct the policy-gated memory runtime, while the
+      // default policy still refuses durable reads/writes.
+      '@qf-jarvis/governed-memory-foundation',
       '@qf-jarvis/groq-staging-smoke',
       '@qf-jarvis/jarvis-runtime',
       // JF-7 serving consumes immutable release/profile facts and a finished owner seal. The live
@@ -696,6 +703,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       '@qf-jarvis/openai-compatible-embedding-adapter',
       '@qf-jarvis/postgres-approval-queue',
       '@qf-jarvis/postgres-conversation-state',
+      // ADR-0161: the same caller-owned pool may back derived, non-authoritative memory. The schema
+      // remains separately migration-gated and importing the adapter connects to nothing.
+      '@qf-jarvis/postgres-governed-memory-store',
       '@qf-jarvis/postgres-knowledge-index',
       // JF-6 serving composition: these are the existing durable implementations of the two ports
       // Riya already requires. They receive the caller-owned pool and add no environment authority.

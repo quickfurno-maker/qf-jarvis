@@ -1,7 +1,8 @@
-import type { DatabasePool } from '@qf-jarvis/event-backbone';
 import { describe, expect, it, vi } from 'vitest';
 
 import { composeGovernedMemoryRuntime } from '../runtime/durable-jarvis-runtime.js';
+
+type MemoryPool = Parameters<typeof composeGovernedMemoryRuntime>[0]['pool'];
 
 const record = {
   memoryRecordId: 'c2000004-0000-4000-8000-000000000004',
@@ -22,8 +23,8 @@ const record = {
   correlationId: 'c2000006-0000-4000-8000-000000000006',
 };
 
-function pool(query: ReturnType<typeof vi.fn>): DatabasePool {
-  return { query } as unknown as DatabasePool;
+function pool(query: ReturnType<typeof vi.fn>): MemoryPool {
+  return { query } as unknown as MemoryPool;
 }
 
 describe('durable governed memory application composition', () => {

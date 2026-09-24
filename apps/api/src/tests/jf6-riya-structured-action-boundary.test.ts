@@ -1,19 +1,22 @@
+import { generateKeyPairSync } from 'node:crypto';
+
 import type {
   CoreRiyaIntakeLookupInput,
   CoreRiyaIntakePort,
   CoreRiyaIntakeReadInput,
   CoreRiyaIntakeSubmissionRequestV1,
 } from '@qf-jarvis/core-riya-intake';
-import type { DatabasePool } from '@qf-jarvis/event-backbone';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createJf6RiyaStructuredActionBoundary } from '../jf6-private-process/create-riya-structured-action-boundary.js';
+import { createJf6RiyaStructuredActionBoundary } from '../jf6-private-process/create-riya-service-boundary.js';
 
-function pool(): DatabasePool {
+type BoundaryPool = Parameters<typeof createJf6RiyaStructuredActionBoundary>[0]['pool'];
+
+function pool(): BoundaryPool {
   return {
     connect: vi.fn(),
     query: vi.fn(),
-  } as unknown as DatabasePool;
+  } as unknown as BoundaryPool;
 }
 
 function intakeHarness() {
@@ -30,11 +33,11 @@ function intakeHarness() {
   return { port, readCurrent, lookupSubmission, submit };
 }
 
+const { privateKey } = generateKeyPairSync('ed25519');
 const availability = {
   baseUrl: 'https://core.quickfurno.invalid/',
   keyId: 'qfj.test.key',
-  privateKeyPem:
-    '-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIJrLjL95hGUNOpwAH8XqbtSPDfHycaFW9OdDYkzq/RGp\n-----END PRIVATE KEY-----',
+  privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
   clock: () => '2026-09-23T12:00:00.000Z',
   requestId: () => 'availability.request.1',
   httpPost: vi.fn(),

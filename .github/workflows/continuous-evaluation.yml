@@ -28,7 +28,7 @@ on:
       - 'packages/jao-action-registry/**'
       - 'packages/jarvis-runtime/**'
       - 'apps/api/src/jf6-private-process/create-core-data-tools.ts'
-      - 'apps/api/src/jf6-private-process/create-riya-structured-action-boundary.ts'
+      - 'apps/api/src/jf6-private-process/create-riya-service-boundary.ts'
       - 'apps/api/src/knowledge-freshness/**'
       - 'apps/api/src/runtime/durable-jarvis-runtime.ts'
       - 'apps/worker/src/jao/**'
