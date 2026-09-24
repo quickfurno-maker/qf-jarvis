@@ -16,6 +16,18 @@ import type {
 } from './read-source';
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
+
+type OperatorSnapshotRequest = (
+  input: URL,
+  init: {
+    readonly method: 'POST';
+    readonly signal: AbortSignal;
+    readonly headers: Readonly<Record<string, string>>;
+    readonly body: string;
+    readonly cache: 'no-store';
+  },
+) => Promise<Pick<Response, 'ok' | 'status' | 'arrayBuffer'>>;
+
 const OWNED_SECTIONS = [
   'approvalQueue',
   'approvalBreakdown',
@@ -25,6 +37,9 @@ const OWNED_SECTIONS = [
   'businessAnalytics',
   'coreAutomationExecution',
 ] as const satisfies readonly ControlPlaneSectionName[];
+
+const defaultOperatorSnapshotRequest: OperatorSnapshotRequest = (input, init) =>
+  globalThis.fetch(input, init);
 
 function digest(raw: Uint8Array): string {
   return createHash('sha256').update(raw).digest('base64url');
@@ -52,7 +67,7 @@ function signingInput(args: {
 export function createQuickFurnoOperatorReadSource(
   configPath: string,
   now: () => Date = () => new Date(),
-  request: typeof fetch = fetch,
+  request: OperatorSnapshotRequest = defaultOperatorSnapshotRequest,
 ): ReadSourceDescriptor {
   if (!isAbsolute(configPath)) {
     throw new TypeError('quickfurno-core-read-config-path-invalid');
@@ -69,13 +84,12 @@ export function createQuickFurnoOperatorReadSource(
         const config = loadCoreReadConfig({ path: configPath });
         const requestId = randomUUID();
         const issuedAt = now().toISOString();
-        const body = new TextEncoder().encode(
-          JSON.stringify({
-            protocol: QUICKFURNO_OPERATOR_REQUEST_PROTOCOL,
-            requestId,
-            issuedAt,
-          }),
-        );
+        const body = JSON.stringify({
+          protocol: QUICKFURNO_OPERATOR_REQUEST_PROTOCOL,
+          requestId,
+          issuedAt,
+        });
+        const bodyBytes = new TextEncoder().encode(body);
         const privateKey = createPrivateKey(config.privateKeyPem);
         if (privateKey.type !== 'private' || privateKey.asymmetricKeyType !== 'ed25519') {
           return Object.freeze({
@@ -90,7 +104,7 @@ export function createQuickFurnoOperatorReadSource(
               requestId,
               issuedAt,
               keyId: config.keyId,
-              bodyDigest: digest(body),
+              bodyDigest: digest(bodyBytes),
             }),
             'utf8',
           ),
