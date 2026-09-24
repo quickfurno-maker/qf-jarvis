@@ -1,0 +1,11 @@
+services:
+  quickfurno-worker:
+    volumes:
+      - type: bind
+        source: /srv/qf-jarvis/secrets/embedding-production.key
+        target: /run/secrets/embedding-production.key
+        read_only: true
+      - type: bind
+        source: /srv/qf-jarvis/secrets/postgres-ca.pem
+        target: /run/secrets/postgres-ca.pem
+        read_only: true

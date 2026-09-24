@@ -38,11 +38,23 @@ const FULL_ARGV = [
   OUTSIDE,
   '--groq-smoke-config',
   'D:/certification/smoke.json',
+  '--knowledge-mode',
+  'HYBRID',
   '--knowledge-revision',
   KNOWLEDGE_REVISION,
 ] as const;
 
-function manifest() {
+const DISABLED_ARGV = [
+  '--execute-live',
+  '--output-dir',
+  OUTSIDE,
+  '--groq-smoke-config',
+  'D:/certification/smoke.json',
+  '--knowledge-mode',
+  'DISABLED',
+] as const;
+
+function manifest(knowledgeRevision: string | undefined) {
   return createJf5bCoverageManifest({
     manifestVersion: 2,
     providerMode: JF5B_PROVIDER_MODE,
@@ -66,7 +78,7 @@ function manifest() {
         evaluationSuiteVersion: JF5B_EVALUATION_SUITE_VERSION,
         redTeamSuiteId: JF5B_RED_TEAM_SUITE_ID,
         fixtureManifestId: JF5B_FIXTURE_MANIFEST_ID,
-        knowledgeRevision: KNOWLEDGE_REVISION,
+        ...(knowledgeRevision === undefined ? {} : { knowledgeRevision }),
         liveRunId: 'run.jf5b.groq-only.test',
         caseSetDigest: String(index + 1).repeat(64),
         resultDigest: String(index + 4).repeat(64),
@@ -79,13 +91,13 @@ function manifest() {
   });
 }
 
-function successResult(): CertifyAllResult {
+function successResult(knowledgeRevision: string | undefined): CertifyAllResult {
   return {
     ok: true,
     reason: 'certified',
     cases: [],
     diagnostics: [],
-    manifest: manifest(),
+    manifest: manifest(knowledgeRevision),
     rawBundle: JSON.stringify({ providerMode: 'GROQ_ONLY', outputs: [] }),
     reviewBundle: JSON.stringify({ providerMode: 'GROQ_ONLY', items: [] }),
   };
@@ -154,9 +166,9 @@ function harness(
     },
   };
   const runner: CertificationRunner = {
-    certifyGroqOnly: () => {
+    certifyGroqOnly: (input) => {
       seen.certifyGroqOnlyCalls += 1;
-      return Promise.resolve(over.certification ?? successResult());
+      return Promise.resolve(over.certification ?? successResult(input.knowledgeRevision));
     },
     selectNaraModel: () => {
       seen.historicalNaraCalls += 1;
@@ -251,6 +263,8 @@ describe('JF-5B-R25 Groq-only operator gates', () => {
             `${REPO}/out`,
             '--groq-smoke-config',
             'D:/c.json',
+            '--knowledge-mode',
+            'HYBRID',
             '--knowledge-revision',
             KNOWLEDGE_REVISION,
           ],
@@ -349,11 +363,23 @@ describe('JF-5B-R25 Groq-only execution', () => {
   });
 });
 
-describe('JF-5B exact knowledge revision gate', () => {
-  it('refuses missing or floating knowledge revisions before provider work', async () => {
+describe('JF-5B explicit knowledge posture gate', () => {
+  it('certifies DISABLED with no knowledge revision and emits unbound evidence', async () => {
+    const { deps, seen } = harness();
+    const outcome = await runJf5bLiveCertificationCli(DISABLED_ARGV, deps);
+    expect(outcome.exitCode).toBe(EXIT_CODES.OK);
+    const parsed = JSON.parse(seen.fileContents.get('manifest.json') ?? '{}') as {
+      entries?: { knowledgeRevision?: string }[];
+    };
+    expect(parsed.entries?.every((entry) => entry.knowledgeRevision === undefined)).toBe(true);
+    expect(seen.lines.join('\n')).toContain('knowledge mode          DISABLED');
+    expect(seen.lines.join('\n')).toContain('knowledge revision      UNBOUND');
+  });
+
+  it('refuses HYBRID without an exact revision and DISABLED with any revision', async () => {
     const missing = harness();
-    const missingArgv = FULL_ARGV.slice(0, -2);
-    const missingOutcome = await runJf5bLiveCertificationCli(missingArgv, missing.deps);
+    const hybridWithoutRevision = FULL_ARGV.slice(0, -2);
+    const missingOutcome = await runJf5bLiveCertificationCli(hybridWithoutRevision, missing.deps);
     expect(missingOutcome.reason).toBe('knowledge-revision-invalid');
     expect([missing.seen.groqRuns, missing.seen.certifyGroqOnlyCalls]).toEqual([0, 0]);
 
@@ -364,5 +390,23 @@ describe('JF-5B exact knowledge revision gate', () => {
     );
     expect(floatingOutcome.reason).toBe('knowledge-revision-invalid');
     expect([floating.seen.groqRuns, floating.seen.certifyGroqOnlyCalls]).toEqual([0, 0]);
+
+    const conflict = harness();
+    const conflictOutcome = await runJf5bLiveCertificationCli(
+      [...DISABLED_ARGV, '--knowledge-revision', KNOWLEDGE_REVISION],
+      conflict.deps,
+    );
+    expect(conflictOutcome.reason).toBe('knowledge-mode-revision-conflict');
+    expect([conflict.seen.groqRuns, conflict.seen.certifyGroqOnlyCalls]).toEqual([0, 0]);
+  });
+
+  it('refuses an unspecified knowledge mode before provider work', async () => {
+    const { deps, seen } = harness();
+    const outcome = await runJf5bLiveCertificationCli(
+      ['--execute-live', '--output-dir', OUTSIDE, '--groq-smoke-config', 'D:/c.json'],
+      deps,
+    );
+    expect(outcome.reason).toBe('knowledge-mode-invalid');
+    expect([seen.groqRuns, seen.certifyGroqOnlyCalls]).toEqual([0, 0]);
   });
 });

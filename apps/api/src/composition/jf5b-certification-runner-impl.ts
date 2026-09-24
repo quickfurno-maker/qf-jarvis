@@ -960,7 +960,7 @@ function buildGroqOnlyManifest(input: {
   readonly createdAt: string;
   readonly executed: readonly ExecutedCase[];
   readonly reviewBundleDigest: string;
-  readonly knowledgeRevision: string;
+  readonly knowledgeRevision?: string;
 }): Jf5bCoverageManifest {
   const provider = 'groq' as const;
   const release = releaseFor(provider, JF5B_GROQ_MODEL_ID);
@@ -983,7 +983,9 @@ function buildGroqOnlyManifest(input: {
       evaluationSuiteVersion: JF5B_EVALUATION_SUITE_VERSION,
       redTeamSuiteId: JF5B_RED_TEAM_SUITE_ID,
       fixtureManifestId: JF5B_FIXTURE_MANIFEST_ID,
-      knowledgeRevision: input.knowledgeRevision,
+      ...(input.knowledgeRevision === undefined
+        ? {}
+        : { knowledgeRevision: input.knowledgeRevision }),
       liveRunId: input.runId,
       caseSetDigest: sha256(records.map((one) => one.caseId).join('\n')),
       resultDigest: sha256(JSON.stringify(records)),
@@ -1146,7 +1148,9 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
                 runId: input.runId,
                 ledger: input.ledger,
                 clock,
-                knowledgeRevision: input.knowledgeRevision,
+                ...(input.knowledgeRevision === undefined
+                  ? {}
+                  : { knowledgeRevision: input.knowledgeRevision }),
                 ...(groqPacer === undefined ? {} : { pacer: groqPacer }),
                 diagnostics: caseDiagnostics,
               }),
@@ -1208,7 +1212,9 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
         createdAt,
         executed,
         reviewBundleDigest: sha256(reviewBundle),
-        knowledgeRevision: input.knowledgeRevision,
+        ...(input.knowledgeRevision === undefined
+          ? {}
+          : { knowledgeRevision: input.knowledgeRevision }),
       });
       const nonPass = executed.filter((one) => one.record.outcome !== 'PASS');
 

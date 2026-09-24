@@ -10,9 +10,9 @@ CONFIG='/srv/qf-jarvis/secrets/qf-jarvis-whatsapp-worker.json'
 GROQ='/srv/qf-jarvis/secrets/groq-production.key'
 SIGNING='/srv/qf-jarvis/secrets/quickfurno-signing.key'
 EMBEDDING='/srv/qf-jarvis/secrets/embedding-production.key'
-RIYA_DECISION='/srv/qf-jarvis/secrets/riya-persistence-owner-decision.json'
 SEAL='/srv/qf-jarvis/seals/jf5c-production-seal.json'
 CA='/srv/qf-jarvis/secrets/postgres-ca.pem'
+KNOWLEDGE_MODE="${QFJ_WORKER_KNOWLEDGE_MODE:-DISABLED}"
 SPOOL='/srv/qf-jarvis/state/quickfurno-gateway-turns'
 CONTROL='/srv/qf-jarvis/state/quickfurno-worker-control'
 OBSERVABILITY='/srv/qf-jarvis/state/observability'
@@ -25,17 +25,24 @@ die() { echo "FATAL: $1" >&2; exit 1; }
 
 # Deployment is intentionally impossible in an armed state. Activation is a different operator step.
 [[ -f "$DISABLE" ]] || die "$DISABLE is missing. Run disable.sh before deploy."
+[[ "$KNOWLEDGE_MODE" == "DISABLED" || "$KNOWLEDGE_MODE" == "HYBRID" ]] ||
+  die "QFJ_WORKER_KNOWLEDGE_MODE must be DISABLED or HYBRID."
 
-for file in "$CONFIG" "$GROQ" "$SIGNING" "$EMBEDDING" "$RIYA_DECISION" "$SEAL" "$CA"; do
+required_files=("$CONFIG" "$GROQ" "$SIGNING" "$SEAL")
+if [[ "$KNOWLEDGE_MODE" == "HYBRID" ]]; then
+  required_files+=("$EMBEDDING" "$CA")
+fi
+
+for file in "${required_files[@]}"; do
   [[ -f "$file" && ! -L "$file" ]] || die "$file must be a regular non-symlink file."
 done
 [[ -d "$SPOOL" && ! -L "$SPOOL" ]] || die "$SPOOL must be the gateway's real spool directory."
 [[ -d "$CONTROL" && ! -L "$CONTROL" ]] || die "$CONTROL must be a real directory."
 [[ -d "$OBSERVABILITY" && ! -L "$OBSERVABILITY" ]] || die "$OBSERVABILITY must be a real directory."
 
-# Secret-bearing config/key are readable only by the worker uid. The seal and CA are also installed
-# privately to keep one simple mount/ownership policy.
-for file in "$CONFIG" "$GROQ" "$SIGNING" "$EMBEDDING" "$RIYA_DECISION" "$SEAL" "$CA"; do
+# Every mounted secret/evidence file is privately readable by the worker uid. Knowledge-only files are
+# checked and mounted only when HYBRID is explicitly requested.
+for file in "${required_files[@]}"; do
   mode="$(stat -c '%a' "$file")"
   owner="$(stat -c '%u:%g' "$file")"
   [[ "$mode" == "400" || "$mode" == "600" ]] ||
@@ -69,8 +76,13 @@ echo "==> building qf-jarvis-whatsapp-worker:$SHA"
 docker build   --file "$BUILD_CTX/deploy/quickfurno-worker/Dockerfile"   --build-arg "GIT_SHA=$SHA"   --tag "qf-jarvis-whatsapp-worker:$SHA"   "$BUILD_CTX"
 
 BASE="$BUILD_CTX/deploy/quickfurno-worker/compose.production.yml"
-echo "==> starting worker disabled"
-QFJ_WORKER_IMAGE_TAG="$SHA" docker compose -p qf-jarvis-whatsapp-worker -f "$BASE" up -d
+KNOWLEDGE_OVERRIDE="$BUILD_CTX/deploy/quickfurno-worker/compose.knowledge.yml"
+compose_args=(-p qf-jarvis-whatsapp-worker -f "$BASE")
+if [[ "$KNOWLEDGE_MODE" == "HYBRID" ]]; then
+  compose_args+=(-f "$KNOWLEDGE_OVERRIDE")
+fi
+echo "==> starting worker disabled (knowledge=$KNOWLEDGE_MODE)"
+QFJ_WORKER_IMAGE_TAG="$SHA" docker compose "${compose_args[@]}" up -d
 
 for _ in $(seq 1 45); do
   running="$(docker inspect qf-jarvis-whatsapp-worker --format '{{.State.Running}}' 2>/dev/null || echo false)"
@@ -107,11 +119,21 @@ prove "observation source" "$OBSERVABILITY"   "$(docker inspect qf-jarvis-whatsa
 prove "observation writable" "true"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/run/qfj-observability"}}{{.RW}}{{end}}{{end}}')"
 prove "kill switch visible" "true"   "$(docker exec qf-jarvis-whatsapp-worker node -e "const fs=require('node:fs');console.log(fs.existsSync('/var/run/qfj-control/DISABLE_MODEL'))")"
 
+embedding_mount="$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/embedding-production.key"}}{{.Source}}{{end}}{{end}}')"
+ca_mount="$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/postgres-ca.pem"}}{{.Source}}{{end}}{{end}}')"
+if [[ "$KNOWLEDGE_MODE" == "HYBRID" ]]; then
+  prove "embedding secret source" "$EMBEDDING" "$embedding_mount"
+  prove "postgres CA source" "$CA" "$ca_mount"
+else
+  prove "embedding secret absent" "" "$embedding_mount"
+  prove "postgres CA absent" "" "$ca_mount"
+fi
+
 [[ "$fail" -eq 0 ]] || die "disabled deployment proof failed."
 
 cat <<EOF
 
-DISABLED deployment verified for $SHA.
+DISABLED deployment verified for $SHA (knowledge=$KNOWLEDGE_MODE).
 No public port exists and the worker cannot claim a turn while DISABLE_MODEL exists.
 
 Do not activate until:

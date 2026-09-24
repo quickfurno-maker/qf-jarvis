@@ -42,6 +42,8 @@ export interface PreflightFacts {
   /** Historical compatibility field; ignored in Groq-only mode and must be empty in live use. */
   readonly naraCandidates?: readonly string[];
   readonly groqCertificationModelId: string;
+  /** Explicit serving knowledge posture under certification. */
+  readonly knowledgeMode?: 'DISABLED' | 'HYBRID';
   /** Exact governed knowledge release for a current grounded certification. */
   readonly knowledgeRevision?: string;
 }
@@ -61,7 +63,8 @@ export function renderPreflightSummary(facts: PreflightFacts): readonly string[]
     `  groq host              ${GROQ_CHAT_HOST}`,
     '  groq connectivity smoke  as supplied by --groq-smoke-config (phase 1 only)',
     `  groq certification model ${facts.groqCertificationModelId} (phase 2)`,
-    `  knowledge revision      ${facts.knowledgeRevision ?? 'UNBOUND — historical/audit helper only'}`,
+    `  knowledge mode          ${facts.knowledgeMode ?? 'UNSPECIFIED — historical/audit helper only'}`,
+    `  knowledge revision      ${facts.knowledgeRevision ?? 'UNBOUND'}`,
     '',
     `  max groq calls         ${String(JF5B_GROQ_ONLY_BUDGET.maxGroqCalls)}`,
     `  max nara calls         ${String(JF5B_GROQ_ONLY_BUDGET.maxNaraCalls)} (hard-disabled)`,
@@ -98,6 +101,7 @@ export interface CertifyArgv {
   readonly executeLive: boolean;
   readonly outputDirectory: string | undefined;
   readonly groqSmokeConfig: string | undefined;
+  readonly knowledgeMode: 'DISABLED' | 'HYBRID' | undefined;
   readonly knowledgeRevision: string | undefined;
   /** Historical compatibility only. Always empty; Nara flags are collected as unknown. */
   readonly naraCandidates: readonly string[];
@@ -112,6 +116,7 @@ export function parseCertifyArgv(argv: readonly string[]): CertifyArgv {
   let executeLive = false;
   let outputDirectory: string | undefined;
   let groqSmokeConfig: string | undefined;
+  let knowledgeMode: 'DISABLED' | 'HYBRID' | undefined;
   let knowledgeRevision: string | undefined;
   const unknown: string[] = [];
 
@@ -145,6 +150,25 @@ export function parseCertifyArgv(argv: readonly string[]): CertifyArgv {
       groqSmokeConfig = arg.slice('--groq-smoke-config='.length);
       continue;
     }
+    if (arg === '--knowledge-mode') {
+      const next = argv[index + 1];
+      if (next === 'DISABLED' || next === 'HYBRID') {
+        knowledgeMode = next;
+        index += 1;
+      } else if (next !== undefined) {
+        unknown.push(arg, next);
+        index += 1;
+      } else {
+        unknown.push(arg);
+      }
+      continue;
+    }
+    if (arg.startsWith('--knowledge-mode=')) {
+      const value = arg.slice('--knowledge-mode='.length);
+      if (value === 'DISABLED' || value === 'HYBRID') knowledgeMode = value;
+      else unknown.push(arg);
+      continue;
+    }
     if (arg === '--knowledge-revision') {
       const next = argv[index + 1];
       if (next !== undefined) {
@@ -164,6 +188,7 @@ export function parseCertifyArgv(argv: readonly string[]): CertifyArgv {
     executeLive,
     outputDirectory,
     groqSmokeConfig,
+    knowledgeMode,
     knowledgeRevision,
     naraCandidates: Object.freeze([]),
     unknown: Object.freeze(unknown),

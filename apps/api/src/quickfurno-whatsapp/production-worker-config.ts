@@ -61,6 +61,38 @@ const embeddingSchema = z.discriminatedUnion('executionClass', [
     .strict(),
 ]);
 
+const databaseSchema = z
+  .object({
+    connectionString: z.string().min(1).max(8192),
+    maxConnections: z.number().int().min(1).max(50).optional(),
+    connectionTimeoutMillis: z.number().int().min(1000).max(60_000).optional(),
+    idleTimeoutMillis: z.number().int().min(1000).max(300_000).optional(),
+    statementTimeoutMillis: z.number().int().min(1000).max(300_000).optional(),
+    tls: z.object({ mode: z.literal('verify-full'), caFile: absolutePath }).strict(),
+  })
+  .strict();
+
+const knowledgeSchema = z.union([
+  z.object({ mode: z.literal('DISABLED') }).strict(),
+  z
+    .object({
+      mode: z.literal('HYBRID').default('HYBRID'),
+      revision: z
+        .string()
+        .regex(REF)
+        .refine((value) => value.toLowerCase() !== 'latest'),
+      embedding: embeddingSchema,
+      agents: z
+        .object({
+          RIYA: searchPolicySchema,
+          ANISHA: searchPolicySchema,
+          AAROHI: searchPolicySchema,
+        })
+        .strict(),
+    })
+    .strict(),
+]);
+
 const schema = z
   .object({
     revision: z.string().regex(SHA40),
@@ -68,16 +100,7 @@ const schema = z
     sealFile: absolutePath,
     groqCredentialReference: z.string().regex(REF),
     groqCredentialFile: absolutePath,
-    database: z
-      .object({
-        connectionString: z.string().min(1).max(8192),
-        maxConnections: z.number().int().min(1).max(50).optional(),
-        connectionTimeoutMillis: z.number().int().min(1000).max(60_000).optional(),
-        idleTimeoutMillis: z.number().int().min(1000).max(300_000).optional(),
-        statementTimeoutMillis: z.number().int().min(1000).max(300_000).optional(),
-        tls: z.object({ mode: z.literal('verify-full'), caFile: absolutePath }).strict(),
-      })
-      .strict(),
+    database: databaseSchema.optional(),
     quickfurno: z
       .object({
         baseUrl: z.url().max(2048),
@@ -86,22 +109,7 @@ const schema = z
         timeoutMs: z.number().int().min(100).max(30_000).default(5000),
       })
       .strict(),
-    knowledge: z
-      .object({
-        revision: z
-          .string()
-          .regex(REF)
-          .refine((value) => value.toLowerCase() !== 'latest'),
-        embedding: embeddingSchema,
-        agents: z
-          .object({
-            RIYA: searchPolicySchema,
-            ANISHA: searchPolicySchema,
-            AAROHI: searchPolicySchema,
-          })
-          .strict(),
-      })
-      .strict(),
+    knowledge: knowledgeSchema,
     spoolDirectory: absolutePath,
     killSwitchFile: absolutePath,
     operationalSnapshotFile: absolutePath,
@@ -110,7 +118,23 @@ const schema = z
     idlePollMs: z.number().int().min(50).max(60_000).default(500),
     staleProcessingMs: z.number().int().min(1000).max(86_400_000).default(300_000),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.knowledge.mode === 'HYBRID' && value.database === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['database'],
+        message: 'hybrid knowledge needs database',
+      });
+    }
+    if (value.knowledge.mode === 'DISABLED' && value.database !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['database'],
+        message: 'disabled knowledge must not carry database configuration',
+      });
+    }
+  });
 
 export interface QuickFurnoWhatsAppProductionWorkerConfig {
   readonly revision: string;
@@ -118,26 +142,29 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
   readonly seal: unknown;
   readonly groqCredentialReference: string;
   readonly groqCredentialFile: string;
-  readonly database: DatabaseConfig;
+  readonly database?: DatabaseConfig;
   readonly quickfurno: Readonly<{
     baseUrl: string;
     keyId: string;
     privateKeyPem: string;
     timeoutMs: number;
   }>;
-  readonly knowledge: Readonly<{
-    revision: string;
-    embedding: Readonly<{
-      executionClass: 'HOSTED' | 'LOCAL';
-      endpoint: string;
-      modelRef: string;
-      bearerToken?: string;
-      timeoutMs: number;
-      maxBatchItems: number;
-      maxInputChars: number;
-    }>;
-    agents: Readonly<Record<'RIYA' | 'ANISHA' | 'AAROHI', AgentHybridKnowledgeSearchPolicy>>;
-  }>;
+  readonly knowledge:
+    | Readonly<{ mode: 'DISABLED' }>
+    | Readonly<{
+        mode: 'HYBRID';
+        revision: string;
+        embedding: Readonly<{
+          executionClass: 'HOSTED' | 'LOCAL';
+          endpoint: string;
+          modelRef: string;
+          bearerToken?: string;
+          timeoutMs: number;
+          maxBatchItems: number;
+          maxInputChars: number;
+        }>;
+        agents: Readonly<Record<'RIYA' | 'ANISHA' | 'AAROHI', AgentHybridKnowledgeSearchPolicy>>;
+      }>;
   readonly spoolDirectory: string;
   readonly killSwitchFile: string;
   readonly operationalSnapshotFile: string;
@@ -175,67 +202,59 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
   if (!parsed.success) throw new Error('production-worker-config-invalid');
   const input = parsed.data;
 
-  let tls: DatabaseConfigInput['tls'];
-  try {
-    tls = {
-      mode: 'verify-full',
-      caCertificatePem: boundedFile(input.database.tls.caFile, MAX_CA_BYTES).toString('utf8'),
-    };
-  } catch {
-    throw new Error('production-worker-config-invalid');
-  }
-
-  let database: DatabaseConfig;
-  try {
-    database = createDatabaseConfig({
-      connectionString: input.database.connectionString,
-      ...(input.database.maxConnections === undefined
-        ? {}
-        : { maxConnections: input.database.maxConnections }),
-      ...(input.database.connectionTimeoutMillis === undefined
-        ? {}
-        : { connectionTimeoutMillis: input.database.connectionTimeoutMillis }),
-      ...(input.database.idleTimeoutMillis === undefined
-        ? {}
-        : { idleTimeoutMillis: input.database.idleTimeoutMillis }),
-      ...(input.database.statementTimeoutMillis === undefined
-        ? {}
-        : { statementTimeoutMillis: input.database.statementTimeoutMillis }),
-      applicationName: 'qf-jarvis-whatsapp-worker',
-      tls,
-    });
-  } catch {
-    throw new Error('production-worker-config-invalid');
-  }
-
   let privateKeyPem: string;
-  let bearerToken: string | undefined;
   try {
     privateKeyPem = secretText(input.quickfurno.privateKeyFile, MAX_PRIVATE_KEY_BYTES);
-    bearerToken =
-      input.knowledge.embedding.executionClass === 'HOSTED'
-        ? secretText(input.knowledge.embedding.credentialFile, MAX_EMBEDDING_CREDENTIAL_BYTES)
-        : undefined;
   } catch {
     throw new Error('production-worker-config-invalid');
   }
 
-  const seal = parseJsonFile(input.sealFile, MAX_SEAL_BYTES);
-  const embedding = input.knowledge.embedding;
-  return Object.freeze({
-    revision: input.revision,
-    deploymentMode: input.deploymentMode,
-    seal,
-    groqCredentialReference: input.groqCredentialReference,
-    groqCredentialFile: input.groqCredentialFile,
-    database,
-    quickfurno: Object.freeze({
-      baseUrl: input.quickfurno.baseUrl,
-      keyId: input.quickfurno.keyId,
-      privateKeyPem,
-      timeoutMs: input.quickfurno.timeoutMs,
-    }),
-    knowledge: Object.freeze({
+  let database: DatabaseConfig | undefined;
+  let knowledge: QuickFurnoWhatsAppProductionWorkerConfig['knowledge'];
+  if (input.knowledge.mode === 'DISABLED') {
+    knowledge = Object.freeze({ mode: 'DISABLED' as const });
+  } else {
+    if (input.database === undefined) throw new Error('production-worker-config-invalid');
+
+    let tls: DatabaseConfigInput['tls'];
+    try {
+      tls = {
+        mode: 'verify-full',
+        caCertificatePem: boundedFile(input.database.tls.caFile, MAX_CA_BYTES).toString('utf8'),
+      };
+      database = createDatabaseConfig({
+        connectionString: input.database.connectionString,
+        ...(input.database.maxConnections === undefined
+          ? {}
+          : { maxConnections: input.database.maxConnections }),
+        ...(input.database.connectionTimeoutMillis === undefined
+          ? {}
+          : { connectionTimeoutMillis: input.database.connectionTimeoutMillis }),
+        ...(input.database.idleTimeoutMillis === undefined
+          ? {}
+          : { idleTimeoutMillis: input.database.idleTimeoutMillis }),
+        ...(input.database.statementTimeoutMillis === undefined
+          ? {}
+          : { statementTimeoutMillis: input.database.statementTimeoutMillis }),
+        applicationName: 'qf-jarvis-whatsapp-worker',
+        tls,
+      });
+    } catch {
+      throw new Error('production-worker-config-invalid');
+    }
+
+    let bearerToken: string | undefined;
+    try {
+      bearerToken =
+        input.knowledge.embedding.executionClass === 'HOSTED'
+          ? secretText(input.knowledge.embedding.credentialFile, MAX_EMBEDDING_CREDENTIAL_BYTES)
+          : undefined;
+    } catch {
+      throw new Error('production-worker-config-invalid');
+    }
+    const embedding = input.knowledge.embedding;
+    knowledge = Object.freeze({
+      mode: 'HYBRID' as const,
       revision: input.knowledge.revision,
       embedding: Object.freeze({
         executionClass: embedding.executionClass,
@@ -251,7 +270,24 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
         ANISHA: Object.freeze({ ...input.knowledge.agents.ANISHA }),
         AAROHI: Object.freeze({ ...input.knowledge.agents.AAROHI }),
       }),
+    });
+  }
+
+  const seal = parseJsonFile(input.sealFile, MAX_SEAL_BYTES);
+  return Object.freeze({
+    revision: input.revision,
+    deploymentMode: input.deploymentMode,
+    seal,
+    groqCredentialReference: input.groqCredentialReference,
+    groqCredentialFile: input.groqCredentialFile,
+    ...(database === undefined ? {} : { database }),
+    quickfurno: Object.freeze({
+      baseUrl: input.quickfurno.baseUrl,
+      keyId: input.quickfurno.keyId,
+      privateKeyPem,
+      timeoutMs: input.quickfurno.timeoutMs,
     }),
+    knowledge,
     spoolDirectory: input.spoolDirectory,
     killSwitchFile: input.killSwitchFile,
     operationalSnapshotFile: input.operationalSnapshotFile,

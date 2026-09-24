@@ -88,8 +88,8 @@ export interface CertifyGroqInput {
   readonly groqApiKey: GroqApiKey;
   readonly runId: string;
   readonly headSha: string;
-  /** Exact governed knowledge release exercised by this certification. */
-  readonly knowledgeRevision: string;
+  /** Exact governed knowledge release exercised by this certification, absent only in DISABLED mode. */
+  readonly knowledgeRevision?: string;
   readonly ledger: CallLedger;
 }
 

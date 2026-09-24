@@ -111,6 +111,43 @@ describe('worker observation read source', () => {
     expect(JSON.stringify(result)).not.toContain('conversationId');
   });
 
+  it('renders v3 disabled knowledge as disabled rather than as an active revision', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'qfj-worker-observation-'));
+    const path = join(root, 'worker-v3-disabled.json');
+    const base = observation();
+    const {
+      knowledgeRevision: _knowledgeRevision,
+      embeddingModelRef: _embeddingModelRef,
+      ...withoutLegacyKnowledge
+    } = base;
+    const v3 = {
+      ...withoutLegacyKnowledge,
+      protocol: 'qfj.quickfurno-worker-observation.v3',
+      knowledge: { mode: 'DISABLED' },
+      modelGateway: { completed: 1, failed: 0, fallbackUsed: 0 },
+      modelUsage: {
+        invocations: 1,
+        reportedTokenInvocations: 1,
+        inputTokens: 100,
+        outputTokens: 40,
+        totalTokens: 140,
+      },
+      embeddingUsage: { requests: 0, texts: 0, characters: 0 },
+    };
+    writeFileSync(path, JSON.stringify(v3), 'utf8');
+
+    const result = await createWorkerObservationReadSource(path).acquire(
+      new AbortController().signal,
+    );
+    expect(result.status).toBe('OBSERVED');
+    if (result.status !== 'OBSERVED') return;
+    const item = result.sections.knowledge?.items[0];
+    expect(item?.state).toBe('DISABLED');
+    expect(item?.detail).toContain('intentionally disabled');
+    expect(JSON.stringify(result)).not.toContain('knowledge.quickfurno.release.1');
+    expect(JSON.stringify(result)).not.toContain('embedding/model-v1');
+  });
+
   it('refuses stale or content-bearing snapshots rather than rendering them as live', async () => {
     const root = mkdtempSync(join(tmpdir(), 'qfj-worker-observation-'));
     const stalePath = join(root, 'stale.json');

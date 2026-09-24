@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import type { ModelUsage } from '@qf-jarvis/model-gateway';
 import {
   parseQuickFurnoWorkerObservation,
-  type QuickFurnoWorkerObservationV2,
+  type QuickFurnoWorkerObservationV3,
 } from '@qf-jarvis/worker-observation-contract';
 
 import type { HybridRetrievalReason } from '@qf-jarvis/knowledge-index';
@@ -41,8 +41,9 @@ export interface QuickFurnoWorkerObservationWriterConfig {
   readonly filePath: string;
   readonly revision: string;
   readonly runtimeId: string;
-  readonly knowledgeRevision: string;
-  readonly embeddingModelRef: string;
+  readonly knowledge:
+    | Readonly<{ mode: 'DISABLED' }>
+    | Readonly<{ mode: 'HYBRID'; revision: string; embeddingModelRef: string }>;
 }
 
 function increment(value: number): number {
@@ -176,15 +177,14 @@ export function createQuickFurnoWorkerObservationWriter(
       spool: ProductionSpoolObservation,
       emittedAt: string,
     ): Promise<void> {
-      const observation: QuickFurnoWorkerObservationV2 = parseQuickFurnoWorkerObservation({
-        protocol: 'qfj.quickfurno-worker-observation.v2',
+      const observation: QuickFurnoWorkerObservationV3 = parseQuickFurnoWorkerObservation({
+        protocol: 'qfj.quickfurno-worker-observation.v3',
         emittedAt,
         revision: config.revision,
         runtimeId: config.runtimeId,
         state,
         providerMode: 'GROQ_ONLY',
-        knowledgeRevision: config.knowledgeRevision,
-        embeddingModelRef: config.embeddingModelRef,
+        knowledge: config.knowledge,
         spool,
         outcomes,
         modelLatency: latencies,
@@ -195,7 +195,7 @@ export function createQuickFurnoWorkerObservationWriter(
         modelGateway,
         modelUsage,
         embeddingUsage,
-      }) as QuickFurnoWorkerObservationV2;
+      }) as QuickFurnoWorkerObservationV3;
       const directory = dirname(config.filePath);
       await mkdir(directory, { recursive: true, mode: 0o700 });
       const temporary = config.filePath + '.tmp';

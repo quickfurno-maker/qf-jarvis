@@ -4,8 +4,10 @@
 
 ## Invariants
 
-- The serving worker binds one exact Git SHA, one exact JF-5C seal, one exact SEALED knowledge revision and one exact embedding model.
-- Wildcard or `latest` knowledge revisions are forbidden.
+- The WhatsApp serving worker has two explicit knowledge postures: `DISABLED` and `HYBRID`.
+- `DISABLED` has no knowledge revision, database or embedding dependency and executes no retrieval.
+- `HYBRID` binds one exact Git SHA, one exact JF-5C seal, one exact SEALED knowledge revision and one exact embedding model.
+- Wildcard or `latest` knowledge revisions are forbidden in HYBRID.
 - Production database TLS is `verify-full` only.
 - Subject-linked records are refused before normalization, chunking, embedding or persistence.
 - `HUMAN_ONLY` data is never embedded. `LOCAL_ONLY` data may use only LOCAL embedding and LOCAL reranking.

@@ -15,8 +15,11 @@ describe('QuickFurno worker production observation', () => {
       filePath,
       revision: 'a'.repeat(40),
       runtimeId: 'qfj.whatsapp.production.v1',
-      knowledgeRevision: 'knowledge.quickfurno.release.1',
-      embeddingModelRef: 'embedding/model-v1',
+      knowledge: {
+        mode: 'HYBRID',
+        revision: 'knowledge.quickfurno.release.1',
+        embeddingModelRef: 'embedding/model-v1',
+      },
     });
     writer.recordModelLatency(123, '2026-09-23T00:00:00.000Z');
     writer.recordModelOutcome(true, false);
@@ -41,7 +44,7 @@ describe('QuickFurno worker production observation', () => {
 
     const raw = readFileSync(filePath, 'utf8');
     const parsed = parseQuickFurnoWorkerObservation(JSON.parse(raw));
-    expect(parsed.protocol).toBe('qfj.quickfurno-worker-observation.v2');
+    expect(parsed.protocol).toBe('qfj.quickfurno-worker-observation.v3');
     expect(parsed.state).toBe('DEGRADED');
     expect(parsed.outcomes.completedQueued).toBe(1);
     expect(parsed.outcomes.failedIndeterminate).toBe(1);
@@ -49,7 +52,12 @@ describe('QuickFurno worker production observation', () => {
     expect(parsed.knowledgeRetrieval.served).toBe(1);
     expect(parsed.knowledgeRetrieval.governanceRefused).toBe(1);
     expect(parsed.knowledgeRetrieval.latency.map((sample) => sample.latencyMs)).toEqual([37, 11]);
-    if (parsed.protocol !== 'qfj.quickfurno-worker-observation.v2') return;
+    if (parsed.protocol !== 'qfj.quickfurno-worker-observation.v3') return;
+    expect(parsed.knowledge).toEqual({
+      mode: 'HYBRID',
+      revision: 'knowledge.quickfurno.release.1',
+      embeddingModelRef: 'embedding/model-v1',
+    });
     expect(parsed.modelGateway).toEqual({ completed: 1, failed: 0, fallbackUsed: 0 });
     expect(parsed.modelUsage).toEqual({
       invocations: 1,
@@ -66,5 +74,38 @@ describe('QuickFurno worker production observation', () => {
     expect(raw).not.toContain('conversationId');
     expect(raw).not.toContain('messageText');
     expect(raw).not.toContain('subjectRef');
+  });
+
+  it('writes an explicit DISABLED knowledge posture without invented revision or embedding identity', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'qfj-production-observation-'));
+    const filePath = join(root, 'observation', 'worker.json');
+    const writer = createQuickFurnoWorkerObservationWriter({
+      filePath,
+      revision: 'b'.repeat(40),
+      runtimeId: 'qfj.whatsapp.production.v1',
+      knowledge: { mode: 'DISABLED' },
+    });
+
+    await writer.write(
+      'HEALTHY',
+      {
+        pending: 0,
+        processing: 0,
+        completed: 0,
+        failed: 0,
+        oldestPendingAgeMs: null,
+      },
+      '2026-09-23T00:00:01.000Z',
+    );
+
+    const raw = readFileSync(filePath, 'utf8');
+    const parsed = parseQuickFurnoWorkerObservation(JSON.parse(raw));
+    expect(parsed.protocol).toBe('qfj.quickfurno-worker-observation.v3');
+    if (parsed.protocol !== 'qfj.quickfurno-worker-observation.v3') return;
+    expect(parsed.knowledge).toEqual({ mode: 'DISABLED' });
+    expect(parsed.embeddingUsage).toEqual({ requests: 0, texts: 0, characters: 0 });
+    expect(parsed.knowledgeRetrieval.served).toBe(0);
+    expect(raw).not.toContain('knowledgeRevision');
+    expect(raw).not.toContain('embeddingModelRef');
   });
 });

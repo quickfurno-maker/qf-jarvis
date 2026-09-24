@@ -82,7 +82,10 @@ export async function createQuickFurnoWhatsAppProductionWorker(
   config: QuickFurnoWhatsAppProductionWorkerConfig,
 ): Promise<QuickFurnoWhatsAppProductionWorker> {
   // Seal verification happens before credential resolution, database I/O or spool claims.
-  const sealed = bindJf5cSealForProduction(config.seal, config.revision, config.knowledge.revision);
+  // Knowledge is part of the certified binding only when this deployment actually enables it.
+  const expectedKnowledgeRevision =
+    config.knowledge.mode === 'HYBRID' ? config.knowledge.revision : null;
+  const sealed = bindJf5cSealForProduction(config.seal, config.revision, expectedKnowledgeRevision);
   if (!sealed.ok) throw new Error(`production-seal-refused:${sealed.reason}`);
   const binding = sealed.binding;
 
@@ -152,13 +155,26 @@ export async function createQuickFurnoWhatsAppProductionWorker(
     throw new Error('production-model-gateway-refused');
   }
 
-  const pool: DatabasePool = createDatabasePool(config.database);
+  let pool: DatabasePool | undefined;
+  if (config.knowledge.mode === 'HYBRID') {
+    if (config.database === undefined) throw new Error('production-worker-config-invalid');
+    pool = createDatabasePool(config.database);
+  } else if (config.database !== undefined) {
+    throw new Error('production-worker-config-invalid');
+  }
+
   const observation = createQuickFurnoWorkerObservationWriter({
     filePath: config.operationalSnapshotFile,
     revision: config.revision,
     runtimeId: config.runtimeId,
-    knowledgeRevision: config.knowledge.revision,
-    embeddingModelRef: config.knowledge.embedding.modelRef,
+    knowledge:
+      config.knowledge.mode === 'HYBRID'
+        ? Object.freeze({
+            mode: 'HYBRID' as const,
+            revision: config.knowledge.revision,
+            embeddingModelRef: config.knowledge.embedding.modelRef,
+          })
+        : Object.freeze({ mode: 'DISABLED' as const }),
   });
   const baseGatewayInvoker = createLiveModelGatewayInvoker(production.composition.gateway);
   const observedGatewayInvoker = Object.freeze({
@@ -178,45 +194,59 @@ export async function createQuickFurnoWhatsAppProductionWorker(
 
   let closed = false;
   try {
-    const baseEmbedding = createOpenAICompatibleEmbeddingPort({
-      endpoint: config.knowledge.embedding.endpoint,
-      modelRef: config.knowledge.embedding.modelRef,
-      executionClass: config.knowledge.embedding.executionClass,
-      ...(config.knowledge.embedding.bearerToken === undefined
-        ? {}
-        : { bearerToken: config.knowledge.embedding.bearerToken }),
-      timeoutMs: config.knowledge.embedding.timeoutMs,
-      maxBatchItems: config.knowledge.embedding.maxBatchItems,
-      maxInputChars: config.knowledge.embedding.maxInputChars,
-    });
-    const embedding = Object.freeze({
-      modelRef: baseEmbedding.modelRef,
-      dimension: baseEmbedding.dimension,
-      executionClass: baseEmbedding.executionClass,
-      async embed(texts: readonly string[]) {
-        observation.recordEmbeddingUsage(texts);
-        return baseEmbedding.embed(texts);
-      },
-    });
-    await assertPostgresKnowledgeReleaseReady(
-      pool,
-      config.knowledge.revision,
-      config.knowledge.embedding.modelRef,
-    );
-    const knowledgeStore = createPostgresHybridCandidateStore(pool, config.knowledge.revision);
-    const baseHybridKnowledge = createHybridKnowledgeRetriever({
-      embedding,
-      store: knowledgeStore,
-    });
-    const hybridKnowledge = Object.freeze({
-      knowledgeRevision: baseHybridKnowledge.knowledgeRevision,
-      async retrieve(request: Parameters<typeof baseHybridKnowledge.retrieve>[0]) {
-        const started = Date.now();
-        const result = await baseHybridKnowledge.retrieve(request);
-        observation.recordKnowledgeRetrieval(result.reason, Date.now() - started, systemInstant());
-        return result;
-      },
-    });
+    let agentHybridKnowledge: Parameters<typeof createJarvisRuntime>[0]['agentHybridKnowledge'];
+    if (config.knowledge.mode === 'HYBRID') {
+      if (pool === undefined) throw new Error('production-worker-config-invalid');
+      const hybridConfig = config.knowledge;
+      const baseEmbedding = createOpenAICompatibleEmbeddingPort({
+        endpoint: hybridConfig.embedding.endpoint,
+        modelRef: hybridConfig.embedding.modelRef,
+        executionClass: hybridConfig.embedding.executionClass,
+        ...(hybridConfig.embedding.bearerToken === undefined
+          ? {}
+          : { bearerToken: hybridConfig.embedding.bearerToken }),
+        timeoutMs: hybridConfig.embedding.timeoutMs,
+        maxBatchItems: hybridConfig.embedding.maxBatchItems,
+        maxInputChars: hybridConfig.embedding.maxInputChars,
+      });
+      const embedding = Object.freeze({
+        modelRef: baseEmbedding.modelRef,
+        dimension: baseEmbedding.dimension,
+        executionClass: baseEmbedding.executionClass,
+        async embed(texts: readonly string[]) {
+          observation.recordEmbeddingUsage(texts);
+          return baseEmbedding.embed(texts);
+        },
+      });
+      await assertPostgresKnowledgeReleaseReady(
+        pool,
+        hybridConfig.revision,
+        hybridConfig.embedding.modelRef,
+      );
+      const knowledgeStore = createPostgresHybridCandidateStore(pool, hybridConfig.revision);
+      const baseHybridKnowledge = createHybridKnowledgeRetriever({
+        embedding,
+        store: knowledgeStore,
+      });
+      const hybridKnowledge = Object.freeze({
+        knowledgeRevision: baseHybridKnowledge.knowledgeRevision,
+        async retrieve(request: Parameters<typeof baseHybridKnowledge.retrieve>[0]) {
+          const started = Date.now();
+          const result = await baseHybridKnowledge.retrieve(request);
+          observation.recordKnowledgeRetrieval(
+            result.reason,
+            Date.now() - started,
+            systemInstant(),
+          );
+          return result;
+        },
+      });
+      agentHybridKnowledge = Object.freeze({
+        knowledgeRevision: hybridConfig.revision,
+        retrieval: hybridKnowledge,
+        agents: hybridConfig.agents,
+      });
+    }
 
     const promptRegistry = createPromptRegistry([
       ...RIYA_PRODUCTION_PROMPTS,
@@ -251,11 +281,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       promptRegistry,
       capabilityProfileRef: binding.capabilityProfileRef,
       gatewayInvoker: observedGatewayInvoker,
-      agentHybridKnowledge: {
-        knowledgeRevision: config.knowledge.revision,
-        retrieval: hybridKnowledge,
-        agents: config.knowledge.agents,
-      },
+      ...(agentHybridKnowledge === undefined ? {} : { agentHybridKnowledge }),
       requireEvaluationRef: true,
       provenanceRefs: {
         runtimeRef: 'qfj.jarvis-runtime.quickfurno-authority-v2',
@@ -343,11 +369,11 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       async close(): Promise<void> {
         if (closed) return;
         closed = true;
-        await closeDatabasePool(pool);
+        if (pool !== undefined) await closeDatabasePool(pool);
       },
     });
   } catch (error) {
-    await closeDatabasePool(pool).catch(() => undefined);
+    if (pool !== undefined) await closeDatabasePool(pool).catch(() => undefined);
     throw error;
   }
 }

@@ -74,43 +74,79 @@ export const quickFurnoWorkerObservationV1Schema = z
   })
   .strict();
 
+const modelGatewaySchema = z
+  .object({
+    completed: boundedCount,
+    failed: boundedCount,
+    fallbackUsed: boundedCount,
+  })
+  .strict();
+const modelUsageSchema = z
+  .object({
+    invocations: boundedCount,
+    reportedTokenInvocations: boundedCount,
+    inputTokens: boundedUsage,
+    outputTokens: boundedUsage,
+    totalTokens: boundedUsage,
+  })
+  .strict();
+const embeddingUsageSchema = z
+  .object({
+    requests: boundedCount,
+    texts: boundedUsage,
+    characters: boundedUsage,
+  })
+  .strict();
+
 export const quickFurnoWorkerObservationV2Schema = z
   .object({
     protocol: z.literal('qfj.quickfurno-worker-observation.v2'),
     ...baseShape,
-    modelGateway: z
-      .object({
-        completed: boundedCount,
-        failed: boundedCount,
-        fallbackUsed: boundedCount,
-      })
-      .strict(),
-    modelUsage: z
-      .object({
-        invocations: boundedCount,
-        reportedTokenInvocations: boundedCount,
-        inputTokens: boundedUsage,
-        outputTokens: boundedUsage,
-        totalTokens: boundedUsage,
-      })
-      .strict(),
-    embeddingUsage: z
-      .object({
-        requests: boundedCount,
-        texts: boundedUsage,
-        characters: boundedUsage,
-      })
-      .strict(),
+    modelGateway: modelGatewaySchema,
+    modelUsage: modelUsageSchema,
+    embeddingUsage: embeddingUsageSchema,
+  })
+  .strict();
+
+const knowledgeModeSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('DISABLED') }).strict(),
+  z
+    .object({
+      mode: z.literal('HYBRID'),
+      revision: ref,
+      embeddingModelRef: modelRef,
+    })
+    .strict(),
+]);
+
+export const quickFurnoWorkerObservationV3Schema = z
+  .object({
+    protocol: z.literal('qfj.quickfurno-worker-observation.v3'),
+    emittedAt: canonicalInstant,
+    revision: z.string().regex(/^[0-9a-f]{40}$/u),
+    runtimeId: ref,
+    state: z.enum(['HEALTHY', 'DEGRADED', 'DISABLED']),
+    providerMode: z.literal('GROQ_ONLY'),
+    knowledge: knowledgeModeSchema,
+    spool: spoolSchema,
+    outcomes: outcomesSchema,
+    modelLatency: z.array(latencySample).max(120),
+    knowledgeRetrieval: knowledgeRetrievalSchema,
+    modelGateway: modelGatewaySchema,
+    modelUsage: modelUsageSchema,
+    embeddingUsage: embeddingUsageSchema,
   })
   .strict();
 
 export const quickFurnoWorkerObservationSchema = z.discriminatedUnion('protocol', [
   quickFurnoWorkerObservationV1Schema,
   quickFurnoWorkerObservationV2Schema,
+  quickFurnoWorkerObservationV3Schema,
 ]);
 
 export type QuickFurnoWorkerObservationV1 = z.infer<typeof quickFurnoWorkerObservationV1Schema>;
 export type QuickFurnoWorkerObservationV2 = z.infer<typeof quickFurnoWorkerObservationV2Schema>;
+export type QuickFurnoWorkerObservationV3 = z.infer<typeof quickFurnoWorkerObservationV3Schema>;
 export type QuickFurnoWorkerObservation = z.infer<typeof quickFurnoWorkerObservationSchema>;
 
 export function parseQuickFurnoWorkerObservation(value: unknown): QuickFurnoWorkerObservation {
