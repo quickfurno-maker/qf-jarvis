@@ -25,6 +25,11 @@ on:
       - 'packages/postgres-governed-memory-store/**'
       - 'packages/core-data-tools/**'
       - 'packages/knowledge-freshness/**'
+      - 'packages/model-intelligence-control/**'
+      - 'packages/semantic-context-engine/**'
+      - 'packages/multimodal-turn-planning/**'
+      - 'packages/governed-agent-handoff/**'
+      - 'packages/digital-twin-simulation/**'
       - 'packages/jao-action-registry/**'
       - 'packages/jarvis-runtime/**'
       - 'apps/api/src/jf6-private-process/create-core-data-tools.ts'
@@ -79,6 +84,11 @@ jobs:
           packages/postgres-governed-memory-store/src/tests
           packages/core-data-tools/src/tests
           packages/knowledge-freshness/src/tests
+          packages/model-intelligence-control/src/tests
+          packages/semantic-context-engine/src/tests
+          packages/multimodal-turn-planning/src/tests
+          packages/governed-agent-handoff/src/tests
+          packages/digital-twin-simulation/src/tests
           packages/jao-action-registry/src/tests
           apps/api/src/tests/jf6-core-data-tools.test.ts
           apps/api/src/tests/jf6-riya-structured-action-boundary.test.ts

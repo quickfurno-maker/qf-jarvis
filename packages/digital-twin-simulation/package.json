@@ -1,0 +1,26 @@
+{
+  "name": "@qf-jarvis/digital-twin-simulation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Deterministic no-effect digital-twin scenario harness for comparing candidate Jarvis behaviour before release.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@qf-jarvis/governed-agent-handoff": "workspace:*",
+    "@qf-jarvis/model-gateway": "workspace:*",
+    "@qf-jarvis/model-intelligence-control": "workspace:*",
+    "@qf-jarvis/multimodal-turn-planning": "workspace:*",
+    "@qf-jarvis/semantic-context-engine": "workspace:*"
+  }
+}

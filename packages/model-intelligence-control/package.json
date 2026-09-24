@@ -1,0 +1,22 @@
+{
+  "name": "@qf-jarvis/model-intelligence-control",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Pure adaptive release selection, evidence-derived answer posture, and certified fallback planning. Selects only explicitly governed releases and never invokes a provider.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/model-gateway": "workspace:*"
+  }
+}
