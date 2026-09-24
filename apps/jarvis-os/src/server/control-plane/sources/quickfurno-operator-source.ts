@@ -52,6 +52,7 @@ function signingInput(args: {
 export function createQuickFurnoOperatorReadSource(
   configPath: string,
   now: () => Date = () => new Date(),
+  request: typeof fetch = fetch,
 ): ReadSourceDescriptor {
   if (!isAbsolute(configPath)) {
     throw new TypeError('quickfurno-core-read-config-path-invalid');
@@ -96,8 +97,7 @@ export function createQuickFurnoOperatorReadSource(
           privateKey,
         ).toString('base64url');
 
-        // eslint-disable-next-line no-restricted-globals -- reviewed server-only QuickFurno read transport.
-        const response = await fetch(new URL(QUICKFURNO_OPERATOR_PATH, config.baseUrl), {
+        const response = await request(new URL(QUICKFURNO_OPERATOR_PATH, config.baseUrl), {
           method: 'POST',
           signal,
           headers: {
