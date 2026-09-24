@@ -312,7 +312,8 @@ export const BASELINE_CORE_SYNC: {
 } = Object.freeze({
   availability: 'STATIC_BASELINE',
   reason: 'Ownership is declared by governance, not read from Core.',
-  expectedSource: 'QuickFurno Core through the adopted signed operator snapshot when runtime evidence is available.',
+  expectedSource:
+    'QuickFurno Core through the adopted signed operator snapshot when runtime evidence is available.',
   items: Object.freeze<readonly OwnershipItem[]>([
     {
       id: 'customers-leads',
@@ -570,7 +571,8 @@ export function baselineSections(): Sections {
     attention: {
       availability: 'STATIC_BASELINE',
       reason: 'Repository and governance notices. Not a live business queue.',
-      expectedSource: 'The adopted signed QuickFurno operator snapshot when configured and reachable.',
+      expectedSource:
+        'The adopted signed QuickFurno operator snapshot when configured and reachable.',
       items: [
         {
           id: 'core-not-connected',

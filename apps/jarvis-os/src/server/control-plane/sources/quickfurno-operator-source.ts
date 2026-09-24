@@ -116,7 +116,8 @@ function deriveAttention(observation: QuickFurnoOperatorObservation): AttentionI
       id: 'core-automation-failed',
       kind: 'integration',
       title: failed24h + ' automation job' + (failed24h === 1 ? '' : 's') + ' failed in 24h',
-      context: 'QuickFurno Core reports failed, dead-lettered or cancelled automation work in the last 24 hours.',
+      context:
+        'QuickFurno Core reports failed, dead-lettered or cancelled automation work in the last 24 hours.',
       severity: 'critical',
     });
   }
@@ -124,8 +125,13 @@ function deriveAttention(observation: QuickFurnoOperatorObservation): AttentionI
     items.push({
       id: 'core-automation-uncertain',
       kind: 'integration',
-      title: uncertain24h + ' automation outcome' + (uncertain24h === 1 ? '' : 's') + ' uncertain in 24h',
-      context: 'QuickFurno Core reports automation outcomes requiring reconciliation in the last 24 hours.',
+      title:
+        uncertain24h +
+        ' automation outcome' +
+        (uncertain24h === 1 ? '' : 's') +
+        ' uncertain in 24h',
+      context:
+        'QuickFurno Core reports automation outcomes requiring reconciliation in the last 24 hours.',
       severity: 'critical',
     });
   }

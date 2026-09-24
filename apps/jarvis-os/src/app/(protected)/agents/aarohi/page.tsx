@@ -81,9 +81,9 @@ export default async function AarohiAgentPage() {
         Registration assistance is not a registration. Payment follow-up is not a payment, and a
         payment is not an activation. A conversation, a provider receipt, a model reading and
         Aarohi&rsquo;s own case state each establish <strong>nothing</strong> about a QuickFurno
-        business fact. Only Core&rsquo;s authoritative confirmation does. The signed Core observation
-        channel can be live while a specific acquisition outcome is still absent, so any unsupported
-        Core-owned figure remains <em>unknown</em> here, never zero.
+        business fact. Only Core&rsquo;s authoritative confirmation does. The signed Core
+        observation channel can be live while a specific acquisition outcome is still absent, so any
+        unsupported Core-owned figure remains <em>unknown</em> here, never zero.
       </Notice>
 
       <Notice tone="info" title="Aarohi is not Anisha">

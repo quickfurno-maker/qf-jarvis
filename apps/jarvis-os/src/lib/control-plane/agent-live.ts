@@ -30,8 +30,7 @@ export function agentOperationalMetrics(
 
   const assigned = workload.items.find((item) => item.id === workloadId)?.value ?? 0;
   const control = plane.conversationControl();
-  const agentLabel =
-    agentId === 'riya' ? 'Riya' : agentId === 'anisha' ? 'Anisha' : 'Aarohi';
+  const agentLabel = agentId === 'riya' ? 'Riya' : agentId === 'anisha' ? 'Anisha' : 'Aarohi';
   const metrics: MetricSummary[] = [
     {
       id: agentId + '-assigned',

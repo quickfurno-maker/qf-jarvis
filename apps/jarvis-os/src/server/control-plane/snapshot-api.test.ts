@@ -187,9 +187,9 @@ describe('the snapshot builder', () => {
     expect(snapshot.system.find((component) => component.id === 'quickfurno-core')?.state).toBe(
       'AVAILABLE',
     );
-    expect(snapshot.sections.headlineMetrics.items.some((item) => item.id === 'live-integrations')).toBe(
-      false,
-    );
+    expect(
+      snapshot.sections.headlineMetrics.items.some((item) => item.id === 'live-integrations'),
+    ).toBe(false);
   });
 
   it('moves generatedAt without moving source freshness', () => {
