@@ -51,6 +51,7 @@ const SCANNERS: readonly string[] = Object.freeze([
   'src/server/auth/auth-crypto.test.ts',
   'src/server/auth/auth-http.test.ts',
   'src/server/auth/proxy-csp.test.ts',
+  'src/server/control-plane/sources/quickfurno-operator-source.test.ts',
 ]);
 
 function walk(dir: string): string[] {
@@ -475,9 +476,15 @@ describe('no live action capability is exposed', () => {
     for (const file of sourceFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8'));
       const label = file.replace(/\\/g, '/').split('/apps/jarvis-os/')[1] ?? file;
-      expect(code, `${label}: fetch`).not.toMatch(/\bfetch\s*\(/);
+      const networkAllowed =
+        label === 'src/server/control-plane/sources/quickfurno-operator-source.ts';
+      if (!networkAllowed) {
+        expect(code, `${label}: fetch`).not.toMatch(/\bfetch\s*\(/);
+      }
       expect(code, `${label}: XHR`).not.toMatch(/XMLHttpRequest|WebSocket|EventSource/);
-      expect(code, `${label}: url`).not.toMatch(/https?:\/\//);
+      if (!networkAllowed) {
+        expect(code, `${label}: url`).not.toMatch(/https?:\/\//);
+      }
       // JOS-01C NARROWS this rather than removing it. `process.env` is permitted in exactly two
       // reviewed places -- the auth config-path boundary and the proxy's NODE_ENV check for
       // development-only CSP relaxations -- and stays forbidden everywhere else, which is where a
@@ -499,6 +506,7 @@ describe('no live action capability is exposed', () => {
         'src/server/auth/config/loader.ts',
         'src/server/control-plane/sources/worker-observation-source.ts',
         'src/server/control-plane/sources/worker-observation-source.test.ts',
+        'src/server/control-plane/sources/quickfurno-operator-source.test.ts',
       ]);
       if (!fsAllowed.has(label)) {
         expect(code, `${label}: fs`).not.toMatch(/from ['"]node:fs['"]/);
@@ -536,12 +544,13 @@ describe('no live action capability is exposed', () => {
     }
   });
 
-  it('imports exactly two workspace packages, and both are powerless read contracts', () => {
-    // JOS-01B/ADR-0159 NARROW this rule rather than relaxing it. Jarvis OS may import only the
-    // control-plane read contract and the strict content-free worker observation schema. Neither has
-    // Node I/O, network, persistence or authority; every backend/runtime package stays forbidden.
+  it('imports only reviewed framework-neutral operator/read contracts', () => {
+    // The web shell and future mobile app share DTO contracts only. Runtime/database/provider
+    // packages remain forbidden from the UI application.
     const ALLOWED = new Set([
       '@qf-jarvis/control-plane-read-contract',
+      '@qf-jarvis/operator-api-contract',
+      '@qf-jarvis/quickfurno-operator-observation-contract',
       '@qf-jarvis/worker-observation-contract',
     ]);
     for (const file of sourceFiles()) {
@@ -577,6 +586,8 @@ describe('no live action capability is exposed', () => {
     // anything, and neither confers any QuickFurno business authority.
     const ENABLED_CONTROL_FILES: readonly string[] = Object.freeze([
       'src/components/shell/AppShell.tsx', // drawer open/close: navigation only
+      'src/components/shell/CommandPalette.tsx', // local route navigation only
+      'src/components/shell/MobileDock.tsx', // route navigation only
       'src/components/shell/OperatorMenu.tsx', // menu toggle + sign-out submit
       'src/components/auth/LoginForm.tsx', // sign-in submit
     ]);

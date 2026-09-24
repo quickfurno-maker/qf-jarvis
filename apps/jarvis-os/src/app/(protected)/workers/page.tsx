@@ -1,9 +1,10 @@
 import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
-import { CapabilityBadge, StatusPill, Tag } from '@/components/system/StatusPill';
+import { StatusPill, Tag } from '@/components/system/StatusPill';
 import { SectionBody, SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
+import { isReadable } from '@/lib/control-plane/types';
 
 /**
  * Workers (JOS-01A).
@@ -21,14 +22,21 @@ export default async function WorkersPage() {
         breadcrumb={['Intelligence', 'Workers']}
         title="Worker fleet"
         purpose="Control plane, projection workers and future local/GPU nodes. No network discovery runs from this surface."
-        status={<CapabilityBadge lifecycle="PLANNED" />}
+        status={<SourceBadge availability={workersSection.availability} />}
       />
 
       <div className="space-y-5">
-        <Notice tone="offline" title="No discovery, no credential">
-          Jarvis OS performs no network scan and holds no node credential. Local inference is a
-          planned capability; the node below is shown offline because it is.
-        </Notice>
+        {isReadable(workersSection.availability) ? (
+          <Notice tone="healthy" title="Governed worker observation connected">
+            Worker health is read from a bounded observation source. Jarvis OS still performs no
+            network discovery and holds no worker credential.
+          </Notice>
+        ) : (
+          <Notice tone="offline" title="Worker observation is not connected">
+            Jarvis OS performs no network scan and holds no node credential. The fleet remains
+            unknown until a governed observation source is available.
+          </Notice>
+        )}
 
         <SectionBody section={workersSection}>
           {(workers) => (

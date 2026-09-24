@@ -4,6 +4,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 
 import { OperatorMenu } from '@/components/shell/OperatorMenu';
+import { CommandPalette } from '@/components/shell/CommandPalette';
+import { MobileDock } from '@/components/shell/MobileDock';
 import { SideNav } from '@/components/navigation/SideNav';
 import { BrandLockup } from '@/components/shell/Brand';
 import { ENVIRONMENT_LABEL } from '@/lib/environment';
@@ -103,9 +105,10 @@ export function AppShell({
           operator={operator}
           csrfToken={csrfToken}
         />
-        <main id="jos-main" className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
-          <div className="mx-auto w-full max-w-[1560px]">{children}</div>
+        <main id="jos-main" className="min-w-0 flex-1 px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:py-7 lg:pb-7">
+          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
         </main>
+        <MobileDock />
       </div>
     </div>
   );
@@ -143,26 +146,8 @@ function TopBar({
           <BrandLockup />
         </div>
 
-        {/* Command affordance — a LOCAL shell only. It performs no search and reaches nothing. */}
         <div className="ml-auto hidden min-w-0 flex-1 justify-center lg:flex">
-          <div
-            className="flex w-full max-w-[420px] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-base-900)] px-3 py-1.5 text-[12px] text-[var(--color-ink-faint)]"
-            aria-hidden="true"
-          >
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" focusable="false">
-              <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4" />
-              <path
-                d="m10.5 10.5 3 3"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-              />
-            </svg>
-            <span className="flex-1 truncate">Search — available in a later JOS phase</span>
-            <kbd className="rounded border border-[var(--color-line)] px-1.5 py-[1px] text-[10px]">
-              ⌘K
-            </kbd>
-          </div>
+          <CommandPalette />
         </div>
 
         <div className="ml-auto flex items-center gap-2.5 lg:ml-0">

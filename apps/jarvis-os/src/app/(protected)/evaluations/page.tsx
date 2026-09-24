@@ -1,7 +1,7 @@
 import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
-import { CapabilityBadge, StatusPill } from '@/components/system/StatusPill';
+import { StatusPill } from '@/components/system/StatusPill';
 import { SectionBody, SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
 import { isReadable } from '@/lib/control-plane/types';
@@ -33,13 +33,20 @@ export default async function EvaluationsPage() {
         breadcrumb={['Intelligence', 'Evaluations']}
         title="Evaluation suites"
         purpose="Fixture-based quality and safety signal across the dimensions that gate a model or provider change."
-        status={<CapabilityBadge lifecycle="SHADOW" />}
+        status={<SourceBadge availability={dimensionsSection.availability} />}
       />
 
       <div className="space-y-5">
-        <Notice tone="warning" title="No production certification is claimed">
-          These suites run against fixtures. They are a signal for a human deciding whether a change
-          is safe to consider — not evidence that anything is approved for production.
+        <Notice
+          tone={isReadable(dimensionsSection.availability) ? 'info' : 'warning'}
+          title={
+            isReadable(dimensionsSection.availability)
+              ? 'Evaluation evidence connected — certification remains separate'
+              : 'Evaluation evidence is not connected'
+          }
+        >
+          Suite results are decision evidence, never production authorization. A passing dimension
+          cannot activate a model, provider, knowledge revision or rollout.
         </Notice>
 
         <Panel

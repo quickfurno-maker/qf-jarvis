@@ -169,7 +169,7 @@ describe('protected pages are never prerendered', () => {
 describe('secret containment in application source', () => {
   const authDir = join(SRC, 'server/auth');
 
-  it('reads process.env in exactly one place, for exactly one variable', () => {
+  it('reads process.env in exactly one reviewed loader boundary', () => {
     const offenders: string[] = [];
     for (const file of walk(join(SRC))) {
       const relative = file.replace(/\\/gu, '/').split('/src/')[1] ?? file;
@@ -188,11 +188,12 @@ describe('secret containment in application source', () => {
     expect(offenders).toEqual([]);
 
     const loader = readFileSync(join(authDir, 'config/loader.ts'), 'utf8');
-    // The only variable, and it holds a path rather than any secret material.
+    // Every environment value is a PATH, never secret material.
     expect(loader).toContain("AUTH_CONFIG_PATH_VAR = 'QFJ_JOS_AUTH_CONFIG_FILE'");
     expect(loader).toContain("WORKER_OBSERVATION_PATH_VAR = 'QFJ_WORKER_OBSERVATION_FILE'");
+    expect(loader).toContain("CORE_READ_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_READ_CONFIG_FILE'");
     const envReads = loader.match(/process\.env\[/gu) ?? [];
-    expect(envReads).toHaveLength(2);
+    expect(envReads).toHaveLength(3);
   });
 
   it('imports node:fs only in the auth config loader', () => {

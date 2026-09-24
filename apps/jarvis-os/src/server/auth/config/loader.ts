@@ -2,6 +2,8 @@ import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
 
 import { AuthFailure } from '../errors';
 
+import { coreReadConfigV1Schema } from './core-read-schema';
+import type { CoreReadConfigV1 } from './core-read-schema';
 import { MAX_AUTH_CONFIG_BYTES, authConfigV1Schema } from './schema';
 import type { AuthConfigV1 } from './schema';
 
@@ -28,9 +30,10 @@ import type { AuthConfigV1 } from './schema';
  * synchronous read of a file the OS already has in page cache.
  */
 
-/** The only environment variables this application reads. Both contain paths, never secrets. */
+/** The only environment variables this application reads. All contain paths, never secrets. */
 export const AUTH_CONFIG_PATH_VAR = 'QFJ_JOS_AUTH_CONFIG_FILE';
 export const WORKER_OBSERVATION_PATH_VAR = 'QFJ_WORKER_OBSERVATION_FILE';
+export const CORE_READ_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_READ_CONFIG_FILE';
 
 /**
  * Read the optional content-free worker observation path through the same reviewed environment
@@ -42,11 +45,35 @@ export function readWorkerObservationPathFromEnvironment(): string | undefined {
   return value === undefined || value.trim() === '' ? undefined : value;
 }
 
+export function readCoreReadConfigPathFromEnvironment(): string | undefined {
+  const value = process.env[CORE_READ_CONFIG_PATH_VAR];
+  return value === undefined || value.trim() === '' ? undefined : value;
+}
+
 export interface LoaderOptions {
   /** Injected for tests. Production passes nothing and the real environment is read. */
   readonly path?: string | undefined;
   /** Injected for tests: the platform to apply POSIX permission rules for. */
   readonly platform?: NodeJS.Platform | undefined;
+}
+
+export function loadCoreReadConfig(options: LoaderOptions = {}): CoreReadConfigV1 {
+  const path = options.path ?? readCoreReadConfigPathFromEnvironment();
+  if (path === undefined || path.trim() === '') {
+    throw new TypeError('core-read-config-path-unset');
+  }
+  const raw = readBoundedRegularFile(path, options.platform ?? process.platform);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new TypeError('core-read-config-malformed');
+  }
+  const result = coreReadConfigV1Schema.safeParse(parsed);
+  if (!result.success) {
+    throw new TypeError('core-read-config-invalid');
+  }
+  return result.data;
 }
 
 /**

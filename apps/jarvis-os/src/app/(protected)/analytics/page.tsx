@@ -15,6 +15,7 @@ import { controlPlane } from '@/lib/control-plane';
  */
 export default async function AnalyticsPage() {
   const plane = await controlPlane();
+  const provenance = plane.provenance();
 
   return (
     <>
@@ -26,10 +27,17 @@ export default async function AnalyticsPage() {
       />
 
       <div className="space-y-5">
-        <Notice tone="warning" title="Demo data — and operational metrics only">
-          Every figure is synthetic. Jarvis measures its own behaviour; revenue, conversion and
-          commercial outcomes are QuickFurno Core&rsquo;s to report, and none appears here.
-        </Notice>
+        {provenance.liveOperationalData ? (
+          <Notice tone="healthy" title="Live operational analytics">
+            Connected sections are request-time observations. Business and commercial outcomes remain
+            QuickFurno Core facts and are never inferred from Jarvis telemetry.
+          </Notice>
+        ) : (
+          <Notice tone="info" title="Operational analytics — source-aware">
+            Sections render only the data they have earned. Missing sources remain unavailable rather
+            than being replaced with synthetic traffic or zero-value charts.
+          </Notice>
+        )}
 
         <MetricStrip section={plane.headlineMetrics()} />
 

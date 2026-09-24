@@ -1,9 +1,10 @@
 import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
-import { CapabilityBadge, StatusPill } from '@/components/system/StatusPill';
+import { StatusPill } from '@/components/system/StatusPill';
 import { SectionBody, SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
+import { isReadable } from '@/lib/control-plane/types';
 
 /**
  * Knowledge (JOS-01A).
@@ -23,14 +24,24 @@ export default async function KnowledgePage() {
         breadcrumb={['Intelligence', 'Knowledge']}
         title="Governed knowledge"
         purpose="Per-agent namespaces with no shared identity. Retrieved content is untrusted reference material — never authority."
-        status={<CapabilityBadge lifecycle="DISABLED" />}
+        status={<SourceBadge availability={namespacesSection.availability} />}
       />
 
       <div className="space-y-5">
-        <Notice tone="offline" title="Retrieval is off and nothing is provisioned">
-          The provisioning contracts are merged; no namespace holds content, and this surface
-          mutates nothing.
-        </Notice>
+        {isReadable(namespacesSection.availability) ? (
+          <Notice
+            tone={namespacesSection.items.some((item) => item.state === 'DISABLED') ? 'offline' : 'healthy'}
+            title="Knowledge posture observed"
+          >
+            This surface reports the worker&rsquo;s governed knowledge mode and exact runtime posture.
+            It cannot enable retrieval or change a corpus revision.
+          </Notice>
+        ) : (
+          <Notice tone="offline" title="Knowledge observation is not connected">
+            Jarvis OS will not infer whether retrieval is enabled. A governed worker observation must
+            state the active mode before this page reports it.
+          </Notice>
+        )}
 
         <Panel
           title="Namespaces"

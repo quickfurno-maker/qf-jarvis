@@ -5,6 +5,8 @@ import {
   StackedShare,
 } from '@/components/charts/Charts';
 import { MetricStrip } from '@/components/analytics/MetricStrip';
+import { CommandDeck } from '@/components/command-center/CommandDeck';
+import { MissionControlHero } from '@/components/command-center/MissionControlHero';
 import { ActivityFeed } from '@/components/operations/ActivityFeed';
 import { AttentionRail } from '@/components/operations/AttentionRail';
 import { Notice, Panel } from '@/components/primitives/Panel';
@@ -17,6 +19,7 @@ import {
   SourceBadge,
 } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
+import { operatorBootstrap } from '@/server/operator/bootstrap';
 
 /**
  * Overview — the signature screen (JOS-01A; made truthful in JOS-01B).
@@ -35,6 +38,8 @@ export default async function OverviewPage() {
   const plane = await controlPlane();
   const health = plane.systemHealth();
   const attention = plane.attention();
+  const provenance = plane.provenance();
+  const bootstrap = operatorBootstrap();
 
   return (
     <>
@@ -46,18 +51,26 @@ export default async function OverviewPage() {
       />
 
       <div className="space-y-5">
-        <ProvenanceBar provenance={plane.provenance()} />
+        <MissionControlHero provenance={provenance} health={health} />
+        <ProvenanceBar provenance={provenance} />
 
-        <Notice tone="warning" title="Production rollout is OFF — and no live source is connected">
-          No communication can reach a real recipient from anywhere in Jarvis. Every figure below is
-          declared by merged repository and governance state; QuickFurno Core and coreAutomation are
-          both <span className="font-mono">NOT_CONNECTED</span>, so the sections that would depend
-          on them show that rather than a zero.
-        </Notice>
+        {provenance.liveOperationalData ? (
+          <Notice tone="healthy" title="Runtime observation connected">
+            Live operational telemetry is being read through a governed adapter. Observation never
+            grants business authority: production rollout remains independently gated.
+          </Notice>
+        ) : (
+          <Notice tone="warning" title="Production rollout is OFF — runtime sources are incomplete">
+            Jarvis OS is truthful about missing instruments. Connected sections show live data;
+            disconnected sections remain unknown rather than being rendered as zero.
+          </Notice>
+        )}
 
         <StatusStrip components={health.components} />
 
         <MetricStrip section={plane.headlineMetrics()} />
+
+        <CommandDeck bootstrap={bootstrap} />
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
           <div className="space-y-5">

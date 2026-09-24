@@ -152,3 +152,123 @@
     scroll-behavior: auto !important;
   }
 }
+
+@layer utilities {
+  .mission-hero {
+    background:
+      radial-gradient(circle at 82% 18%, color-mix(in oklab, var(--color-accent) 17%, transparent), transparent 34%),
+      radial-gradient(circle at 64% 120%, color-mix(in oklab, var(--color-violet) 11%, transparent), transparent 38%),
+      linear-gradient(135deg, #0b101a 0%, #080b12 62%, #090d16 100%);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklab, var(--color-ink) 5%, transparent),
+      0 20px 80px rgb(0 0 0 / 22%);
+  }
+
+  .mission-hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(to right, rgb(122 169 255 / 3%) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(122 169 255 / 3%) 1px, transparent 1px);
+    background-size: 38px 38px;
+    mask-image: linear-gradient(to bottom, black, transparent 88%);
+  }
+
+  .mission-orb {
+    position: absolute;
+    width: 330px;
+    height: 330px;
+    right: -100px;
+    top: -145px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--color-accent) 18%, transparent);
+    box-shadow:
+      0 0 85px color-mix(in oklab, var(--color-accent) 10%, transparent),
+      inset 0 0 85px color-mix(in oklab, var(--color-violet) 7%, transparent);
+  }
+
+  .eyebrow {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.17em;
+    color: var(--color-accent-bright);
+  }
+
+  .live-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-pill);
+    padding: 4px 8px;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: rgb(6 8 13 / 62%);
+  }
+
+  .live-chip.is-live {
+    color: var(--color-healthy);
+    border-color: color-mix(in oklab, var(--color-healthy) 34%, var(--color-line));
+  }
+
+  .live-chip.is-static {
+    color: var(--color-info);
+  }
+
+  .hero-stat,
+  .command-cell {
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 3%), transparent 44%),
+      rgb(10 13 20 / 70%);
+    backdrop-filter: blur(14px);
+  }
+
+  .command-deck {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 2%);
+  }
+
+  .command-cell {
+    transition:
+      border-color 160ms var(--ease-out-quick),
+      transform 160ms var(--ease-out-quick),
+      background-color 160ms var(--ease-out-quick);
+  }
+
+  .command-cell:hover {
+    border-color: color-mix(in oklab, var(--color-accent) 30%, var(--color-line));
+    transform: translateY(-1px);
+  }
+
+  .command-trigger {
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 2%), transparent),
+      rgb(10 13 20 / 78%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
+  }
+
+  .command-trigger:hover {
+    border-color: color-mix(in oklab, var(--color-accent) 26%, var(--color-line));
+    color: var(--color-ink-muted);
+  }
+
+  .mobile-dock {
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 4%), transparent),
+      rgb(10 13 20 / 88%);
+    box-shadow: 0 18px 50px rgb(0 0 0 / 38%);
+    padding-bottom: max(0.375rem, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 640px) {
+  .mission-orb {
+    width: 230px;
+    height: 230px;
+    right: -110px;
+    top: -105px;
+  }
+}

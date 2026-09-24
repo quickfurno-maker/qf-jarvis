@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@qf-jarvis/control-plane-read-contract": "workspace:*",
+    "@qf-jarvis/operator-api-contract": "workspace:*",
+    "@qf-jarvis/quickfurno-operator-observation-contract": "workspace:*",
     "@qf-jarvis/worker-observation-contract": "workspace:*",
     "next": "16.2.11",
     "react": "19.2.0",
