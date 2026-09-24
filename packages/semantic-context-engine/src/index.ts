@@ -37,8 +37,7 @@ function validBinding(value: SemanticAuthorityBinding): boolean {
     REF.test(value.knowledgeRevision) &&
     REF.test(value.policyRevision) &&
     REF.test(value.agentScope) &&
-    REF.test(value.purpose) &&
-    (value.dataClass === 'HOSTED_ALLOWED' || value.dataClass === 'LOCAL_ONLY')
+    REF.test(value.purpose)
   );
 }
 
