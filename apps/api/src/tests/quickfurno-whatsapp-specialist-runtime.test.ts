@@ -133,6 +133,23 @@ describe('QuickFurno WhatsApp specialist runtime', () => {
     expect(r.agentCall).not.toHaveBeenCalled();
   });
 
+  it('does not coerce LOCAL_ONLY media into the certified hosted text-model path', async () => {
+    const r = runtime();
+    const reply = await r.service.process(
+      material({
+        dataClass: 'LOCAL_ONLY',
+        inbound: {
+          version: 1,
+          messageType: 'image',
+          attachment: { kind: 'image', mediaId: 'media.123', mimeType: 'image/jpeg' },
+        },
+      }),
+    );
+    expect(reply).toBeNull();
+    expect(r.riyaCall).not.toHaveBeenCalled();
+    expect(r.agentCall).not.toHaveBeenCalled();
+  });
+
   it('refuses a reply authorized against a different QuickFurno conversation revision', async () => {
     const r = runtime();
     const reply = await r.service.process(material({ revision: 10 }));

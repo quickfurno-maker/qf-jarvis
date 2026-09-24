@@ -320,6 +320,9 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     // but they acquire no provider send authority, tool capability, raw database handle or webhook.
     'src/quickfurno-whatsapp/contracts.ts',
     'src/quickfurno-whatsapp/quickfurno-http.ts',
+    // Reviewed signed media-content reader. It may name the WhatsApp surface, but receives only
+    // bounded QuickFurno-owned bytes and acquires no Meta credential or provider-send authority.
+    'src/quickfurno-whatsapp/media-content-http.ts',
     'src/quickfurno-whatsapp/specialist-runtime.ts',
     'src/quickfurno-whatsapp/turn-processor.ts',
     'src/quickfurno-whatsapp/production-observation.ts',
@@ -340,6 +343,8 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/tests/quickfurno-whatsapp-production-worker.test.ts',
     'src/tests/quickfurno-worker-deployment-containment.test.ts',
     'src/tests/quickfurno-whatsapp-http.test.ts',
+    'src/tests/quickfurno-whatsapp-media-http.test.ts',
+    'src/tests/quickfurno-whatsapp-media-content-http.test.ts',
     'src/tests/quickfurno-whatsapp-specialist-runtime.test.ts',
     'src/tests/quickfurno-whatsapp-turn-processor.test.ts',
     // E2E certification of the reviewed seam. Test-only: it may name WhatsApp while exercising

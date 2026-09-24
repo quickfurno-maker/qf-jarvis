@@ -57,6 +57,12 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         return null;
       }
 
+      // The certified live provider is text-only. LOCAL_ONLY media may cross the separately signed
+      // content bridge, but it must never be silently coerced into a hosted text-model turn.
+      if (material.dataClass !== 'HOSTED_ALLOWED' || material.normalizedText === undefined) {
+        return null;
+      }
+
       if (material.assignedActor === 'RIYA') {
         const result = await config.riya.handleConversationTurn({
           version: 1,
@@ -68,9 +74,7 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
           channelTurnRef: `qf.inbound:${material.inboundMessageId}`,
           dataClass: material.dataClass,
           ...(material.subjectRef === undefined ? {} : { subjectRef: material.subjectRef }),
-          ...(material.normalizedText === undefined
-            ? {}
-            : { normalizedText: material.normalizedText }),
+          normalizedText: material.normalizedText,
         });
         return proposalFrom(material, result.proposedReply);
       }
@@ -87,9 +91,7 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         providerMessageRef: `qf.inbound:${material.inboundMessageId}`,
         dataClass: material.dataClass,
         ...(material.subjectRef === undefined ? {} : { subjectRef: material.subjectRef }),
-        ...(material.normalizedText === undefined
-          ? {}
-          : { normalizedText: material.normalizedText }),
+        normalizedText: material.normalizedText,
       });
       const result = await runCustomerTurnWorkflow(
         () => config.jarvisRuntime.processInboundForProposedReply(envelope),
