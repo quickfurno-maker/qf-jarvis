@@ -1,0 +1,19 @@
+{
+  "name": "@qf-jarvis/multimodal-turn-planning",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Fail-closed planning for WhatsApp non-text material. It may use safe captions/metadata but never claims unseen media content or fetches provider media.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  }
+}

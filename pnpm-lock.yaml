@@ -429,6 +429,24 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/digital-twin-simulation:
+    devDependencies:
+      '@qf-jarvis/governed-agent-handoff':
+        specifier: workspace:*
+        version: link:../governed-agent-handoff
+      '@qf-jarvis/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@qf-jarvis/model-intelligence-control':
+        specifier: workspace:*
+        version: link:../model-intelligence-control
+      '@qf-jarvis/multimodal-turn-planning':
+        specifier: workspace:*
+        version: link:../multimodal-turn-planning
+      '@qf-jarvis/semantic-context-engine':
+        specifier: workspace:*
+        version: link:../semantic-context-engine
+
   packages/durable-orchestration-contracts:
     dependencies:
       zod:
@@ -497,6 +515,8 @@ importers:
       '@qf-jarvis/recommendation-runtime':
         specifier: workspace:*
         version: link:../recommendation-runtime
+
+  packages/governed-agent-handoff: {}
 
   packages/governed-knowledge:
     dependencies:
@@ -671,6 +691,12 @@ importers:
         specifier: workspace:*
         version: link:../model-reply-adapter
 
+  packages/model-intelligence-control:
+    dependencies:
+      '@qf-jarvis/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+
   packages/model-reply-adapter:
     dependencies:
       '@qf-jarvis/agent-runtime':
@@ -685,6 +711,8 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/multimodal-turn-planning: {}
 
   packages/openai-compatible-embedding-adapter:
     dependencies:
@@ -1109,6 +1137,12 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/semantic-context-engine:
+    dependencies:
+      '@qf-jarvis/knowledge-index':
+        specifier: workspace:*
+        version: link:../knowledge-index
 
   packages/worker-observation-contract:
     dependencies:
