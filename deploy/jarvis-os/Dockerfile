@@ -37,6 +37,11 @@ WORKDIR /build
 # Manifests and lockfile first, so a source-only change does not re-resolve the dependency graph.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json tsconfig.json ./
 COPY packages/control-plane-read-contract/package.json packages/control-plane-read-contract/
+COPY packages/operator-api-contract/package.json packages/operator-api-contract/
+COPY packages/operator-client-core/package.json packages/operator-client-core/
+COPY packages/quickfurno-operator-command-contract/package.json packages/quickfurno-operator-command-contract/
+COPY packages/quickfurno-operator-observation-contract/package.json packages/quickfurno-operator-observation-contract/
+COPY packages/worker-observation-contract/package.json packages/worker-observation-contract/
 COPY apps/jarvis-os/package.json apps/jarvis-os/
 
 # `--frozen-lockfile` is the supply-chain contract: the lockfile is authoritative, and a manifest
@@ -45,13 +50,24 @@ COPY apps/jarvis-os/package.json apps/jarvis-os/
 # applies here exactly as it does locally, because they live in pnpm-workspace.yaml.
 RUN pnpm install --frozen-lockfile --filter @qf-jarvis/jarvis-os... --filter .
 
-# Only the two workspaces Jarvis OS actually needs.
+# Copy exactly the framework-neutral workspaces Jarvis OS imports. Keep this list explicit:
+# adding a new workspace dependency must update this image boundary and its containment test.
 COPY packages/control-plane-read-contract packages/control-plane-read-contract
+COPY packages/operator-api-contract packages/operator-api-contract
+COPY packages/operator-client-core packages/operator-client-core
+COPY packages/quickfurno-operator-command-contract packages/quickfurno-operator-command-contract
+COPY packages/quickfurno-operator-observation-contract packages/quickfurno-operator-observation-contract
+COPY packages/worker-observation-contract packages/worker-observation-contract
 COPY apps/jarvis-os apps/jarvis-os
 
-# The shared contract must be compiled before Next traces it: Jarvis OS imports the built `dist`,
-# not the TypeScript source.
+# Workspace packages export built `dist` files, so compile them in dependency order before Next
+# traces the standalone application.
 RUN pnpm --filter @qf-jarvis/control-plane-read-contract build \
+ && pnpm --filter @qf-jarvis/operator-api-contract build \
+ && pnpm --filter @qf-jarvis/operator-client-core build \
+ && pnpm --filter @qf-jarvis/quickfurno-operator-command-contract build \
+ && pnpm --filter @qf-jarvis/quickfurno-operator-observation-contract build \
+ && pnpm --filter @qf-jarvis/worker-observation-contract build \
  && pnpm --filter @qf-jarvis/jarvis-os build
 
 # ---------------------------------------------------------------------------------------------
