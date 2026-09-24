@@ -19,9 +19,10 @@ import type {
  *
  * ### Why unreadable sources carry no rows
  *
- * QuickFurno Core is authoritative and there is no adopted Jarvis-to-Core read protocol in this
- * repository. QuickFurno Core Automation runs on the VPS and Jarvis OS has no adopted protocol to read it either. So both
- * report NOT_CONNECTED, and every section that would depend on them carries no rows and states why.
+ * QuickFurno Core is authoritative and the signed read-only operator snapshot protocol is adopted.
+ * Worker/model/RAG telemetry has a separate content-free observation adapter. A repository baseline
+ * still cannot assert runtime reachability, so sections remain NOT_CONNECTED until an adopted source
+ * actually produces request-time evidence.
  *
  * `0 approvals` and `the approval source is not connected` are different facts. Rendering the
  * second as the first is the specific lie this file exists to prevent.
@@ -58,8 +59,8 @@ export const BASELINE_FACTS = Object.freeze({
   josTrackClosesAfter: 'JOS-01E',
 });
 
-const UNREACHABLE = 'No adopted read protocol exists in this repository.';
-const LATER_PHASE = 'A governed control-plane adapter, in a later JOS phase.';
+const UNREACHABLE = 'No live observation was acquired for this repository baseline.';
+const LATER_PHASE = 'A configured governed read source for this section.';
 
 type Sections = ControlPlaneSnapshotV1['sections'];
 
@@ -116,7 +117,8 @@ export const BASELINE_SYSTEM: readonly SystemComponent[] = Object.freeze<
     id: 'quickfurno-core',
     label: 'QuickFurno Core',
     state: 'NOT_CONNECTED',
-    detail: 'Authoritative for business truth. No Jarvis-to-Core read protocol is adopted.',
+    detail:
+      'Authoritative for business truth. The signed read-only operator snapshot adapter is adopted; this baseline contains no runtime observation.',
   },
   {
     id: 'quickfurno-core-automation',
@@ -135,8 +137,9 @@ export const BASELINE_SYSTEM: readonly SystemComponent[] = Object.freeze<
   {
     id: 'worker-fleet',
     label: 'Worker fleet',
-    state: 'PLANNED',
-    detail: 'Local and GPU node topology is a future slice. No discovery runs.',
+    state: 'NOT_CONNECTED',
+    detail:
+      'The production worker observation adapter is merged. This baseline has no live worker observation.',
   },
   {
     id: 'production-rollout',
@@ -297,7 +300,7 @@ export const BASELINE_ROADMAP: readonly BaselineRoadmap[] = Object.freeze<
     label: 'JOS-01E - Progressive backend read wiring',
     state: 'current',
     detail:
-      'Governed read-source composition. No source is adopted yet: none is reachable without a protocol Core and QuickFurno Core Automation have not adopted.',
+      'Governed read-source composition with signed QuickFurno Core observation and content-free worker telemetry adapters. Runtime reachability is proven per request, never assumed by the baseline.',
   },
 ]);
 
@@ -309,7 +312,7 @@ export const BASELINE_CORE_SYNC: {
 } = Object.freeze({
   availability: 'STATIC_BASELINE',
   reason: 'Ownership is declared by governance, not read from Core.',
-  expectedSource: 'QuickFurno Core, once a read protocol is adopted and authenticated.',
+  expectedSource: 'QuickFurno Core through the adopted signed operator snapshot when runtime evidence is available.',
   items: Object.freeze<readonly OwnershipItem[]>([
     {
       id: 'customers-leads',
@@ -477,7 +480,7 @@ export const BASELINE_AAROHI_READINESS: {
       kind: 'boundary',
       state: 'NOT_CONNECTED',
       detail:
-        'Core attestation is the only route out of Aarohi ownership. Core is not connected, so no handoff figure is readable.',
+        'Core attestation is the only route out of Aarohi ownership. The signed Core observation channel is adopted, but this acquisition read contract does not expose the ACTIVE handoff attestation, so no handoff figure is inferred.',
     },
     {
       id: 'aarohi-anisha-boundary',
@@ -502,14 +505,6 @@ export const BASELINE_AAROHI_READINESS: {
       state: 'PLANNED',
       detail:
         'Deliberately not built (ADR-0127). No ordinary transition reaches the boundary, and inventing a readiness signal was refused.',
-    },
-    {
-      id: 'blocker-core-read-protocol',
-      label: 'Live Core read protocol',
-      kind: 'blocker',
-      state: 'NOT_CONNECTED',
-      detail:
-        'No Jarvis-to-Core read protocol is adopted. Every Core-authoritative figure is therefore unknown rather than zero.',
     },
     {
       id: 'blocker-runtime-and-channel',
@@ -541,7 +536,7 @@ export function baselineSections(): Sections {
           label: 'Live integrations',
           value: '0',
           caption:
-            'Core and QuickFurno Core Automation are both NOT_CONNECTED. No provider is reachable.',
+            'No runtime observation was acquired for this repository baseline. Live adapters replace this claim when evidence is available.',
         },
         {
           id: 'production-rollout',
@@ -575,23 +570,22 @@ export function baselineSections(): Sections {
     attention: {
       availability: 'STATIC_BASELINE',
       reason: 'Repository and governance notices. Not a live business queue.',
-      expectedSource: 'The approval queue, once a governed read adapter is adopted.',
+      expectedSource: 'The adopted signed QuickFurno operator snapshot when configured and reachable.',
       items: [
         {
           id: 'core-not-connected',
           kind: 'integration',
-          title: 'QuickFurno Core is not connected',
+          title: 'QuickFurno Core has no live observation',
           context:
-            'No Jarvis-to-Core read protocol has been adopted. Business truth is unreadable from here.',
+            'The signed Core adapter is adopted, but this repository baseline acquired no live business observation.',
           severity: 'warning',
         },
         {
-          id: 'core-automation-not-connected',
+          id: 'core-automation-not-observed',
           kind: 'integration',
-          title: 'QuickFurno Core Automation is not connected',
+          title: 'Automation execution has no live observation',
           context:
-            'QFJ-P09.02 merged the test-only dispatch VALIDATION boundary. The real transport is ' +
-            'not implemented and the protocol is not adopted. Nothing dispatches.',
+            'This repository baseline does not observe runtime automation state. The signed Core operator snapshot supplies aggregate execution state when reachable.',
           severity: 'warning',
         },
         {
@@ -654,8 +648,8 @@ export function baselineSections(): Sections {
 
     approvalQueue: unreadable(
       'NOT_CONNECTED',
-      'The durable approval queue is merged, and Jarvis OS has no adopted protocol to read it.',
-      'A governed control-plane adapter over the approval queue, in a later JOS phase.',
+      'The signed QuickFurno operator snapshot can read the durable approval queue; this baseline acquired no live observation.',
+      'The adopted signed QuickFurno operator snapshot.',
     ),
     approvalBreakdown: unreadable(
       'NOT_CONNECTED',
@@ -664,7 +658,7 @@ export function baselineSections(): Sections {
     ),
     conversationControl: unreadable(
       'NOT_CONNECTED',
-      'Durable conversation control is merged, and this surface has no adopted protocol to read it.',
+      'The signed QuickFurno operator snapshot can read durable conversation control; this baseline acquired no live observation.',
       LATER_PHASE,
     ),
     conversationActivity: unreadableSeries(
@@ -676,7 +670,7 @@ export function baselineSections(): Sections {
     modelLatency: unreadableSeries(
       'model-latency',
       'Model latency',
-      'Gateway telemetry has no adopted read protocol in this release.',
+      'The content-free worker observation adapter is adopted; this baseline acquired no live gateway telemetry.',
       LATER_PHASE,
     ),
     agentWorkload: unreadable(
@@ -690,18 +684,18 @@ export function baselineSections(): Sections {
       'The QVGE acquisition domain (AVG-1 onward), which is PLANNED and DISABLED.',
     ),
     workers: unreadable(
-      'PLANNED',
-      'Local and GPU node topology is a future slice. No discovery runs.',
-      'Worker discovery, in a later phase.',
+      'NOT_CONNECTED',
+      'The content-free worker observation adapter is adopted; this baseline acquired no live worker observation.',
+      'The adopted production worker observation boundary.',
     ),
     models: unreadable(
       'NOT_CONNECTED',
-      'Provider profiles are configuration this surface has no adopted protocol to read.',
+      'The production worker observation adapter is adopted; this baseline acquired no live provider telemetry.',
       LATER_PHASE,
     ),
     knowledge: unreadable(
       'NOT_CONNECTED',
-      'Governed knowledge is merged with retrieval disabled, and is unreadable from here.',
+      'Governed knowledge posture is observable through the production worker boundary; this baseline acquired no live worker observation.',
       LATER_PHASE,
     ),
     evaluations: unreadable(
@@ -712,14 +706,13 @@ export function baselineSections(): Sections {
     coreSync: { ...BASELINE_CORE_SYNC, items: [...BASELINE_CORE_SYNC.items] },
     businessAnalytics: unreadable(
       'NOT_CONNECTED',
-      'Business analytics are QuickFurno Core truth, and Core is not connected.',
-      'QuickFurno Core, once a read protocol is adopted and authenticated.',
+      'Business analytics are QuickFurno Core truth. The signed operator snapshot is adopted; this baseline acquired no live observation.',
+      'The adopted signed QuickFurno operator snapshot.',
     ),
     coreAutomationExecution: unreadable(
       'NOT_CONNECTED',
-      'QuickFurno Core Automation executes approved intents. Jarvis OS has no adopted protocol to read its state.',
-      'The real Core-to-QuickFurno Core Automation execution transport, which is not implemented. QFJ-P09.02 merged only ' +
-        'the test-only validation boundary.',
+      'Aggregate automation execution state is readable through the signed QuickFurno operator snapshot; this baseline acquired no live observation.',
+      'QuickFurno Core operator observation for aggregate execution state; execution authority remains outside Jarvis OS.',
     ),
   };
 }

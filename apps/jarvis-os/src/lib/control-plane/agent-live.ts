@@ -4,6 +4,7 @@ import { isReadable } from './types';
 const WORKLOAD_ID: Readonly<Partial<Record<AgentId, string>>> = Object.freeze({
   riya: 'riya',
   anisha: 'anisha',
+  aarohi: 'aarohi',
 });
 
 export function agentOperationalMetrics(
@@ -29,7 +30,8 @@ export function agentOperationalMetrics(
 
   const assigned = workload.items.find((item) => item.id === workloadId)?.value ?? 0;
   const control = plane.conversationControl();
-  const agentLabel = agentId === 'riya' ? 'Riya' : 'Anisha';
+  const agentLabel =
+    agentId === 'riya' ? 'Riya' : agentId === 'anisha' ? 'Anisha' : 'Aarohi';
   const metrics: MetricSummary[] = [
     {
       id: agentId + '-assigned',

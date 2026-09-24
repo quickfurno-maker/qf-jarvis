@@ -159,6 +159,39 @@ describe('the snapshot builder', () => {
     expect(snapshot.source.liveOperationalData).toBe(false);
   });
 
+  it('removes the static zero-integration claim when the signed Core source is observed', () => {
+    const at = '2026-09-25T00:00:00.000Z';
+    const snapshot = buildControlPlaneSnapshot({
+      generatedAt: at,
+      requestStartedAt: at,
+      collected: [
+        {
+          descriptor: {
+            id: 'quickfurno-operator-observation',
+            label: 'QuickFurno operator observation',
+            observedReason: 'Observed through the signed read-only Core boundary.',
+            owns: ['businessAnalytics'],
+            timeoutMs: 1000,
+            acquire: () => ({ status: 'UNAVAILABLE', reason: 'SOURCE_UNREACHABLE' }),
+          },
+          result: {
+            status: 'OBSERVED',
+            observedAt: at,
+            sections: { businessAnalytics: { items: [] } },
+          },
+        },
+      ],
+    });
+
+    expect(snapshot.source.liveOperationalData).toBe(true);
+    expect(snapshot.system.find((component) => component.id === 'quickfurno-core')?.state).toBe(
+      'AVAILABLE',
+    );
+    expect(snapshot.sections.headlineMetrics.items.some((item) => item.id === 'live-integrations')).toBe(
+      false,
+    );
+  });
+
   it('moves generatedAt without moving source freshness', () => {
     const early = buildControlPlaneSnapshot({ generatedAt: '2020-01-01T00:00:00.000Z' });
     const late = buildControlPlaneSnapshot({ generatedAt: '2030-01-01T00:00:00.000Z' });

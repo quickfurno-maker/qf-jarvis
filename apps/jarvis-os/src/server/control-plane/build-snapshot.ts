@@ -143,6 +143,20 @@ function buildSharedCore(request: SnapshotRequest): SharedSnapshotCore {
     : { kind: 'REPOSITORY_BASELINE', freshness: 'BUILD_DECLARATION', liveOperationalData: false };
 
   const observed = new Set(composed.observedSourceIds);
+  let sections = composed.sections;
+  if (
+    observed.has('quickfurno-operator-observation') &&
+    sections.headlineMetrics.availability === 'STATIC_BASELINE'
+  ) {
+    sections = {
+      ...sections,
+      headlineMetrics: {
+        ...sections.headlineMetrics,
+        items: sections.headlineMetrics.items.filter((item) => item.id !== 'live-integrations'),
+      },
+    };
+  }
+
   const system = BASELINE_SYSTEM.map((component) => {
     if (observed.has('quickfurno-operator-observation')) {
       if (component.id === 'quickfurno-core') {
@@ -208,7 +222,7 @@ function buildSharedCore(request: SnapshotRequest): SharedSnapshotCore {
       agents: BASELINE_AGENTS.map((agent) => ({ ...agent, notes: [...agent.notes] })),
       roadmap: [...BASELINE_ROADMAP],
     },
-    sections: composed.sections,
+    sections,
   };
 }
 

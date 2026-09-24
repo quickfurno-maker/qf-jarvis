@@ -643,14 +643,17 @@ describe('the Aarohi acquisition surface stays a read surface', () => {
     }
   });
 
-  it('states the two bridges that were deliberately NOT built', async () => {
+  it('states the Aarohi bridges that remain deliberately unbuilt', async () => {
     const readiness = (await controlPlane()).aarohiReadiness();
     const blockers = readiness.items.filter((row) => row.kind === 'blocker');
     const ids = blockers.map((row) => row.id);
     // ADR-0127 refused both. A surface that simply omitted them would read as complete.
     expect(ids).toContain('blocker-post-registration-continuation');
     expect(ids).toContain('blocker-awaiting-core-activation-bridge');
-    expect(ids).toContain('blocker-core-read-protocol');
+    // The signed QuickFurno operator read protocol now exists. Keeping its old blocker would make
+    // the dashboard contradict the reviewed runtime adapter while still failing to prove the two
+    // acquisition-specific boundaries above.
+    expect(ids).not.toContain('blocker-core-read-protocol');
     for (const blocker of blockers) {
       expect(blocker.state, blocker.id).not.toBe('AVAILABLE');
       expect(blocker.state, blocker.id).not.toBe('HEALTHY');
