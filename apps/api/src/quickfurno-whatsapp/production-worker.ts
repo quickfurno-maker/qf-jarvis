@@ -36,18 +36,13 @@ import { createJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
 import { RIYA_PRODUCTION_PROMPTS } from '@qf-jarvis/riya-prompts';
 
 import { createFileGroqCredentialBinding } from '../secrets/file-groq-credential-binding.js';
-import { createJf6RiyaServiceBoundary } from '../jf6-private-process/create-riya-service-boundary.js';
-import { createRiyaCustomerRuntimeComposition } from '../riya-customer-orchestration/create-riya-customer-runtime.js';
 import {
   createQuickFurnoWhatsAppAuthorityReader,
   createQuickFurnoWhatsAppMaterialReader,
   createQuickFurnoWhatsAppReplyWriter,
 } from './quickfurno-http.js';
 import { createQuickFurnoWorkerKillSwitch } from './production-kill-switch.js';
-import {
-  quickFurnoWorkerAvailabilityHttpPost,
-  quickFurnoWorkerHttpPost,
-} from './production-network.js';
+import { quickFurnoWorkerHttpPost } from './production-network.js';
 import { createQuickFurnoWhatsAppAuthorityStatePort } from './authority-state-port.js';
 import { createQuickFurnoWhatsAppSpecialistRuntime } from './specialist-runtime.js';
 import {
@@ -270,27 +265,13 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       },
     });
 
-    const riyaService = createJf6RiyaServiceBoundary({
-      pool,
-      runtime,
-      runtimeId: config.runtimeId,
-      maxConcurrentTextTurns: config.maxConcurrentTextTurns,
-      availability: {
-        baseUrl: config.quickfurno.baseUrl,
-        keyId: config.quickfurno.keyId,
-        privateKeyPem: config.quickfurno.privateKeyPem,
-        clock: systemInstant,
-        requestId: randomUUID,
-        httpPost: quickFurnoWorkerAvailabilityHttpPost,
-        timeoutMs: config.quickfurno.timeoutMs,
-      },
-    });
-    const riya = createRiyaCustomerRuntimeComposition({
-      conversationService: riyaService,
-    }).customerTurnRunner;
+    // WhatsApp intentionally does not compose the durable Riya continuity/turn stores. QuickFurno
+    // already owns the durable inbound message, conversation revision, consent and takeover state;
+    // a second Jarvis-owned client-continuity store remains disabled until its lifecycle policy is
+    // separately approved. The specialist runtime therefore executes one governed proposal per
+    // QuickFurno-bound turn for RIYA/ANISHA/AAROHI alike.
     const specialistRuntime = createQuickFurnoWhatsAppSpecialistRuntime({
       runtimeId: config.runtimeId,
-      riya,
       jarvisRuntime: runtime,
     });
     const spool = await createFileDurableTurnSpool(config.spoolDirectory);

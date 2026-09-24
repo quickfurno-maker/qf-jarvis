@@ -49,7 +49,6 @@ function source(relative: string): string {
 function validConfig(root: string) {
   const sealFile = join(root, 'seal.json');
   const keyFile = join(root, 'groq.key');
-  const decisionFile = join(root, 'riya-persistence-decision.json');
   const caFile = join(root, 'postgres-ca.pem');
   const signingFile = join(root, 'quickfurno-signing.key');
   const embeddingFile = join(root, 'embedding.key');
@@ -58,18 +57,6 @@ function validConfig(root: string) {
   const operationalSnapshotFile = join(root, 'worker-observation.json');
   writeFileSync(sealFile, '{}');
   writeFileSync(keyFile, 'synthetic-not-read-by-config-loader');
-  writeFileSync(
-    decisionFile,
-    JSON.stringify({
-      protocol: 'qfj.riya-managed-persistence-owner-decision.v1',
-      status: 'APPROVED',
-      jarvisRevision: 'a'.repeat(40),
-      decisionRef: 'decision.synthetic.test',
-      continuityPolicyRef: 'policy.synthetic.continuity',
-      logicalTurnPolicyRef: 'policy.synthetic.logical-turn',
-      approvedAt: '2026-09-23T00:00:00.000Z',
-    }),
-  );
   writeFileSync(caFile, SYNTHETIC_CA_PEM);
   writeFileSync(signingFile, 'synthetic-signing-key-not-used-by-loader-test');
   writeFileSync(embeddingFile, 'synthetic-embedding-token-not-used-by-loader-test');
@@ -77,7 +64,6 @@ function validConfig(root: string) {
     revision: 'a'.repeat(40),
     deploymentMode: 'SINGLE_OWNER',
     sealFile,
-    riyaPersistenceDecisionFile: decisionFile,
     groqCredentialReference: 'groq.qfj.production.v1',
     groqCredentialFile: keyFile,
     database: {
@@ -114,7 +100,6 @@ function validConfig(root: string) {
     policyRevision: 'policy.quickfurno.production.v1',
     idlePollMs: 500,
     staleProcessingMs: 300000,
-    maxConcurrentTextTurns: 1,
   };
 }
 
@@ -126,7 +111,6 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     const config = loadQuickFurnoWhatsAppProductionWorkerConfig(path);
     expect(config.revision).toBe('a'.repeat(40));
     expect(config.database.tls.mode).toBe('verify-full');
-    expect(config.riyaPersistenceDecision.jarvisRevision).toBe('a'.repeat(40));
     expect(config.knowledge.revision).toBe('knowledge.quickfurno.release.1');
     expect(config.knowledge.embedding.bearerToken).toBe(
       'synthetic-embedding-token-not-used-by-loader-test',
@@ -154,23 +138,17 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     );
   });
 
-  it('refuses a persistence decision that is not bound to the exact Jarvis revision', () => {
+  it('refuses an obsolete managed-Riya persistence field in WhatsApp production config', () => {
     const root = tempRoot();
     const path = join(root, 'worker.json');
     const config = validConfig(root);
     writeFileSync(
-      config.riyaPersistenceDecisionFile,
+      path,
       JSON.stringify({
-        protocol: 'qfj.riya-managed-persistence-owner-decision.v1',
-        status: 'APPROVED',
-        jarvisRevision: 'b'.repeat(40),
-        decisionRef: 'decision.synthetic.test',
-        continuityPolicyRef: 'policy.synthetic.continuity',
-        logicalTurnPolicyRef: 'policy.synthetic.logical-turn',
-        approvedAt: '2026-09-23T00:00:00.000Z',
+        ...config,
+        riyaPersistenceDecisionFile: join(root, 'must-not-be-required.json'),
       }),
     );
-    writeFileSync(path, JSON.stringify(config));
     expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
       'production-worker-config-invalid',
     );
@@ -256,6 +234,10 @@ describe('QuickFurno WhatsApp production worker containment', () => {
     expect(worker).toContain('createJarvisRuntime');
     expect(worker).not.toContain('composeDurableJarvisRuntime');
     expect(worker).not.toContain('createPostgresConversationStateAdapter');
+    expect(worker).not.toContain('createJf6RiyaServiceBoundary');
+    expect(worker).not.toContain('createPostgresRiyaConversationContinuityStore');
+    expect(worker).not.toContain('createPostgresRiyaTurnCoordinator');
+    expect(worker).not.toContain('riyaPersistenceDecision');
     expect(worker).not.toContain('.provision(');
   });
 
