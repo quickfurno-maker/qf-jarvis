@@ -53,12 +53,18 @@ importers:
       '@qf-jarvis/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@qf-jarvis/core-data-tools':
+        specifier: workspace:*
+        version: link:../../packages/core-data-tools
       '@qf-jarvis/core-decision-adapter':
         specifier: workspace:*
         version: link:../../packages/core-decision-adapter
       '@qf-jarvis/core-decision-http-transport':
         specifier: workspace:*
         version: link:../../packages/core-decision-http-transport
+      '@qf-jarvis/core-riya-intake':
+        specifier: workspace:*
+        version: link:../../packages/core-riya-intake
       '@qf-jarvis/core-service-availability-read':
         specifier: workspace:*
         version: link:../../packages/core-service-availability-read
@@ -71,6 +77,9 @@ importers:
       '@qf-jarvis/governed-knowledge':
         specifier: workspace:*
         version: link:../../packages/governed-knowledge
+      '@qf-jarvis/governed-memory-foundation':
+        specifier: workspace:*
+        version: link:../../packages/governed-memory-foundation
       '@qf-jarvis/groq-staging-smoke':
         specifier: workspace:*
         version: link:../../packages/groq-staging-smoke
@@ -86,9 +95,15 @@ importers:
       '@qf-jarvis/jarvis-v1-provider-certification-live':
         specifier: workspace:*
         version: link:../../packages/jarvis-v1-provider-certification-live
+      '@qf-jarvis/knowledge-freshness':
+        specifier: workspace:*
+        version: link:../../packages/knowledge-freshness
       '@qf-jarvis/knowledge-index':
         specifier: workspace:*
         version: link:../../packages/knowledge-index
+      '@qf-jarvis/knowledge-ingestion':
+        specifier: workspace:*
+        version: link:../../packages/knowledge-ingestion
       '@qf-jarvis/model-evaluation':
         specifier: workspace:*
         version: link:../../packages/model-evaluation
@@ -110,6 +125,9 @@ importers:
       '@qf-jarvis/postgres-conversation-state':
         specifier: workspace:*
         version: link:../../packages/postgres-conversation-state
+      '@qf-jarvis/postgres-governed-memory-store':
+        specifier: workspace:*
+        version: link:../../packages/postgres-governed-memory-store
       '@qf-jarvis/postgres-knowledge-index':
         specifier: workspace:*
         version: link:../../packages/postgres-knowledge-index
@@ -225,12 +243,18 @@ importers:
       '@qf-jarvis/control-plane-read-contract':
         specifier: workspace:*
         version: link:../../packages/control-plane-read-contract
+      '@qf-jarvis/durable-orchestration-contracts':
+        specifier: workspace:*
+        version: link:../../packages/durable-orchestration-contracts
       '@qf-jarvis/event-backbone':
         specifier: workspace:*
         version: link:../../packages/event-backbone
       '@qf-jarvis/execution-intent-runtime':
         specifier: workspace:*
         version: link:../../packages/execution-intent-runtime
+      '@qf-jarvis/jao-action-registry':
+        specifier: workspace:*
+        version: link:../../packages/jao-action-registry
       '@qf-jarvis/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway
@@ -360,6 +384,15 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/core-data-tools:
+    dependencies:
+      '@qf-jarvis/core-riya-intake':
+        specifier: workspace:*
+        version: link:../core-riya-intake
+      '@qf-jarvis/core-service-availability-read':
+        specifier: workspace:*
+        version: link:../core-service-availability-read
+
   packages/core-decision-adapter:
     dependencies:
       '@qf-jarvis/agent-runtime':
@@ -471,6 +504,12 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/governed-memory-foundation:
+    dependencies:
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/groq-staging-smoke:
     dependencies:
       '@qf-jarvis/model-gateway':
@@ -479,6 +518,8 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/jao-action-registry: {}
 
   packages/jarvis-runtime:
     dependencies:
@@ -588,6 +629,8 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/knowledge-freshness: {}
 
   packages/knowledge-index:
     dependencies:
@@ -705,6 +748,22 @@ importers:
       '@qf-jarvis/event-backbone':
         specifier: workspace:*
         version: link:../event-backbone
+      '@types/pg':
+        specifier: 8.20.0
+        version: 8.20.0
+
+  packages/postgres-governed-memory-store:
+    dependencies:
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@qf-jarvis/governed-memory-foundation':
+        specifier: workspace:*
+        version: link:../governed-memory-foundation
+      pg:
+        specifier: 8.22.0
+        version: 8.22.0
+    devDependencies:
       '@types/pg':
         specifier: 8.20.0
         version: 8.20.0

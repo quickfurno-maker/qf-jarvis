@@ -31,6 +31,11 @@
  * provisions no conversation. No consent, approval, recommendation, operator API or transport.
  */
 import { closeDatabasePool, createDatabasePool } from '@qf-jarvis/event-backbone';
+import {
+  createGovernedMemoryRuntime,
+  type GovernedMemoryPolicy,
+  type GovernedMemoryRuntime,
+} from '@qf-jarvis/governed-memory-foundation';
 import type { DatabaseConfig, DatabasePool } from '@qf-jarvis/event-backbone';
 import { createJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
 import type {
@@ -39,6 +44,7 @@ import type {
   RiyaConversationEvolutionJarvisRuntime,
 } from '@qf-jarvis/jarvis-runtime';
 import { createPostgresConversationStateAdapter } from '@qf-jarvis/postgres-conversation-state';
+import { createPostgresGovernedMemoryStore } from '@qf-jarvis/postgres-governed-memory-store';
 
 /**
  * The B3 application provenance reference.
@@ -82,6 +88,25 @@ export interface DurableJarvisRuntimeLifecycle {
  * not even on failure: closing something you did not create is how one subsystem's error becomes
  * another's outage.
  */
+/**
+ * Compose governed long-term memory over the SAME caller-owned pool as the durable runtime.
+ *
+ * The default engineering policy stays durable-write disabled. Supplying the store even while
+ * disabled is deliberate: erasure/invalidation must remain possible for previously persisted
+ * derived memory after an operator turns memory off. This helper applies no migration and reads no
+ * environment. Enabling durable writes still requires an explicit owner-approved lifecycle policy.
+ */
+export function composeGovernedMemoryRuntime(input: {
+  readonly pool: DatabasePool;
+  readonly policy?: GovernedMemoryPolicy;
+}): GovernedMemoryRuntime {
+  const store = createPostgresGovernedMemoryStore(input.pool);
+  return createGovernedMemoryRuntime({
+    ...(input.policy === undefined ? {} : { policy: input.policy }),
+    store,
+  });
+}
+
 export async function composeDurableJarvisRuntime(input: {
   readonly pool: DatabasePool;
   readonly runtimeConfig: DurableJarvisRuntimeConfig;

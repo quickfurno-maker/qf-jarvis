@@ -21,7 +21,17 @@ on:
       - 'packages/knowledge-ingestion/**'
       - 'packages/postgres-knowledge-index/**'
       - 'packages/rag-provisioning/**'
+      - 'packages/governed-memory-foundation/**'
+      - 'packages/postgres-governed-memory-store/**'
+      - 'packages/core-data-tools/**'
+      - 'packages/knowledge-freshness/**'
+      - 'packages/jao-action-registry/**'
       - 'packages/jarvis-runtime/**'
+      - 'apps/api/src/jf6-private-process/create-core-data-tools.ts'
+      - 'apps/api/src/jf6-private-process/create-riya-service-boundary.ts'
+      - 'apps/api/src/knowledge-freshness/**'
+      - 'apps/api/src/runtime/durable-jarvis-runtime.ts'
+      - 'apps/worker/src/jao/**'
       - 'apps/api/src/composition/jf5b-**'
       - 'apps/api/src/tests/jf5b-**'
       - 'apps/api/src/quickfurno-whatsapp/production-seal-binding.ts'
@@ -65,6 +75,18 @@ jobs:
           pnpm exec vitest run
           packages/model-evaluation/src/tests
           packages/knowledge-index/src/tests/quality.test.ts
+          packages/governed-memory-foundation/src/tests
+          packages/postgres-governed-memory-store/src/tests
+          packages/core-data-tools/src/tests
+          packages/knowledge-freshness/src/tests
+          packages/jao-action-registry/src/tests
+          apps/api/src/tests/jf6-core-data-tools.test.ts
+          apps/api/src/tests/jf6-riya-structured-action-boundary.test.ts
+          apps/api/src/tests/governed-memory-runtime.test.ts
+          apps/api/src/tests/knowledge-freshness-coordinator.test.ts
+          apps/api/src/tests/knowledge-freshness-manifest-source.test.ts
+          apps/worker/src/tests/jao-action-registry-binding.test.ts
+          apps/worker/src/tests/jao-maturity-gate.test.ts
           packages/jarvis-runtime/src/tests/hybrid-grounding.test.ts
           packages/jarvis-runtime/src/tests/jf4-three-agent-rag.test.ts
           packages/jarvis-runtime/src/tests/fail-closed.test.ts

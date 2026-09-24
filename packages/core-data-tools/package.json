@@ -1,0 +1,23 @@
+{
+  "name": "@qf-jarvis/core-data-tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Read-only Jarvis tool registry over existing QuickFurno Core-owned ports. It creates no HTTP/database adapter and cannot mutate Core.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/core-riya-intake": "workspace:*",
+    "@qf-jarvis/core-service-availability-read": "workspace:*"
+  }
+}

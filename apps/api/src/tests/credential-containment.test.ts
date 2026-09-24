@@ -159,6 +159,8 @@ const DESIGNATED_TIMER_MODULE = 'src/shadow/create-controlled-shadow-runner.ts';
 const DESIGNATED_DATABASE_MODULE = 'src/runtime/durable-jarvis-runtime.ts';
 const JF6_RIYA_SERVICE_COMPOSITION_MODULE =
   'src/jf6-private-process/create-riya-service-boundary.ts';
+const KNOWLEDGE_FRESHNESS_COMPOSITION_MODULE =
+  'src/knowledge-freshness/create-knowledge-freshness-coordinator.ts';
 const isDesignatedDatabaseModule = (f: string): boolean =>
   normalise(f).endsWith(`/${DESIGNATED_DATABASE_MODULE}`);
 const isJf6RiyaServiceComposition = (f: string): boolean =>
@@ -474,6 +476,7 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       if (
         !isDesignatedDatabaseModule(file) &&
         !isJf6RiyaServiceComposition(file) &&
+        normalise(file).split('/apps/api/')[1] !== KNOWLEDGE_FRESHNESS_COMPOSITION_MODULE &&
         !isDesignatedQueueTypeModule(file) &&
         !isJf7File(file, [JF7_CONFIG, JF7_WORKER])
       ) {
@@ -482,7 +485,7 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     }
   });
 
-  it('exactly five production modules name a database, with only reviewed config/pool seams', () => {
+  it('exactly six production modules name a database, with only reviewed config/pool seams', () => {
     const touching = productionFiles().filter((file) => {
       const code = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
       return (
@@ -497,6 +500,7 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       [
         DESIGNATED_DATABASE_MODULE,
         JF6_RIYA_SERVICE_COMPOSITION_MODULE,
+        KNOWLEDGE_FRESHNESS_COMPOSITION_MODULE,
         DESIGNATED_QUEUE_TYPE_MODULE,
         JF7_CONFIG,
         JF7_WORKER,
@@ -653,10 +657,15 @@ describe('the staging smoke stays out of the production boundary', () => {
       //   jarvis-v1-provider-certification-live  the evaluation-only operator library
       //   model-reply-adapter          the gateway invoker and prompt-binding TYPES
       //   riya-prompts                 her three task-class variants, for her dedicated capability
+      '@qf-jarvis/core-data-tools',
       '@qf-jarvis/core-decision-adapter',
       // JF-6 prep: the private process composes the signed QuickFurno Core transport through the
       // existing adapter. Workspace-only dependency; no new third-party resolution and no provider.
       '@qf-jarvis/core-decision-http-transport',
+      // ADR-0161: the structured Riya application boundary accepts the canonical Core-owned intake
+      // port as a TYPE. The business mapping remains injected; this dependency grants no endpoint,
+      // credential or Core mutation authority.
+      '@qf-jarvis/core-riya-intake',
       '@qf-jarvis/core-service-availability-read',
       // ADR-0154: the API owns only the content-minimized Temporal client contract. Workflow state
       // and execution authority remain outside this app boundary.
@@ -669,6 +678,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       // are workspace packages already in this repository, and neither is a knowledge authority
       // here -- the authority stays inside governed-knowledge, reached through JF-3.
       '@qf-jarvis/governed-knowledge',
+      // ADR-0161: the durable composition can construct the policy-gated memory runtime, while the
+      // default policy still refuses durable reads/writes.
+      '@qf-jarvis/governed-memory-foundation',
       '@qf-jarvis/groq-staging-smoke',
       '@qf-jarvis/jarvis-runtime',
       // JF-7 serving consumes immutable release/profile facts and a finished owner seal. The live
@@ -676,10 +688,14 @@ describe('the staging smoke stays out of the production boundary', () => {
       '@qf-jarvis/jarvis-v1-production-profile',
       '@qf-jarvis/jarvis-v1-production-seal',
       '@qf-jarvis/jarvis-v1-provider-certification-live',
+      // ADR-0161: deterministic freshness orchestration uses the authority-free fingerprint engine
+      // and the existing ingestion normalizer. It can only build a sealed inactive candidate.
+      '@qf-jarvis/knowledge-freshness',
       // ADR-0159 production RAG composition: the API worker owns the hybrid retriever, the
       // provider-neutral embedding adapter, and the PostgreSQL implementation. All three are existing
       // workspace packages and add no third-party SDK/client dependency to the serving boundary.
       '@qf-jarvis/knowledge-index',
+      '@qf-jarvis/knowledge-ingestion',
       '@qf-jarvis/model-evaluation',
       '@qf-jarvis/model-gateway',
       '@qf-jarvis/model-gateway-composition',
@@ -687,6 +703,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       '@qf-jarvis/openai-compatible-embedding-adapter',
       '@qf-jarvis/postgres-approval-queue',
       '@qf-jarvis/postgres-conversation-state',
+      // ADR-0161: the same caller-owned pool may back derived, non-authoritative memory. The schema
+      // remains separately migration-gated and importing the adapter connects to nothing.
+      '@qf-jarvis/postgres-governed-memory-store',
       '@qf-jarvis/postgres-knowledge-index',
       // JF-6 serving composition: these are the existing durable implementations of the two ports
       // Riya already requires. They receive the caller-owned pool and add no environment authority.
