@@ -11,6 +11,11 @@ on:
       - 'packages/knowledge-index/**'
       - 'packages/postgres-knowledge-index/**'
       - 'packages/model-evaluation/**'
+      - 'packages/model-intelligence-control/**'
+      - 'packages/semantic-context-engine/**'
+      - 'packages/multimodal-turn-planning/**'
+      - 'packages/governed-agent-handoff/**'
+      - 'packages/digital-twin-simulation/**'
       - 'apps/quickfurno-gateway/**'
       - 'apps/api/src/quickfurno-whatsapp/**'
       - 'apps/api/src/tests/jf5b-**'
@@ -93,6 +98,11 @@ jobs:
           pnpm exec vitest run
           packages/model-evaluation/src/tests/red-team-evidence.test.ts
           packages/knowledge-index/src/tests/hybrid.test.ts
+          packages/model-intelligence-control/src/tests
+          packages/semantic-context-engine/src/tests
+          packages/multimodal-turn-planning/src/tests
+          packages/governed-agent-handoff/src/tests
+          packages/digital-twin-simulation/src/tests
           packages/jarvis-runtime/src/tests/fail-closed.test.ts
           packages/jarvis-runtime/src/tests/jf4-three-agent-rag.test.ts
           apps/api/src/tests/jf4-shared-retrieval-port.test.ts
