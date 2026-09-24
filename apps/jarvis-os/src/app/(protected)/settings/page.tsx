@@ -38,7 +38,7 @@ export default async function SettingsPage() {
               <Entry label="Environment" value={ENVIRONMENT_LABEL} />
               <Entry label="Source" value={provenance.kind.replaceAll('_', ' ')} />
               <Entry label="Live operational data" value={provenance.liveOperationalData ? 'YES' : 'NO'} />
-              <Entry label="Web session" value={bootstrap.client.webSession ? 'ACTIVE' : 'OFF'} />
+              <Entry label="Web session" value="ACTIVE" />
               <Entry label="Native mobile session" value={bootstrap.client.mobileDeviceSession ? 'ACTIVE' : 'NEXT'} />
             </dl>
           </Panel>
