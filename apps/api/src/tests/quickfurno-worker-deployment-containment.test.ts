@@ -40,7 +40,6 @@ describe('QuickFurno production worker deployment containment', () => {
       '/srv/qf-jarvis/secrets/qf-jarvis-whatsapp-worker.json',
       '/srv/qf-jarvis/secrets/groq-production.key',
       '/srv/qf-jarvis/seals/jf5c-production-seal.json',
-      '/srv/qf-jarvis/secrets/postgres-ca.pem',
       '/srv/qf-jarvis/state/quickfurno-worker-control',
     ]) {
       expect(compose).toContain(`source: ${source}`);
@@ -69,9 +68,11 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(example).toContain('"killSwitchFile": "/var/run/qfj-control/DISABLE_MODEL"');
   });
 
-  it('production example requires verify-full database TLS and the mounted final seal', () => {
-    expect(example).toContain('"mode": "verify-full"');
-    expect(example).toContain('"caFile": "/run/secrets/postgres-ca.pem"');
+  it('production example starts with knowledge disabled and still requires the mounted final seal', () => {
+    expect(example).toContain('"knowledge": {');
+    expect(example).toContain('"mode": "DISABLED"');
+    expect(example).not.toContain('"database":');
+    expect(example).not.toContain('postgres-ca.pem');
     expect(example).toContain('"sealFile": "/run/secrets/jf5c-production-seal.json"');
     expect(example).toContain('"groqCredentialFile": "/run/secrets/groq-production.key"');
   });

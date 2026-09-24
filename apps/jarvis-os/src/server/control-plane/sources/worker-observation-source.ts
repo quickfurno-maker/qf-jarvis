@@ -83,8 +83,12 @@ export function createWorkerObservationReadSource(filePath: string): ReadSourceD
 
       const health = stateOf(observation.state);
       const slo = evaluateWorkerSlo(observation, INITIAL_WORKER_SLO_POLICY_V1);
+      const knowledgeDisabled =
+        observation.protocol === 'qfj.quickfurno-worker-observation.v3' &&
+        observation.knowledge.mode === 'DISABLED';
       const usageItems =
-        observation.protocol === 'qfj.quickfurno-worker-observation.v2'
+        observation.protocol === 'qfj.quickfurno-worker-observation.v2' ||
+        observation.protocol === 'qfj.quickfurno-worker-observation.v3'
           ? [
               {
                 id: 'model-availability',
@@ -226,11 +230,12 @@ export function createWorkerObservationReadSource(filePath: string): ReadSourceD
           items: [
             {
               id: 'active-governed-knowledge',
-              label: 'Active governed knowledge',
+              label: 'Governed knowledge',
               owner: 'QF Jarvis',
-              state: health,
-              detail:
-                'Live worker observation confirms an exact active knowledge revision is bound.',
+              state: knowledgeDisabled ? ('DISABLED' as const) : health,
+              detail: knowledgeDisabled
+                ? 'Governed knowledge is intentionally disabled; this worker makes no retrieval or embedding calls.'
+                : 'Live worker observation confirms an exact active knowledge revision is bound.',
             },
           ],
         },

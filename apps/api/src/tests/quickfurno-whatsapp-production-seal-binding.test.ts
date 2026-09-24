@@ -22,7 +22,7 @@ const HEAD = 'd'.repeat(40);
 const REVIEW_DIGEST = 'c'.repeat(64);
 const KNOWLEDGE_REVISION = 'knowledge.quickfurno.release.1';
 
-function buildSeal() {
+function buildSeal(knowledgeRevision: string | null = KNOWLEDGE_REVISION) {
   const manifest = createJf5bCoverageManifest({
     manifestVersion: 2,
     providerMode: JF5B_PROVIDER_MODE,
@@ -46,7 +46,7 @@ function buildSeal() {
         evaluationSuiteVersion: JF5B_EVALUATION_SUITE_VERSION,
         redTeamSuiteId: JF5B_RED_TEAM_SUITE_ID,
         fixtureManifestId: JF5B_FIXTURE_MANIFEST_ID,
-        knowledgeRevision: KNOWLEDGE_REVISION,
+        ...(knowledgeRevision === null ? {} : { knowledgeRevision }),
         liveRunId: 'jf5b.run.worker.test',
         caseSetDigest: String(index + 1).repeat(64),
         resultDigest: String(index + 4).repeat(64),
@@ -115,6 +115,23 @@ describe('QuickFurno production seal binding', () => {
     expect(result.binding.riyaGroundedReplyPromptBinding).toBe(
       result.binding.promptBindings.CLIENT,
     );
+  });
+
+  it('accepts an explicitly unbound seal for a deployment with knowledge disabled', () => {
+    const result = bindJf5cSealForProduction(buildSeal(null), HEAD, null);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.binding.evaluationEvidence).toHaveLength(3);
+    expect(
+      result.binding.evaluationEvidence.every((one) => one.binding.knowledgeRevision === undefined),
+    ).toBe(true);
+  });
+
+  it('refuses a knowledge-bound seal for an explicitly knowledge-disabled deployment', () => {
+    expect(bindJf5cSealForProduction(buildSeal(), HEAD, null)).toEqual({
+      ok: false,
+      reason: 'knowledge-revision-mismatch',
+    });
   });
 
   it('refuses a seal certified for a different governed knowledge revision', () => {

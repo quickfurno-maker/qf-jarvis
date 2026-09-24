@@ -120,11 +120,12 @@ function stringArray(value: unknown): readonly string[] | null {
 export function bindJf5cSealForProduction(
   value: unknown,
   expectedHeadSha: string,
-  expectedKnowledgeRevision?: string,
+  expectedKnowledgeRevision?: string | null,
 ): ProductionSealBindingResult {
   if (!SHA40.test(expectedHeadSha) || !record(value)) return refusal('seal-invalid');
   if (
     expectedKnowledgeRevision !== undefined &&
+    expectedKnowledgeRevision !== null &&
     (!REF.test(expectedKnowledgeRevision) ||
       expectedKnowledgeRevision.toLowerCase() === 'latest' ||
       expectedKnowledgeRevision.includes('*'))
@@ -224,6 +225,11 @@ export function bindJf5cSealForProduction(
 
     const bindingRaw = rawEvidence['binding'];
     const evidenceRelease = releaseFrom(bindingRaw['release']);
+    const knowledgeMismatch =
+      expectedKnowledgeRevision === null
+        ? bindingRaw['knowledgeRevision'] !== undefined
+        : expectedKnowledgeRevision !== undefined &&
+          bindingRaw['knowledgeRevision'] !== expectedKnowledgeRevision;
     if (
       evidenceRelease === null ||
       bindingRaw['capabilityProfileRef'] !== JARVIS_V1_PRODUCTION_CAPABILITY_PROFILE_REF ||
@@ -232,11 +238,9 @@ export function bindJf5cSealForProduction(
       !Number.isSafeInteger(bindingRaw['promptVersion']) ||
       typeof bindingRaw['promptDigest'] !== 'string' ||
       !SHA256.test(bindingRaw['promptDigest']) ||
-      (expectedKnowledgeRevision !== undefined &&
-        bindingRaw['knowledgeRevision'] !== expectedKnowledgeRevision)
+      knowledgeMismatch
     ) {
-      return expectedKnowledgeRevision !== undefined &&
-        bindingRaw['knowledgeRevision'] !== expectedKnowledgeRevision
+      return knowledgeMismatch
         ? refusal('knowledge-revision-mismatch')
         : refusal('release-mismatch');
     }

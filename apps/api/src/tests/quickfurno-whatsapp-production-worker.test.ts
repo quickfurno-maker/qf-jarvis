@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -77,6 +77,7 @@ function validConfig(root: string) {
       timeoutMs: 5000,
     },
     knowledge: {
+      mode: 'HYBRID',
       revision: 'knowledge.quickfurno.release.1',
       embedding: {
         executionClass: 'HOSTED',
@@ -110,13 +111,56 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     writeFileSync(path, JSON.stringify(validConfig(root)));
     const config = loadQuickFurnoWhatsAppProductionWorkerConfig(path);
     expect(config.revision).toBe('a'.repeat(40));
-    expect(config.database.tls.mode).toBe('verify-full');
+    expect(config.database?.tls.mode).toBe('verify-full');
+    expect(config.knowledge.mode).toBe('HYBRID');
+    if (config.knowledge.mode !== 'HYBRID') throw new Error('expected hybrid knowledge');
     expect(config.knowledge.revision).toBe('knowledge.quickfurno.release.1');
     expect(config.knowledge.embedding.bearerToken).toBe(
       'synthetic-embedding-token-not-used-by-loader-test',
     );
-    expect(config.database.applicationName).toBe('qf-jarvis-whatsapp-worker');
+    expect(config.database?.applicationName).toBe('qf-jarvis-whatsapp-worker');
     expect(config.seal).toEqual({});
+  });
+
+  it('loads DISABLED knowledge without a database, CA file, embedding endpoint or embedding credential', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const hybrid = validConfig(root);
+    unlinkSync(join(root, 'postgres-ca.pem'));
+    unlinkSync(join(root, 'embedding.key'));
+    const { database: _database, ...withoutDatabase } = hybrid;
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...withoutDatabase,
+        knowledge: { mode: 'DISABLED' },
+      }),
+    );
+
+    const config = loadQuickFurnoWhatsAppProductionWorkerConfig(path);
+    expect(config.database).toBeUndefined();
+    expect(config.knowledge).toEqual({ mode: 'DISABLED' });
+  });
+
+  it('refuses database configuration when knowledge is explicitly DISABLED', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const config = validConfig(root);
+    writeFileSync(path, JSON.stringify({ ...config, knowledge: { mode: 'DISABLED' } }));
+    expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+      'production-worker-config-invalid',
+    );
+  });
+
+  it('refuses HYBRID knowledge when database configuration is absent', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const config = validConfig(root);
+    const { database: _database, ...withoutDatabase } = config;
+    writeFileSync(path, JSON.stringify(withoutDatabase));
+    expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+      'production-worker-config-invalid',
+    );
   });
 
   it('refuses non-loopback plaintext PostgreSQL without leaking the supplied URL', () => {
@@ -220,12 +264,15 @@ describe('QuickFurno WhatsApp production worker containment', () => {
     expect(worker).toContain('allowFallback: false');
   });
 
-  it('binds the exact active hybrid knowledge revision before runtime construction', () => {
+  it('binds hybrid knowledge only inside the explicit HYBRID branch', () => {
+    expect(worker).toContain("config.knowledge.mode === 'HYBRID'");
     expect(worker).toContain('assertPostgresKnowledgeReleaseReady');
     expect(worker).toContain('createPostgresHybridCandidateStore');
     expect(worker).toContain('createHybridKnowledgeRetriever');
-    expect(worker).toContain('agentHybridKnowledge');
-    expect(worker).toContain('knowledgeRevision: config.knowledge.revision');
+    expect(worker).toContain('knowledgeRevision: hybridConfig.revision');
+    expect(worker).toContain(
+      '...(agentHybridKnowledge === undefined ? {} : { agentHybridKnowledge })',
+    );
   });
 
   it('uses live QuickFurno authority rather than PostgreSQL business state', () => {

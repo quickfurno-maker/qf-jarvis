@@ -236,6 +236,8 @@ const ARGV = [
   OUTSIDE,
   '--groq-smoke-config',
   'D:/certification/smoke.json',
+  '--knowledge-mode',
+  'HYBRID',
   '--knowledge-revision',
   'knowledge.quickfurno.certification.test.v1',
 ];
