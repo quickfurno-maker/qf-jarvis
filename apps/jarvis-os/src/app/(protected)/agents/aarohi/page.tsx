@@ -6,6 +6,7 @@ import { Notice, Panel } from '@/components/primitives/Panel';
 import { CapabilityBadge, StatusPill } from '@/components/system/StatusPill';
 import { SectionBody } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
+import { agentOperationalMetrics } from '@/lib/control-plane/agent-live';
 import type { AarohiReadinessKind, AarohiReadinessRow } from '@/lib/control-plane/types';
 
 /**
@@ -47,7 +48,7 @@ export default async function AarohiAgentPage() {
   const readinessSection = plane.aarohiReadiness();
 
   return (
-    <AgentOverview agent={agent}>
+    <AgentOverview agent={agent} metricsSection={agentOperationalMetrics(plane, 'aarohi')}>
       <Notice tone="critical" title="No autonomous outreach exists">
         Aarohi has no runtime, no channel and no credential. It cannot contact a prospect, and it
         could not do so even if a human asked: outreach requires QuickFurno Core authorization, and
@@ -80,8 +81,9 @@ export default async function AarohiAgentPage() {
         Registration assistance is not a registration. Payment follow-up is not a payment, and a
         payment is not an activation. A conversation, a provider receipt, a model reading and
         Aarohi&rsquo;s own case state each establish <strong>nothing</strong> about a QuickFurno
-        business fact. Only Core&rsquo;s authoritative confirmation does, and Core is not connected
-        — so every Core-owned figure reads <em>unknown</em> here, never zero.
+        business fact. Only Core&rsquo;s authoritative confirmation does. The signed Core
+        observation channel can be live while a specific acquisition outcome is still absent, so any
+        unsupported Core-owned figure remains <em>unknown</em> here, never zero.
       </Notice>
 
       <Notice tone="info" title="Aarohi is not Anisha">

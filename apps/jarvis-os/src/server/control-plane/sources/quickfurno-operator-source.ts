@@ -6,6 +6,7 @@ import {
   QUICKFURNO_OPERATOR_REQUEST_PROTOCOL,
   QUICKFURNO_OPERATOR_SIGNING_DOMAIN,
   parseQuickFurnoOperatorObservation,
+  type QuickFurnoOperatorObservation,
 } from '@qf-jarvis/quickfurno-operator-observation-contract';
 
 import { loadCoreReadConfig } from '../../auth/config/loader';
@@ -29,6 +30,7 @@ type OperatorSnapshotRequest = (
 ) => Promise<Pick<Response, 'ok' | 'status' | 'arrayBuffer'>>;
 
 const OWNED_SECTIONS = [
+  'attention',
   'approvalQueue',
   'approvalBreakdown',
   'conversationControl',
@@ -62,6 +64,75 @@ function signingInput(args: {
     args.keyId,
     args.bodyDigest,
   ].join('\n');
+}
+
+type AttentionItems = NonNullable<SectionContributions['attention']>['items'];
+
+function deriveAttention(observation: QuickFurnoOperatorObservation): AttentionItems {
+  const items: AttentionItems[number][] = [];
+  const awaiting = observation.approvalQueue.filter(
+    (approval) => approval.state === 'awaiting-operator',
+  ).length;
+  const takeovers = observation.conversationControl.filter(
+    (conversation) => conversation.humanTakeover,
+  ).length;
+  const paused = observation.conversationControl.filter(
+    (conversation) => conversation.aiPaused,
+  ).length;
+  const failed24h =
+    observation.coreAutomationExecution.find((item) => item.id === 'failed-24h')?.value ?? 0;
+  const uncertain24h =
+    observation.coreAutomationExecution.find((item) => item.id === 'uncertain-24h')?.value ?? 0;
+
+  if (awaiting > 0) {
+    items.push({
+      id: 'core-approvals-awaiting',
+      kind: 'governance',
+      title: `${String(awaiting)} approval request${awaiting === 1 ? '' : 's'} need attention`,
+      context: 'QuickFurno Core reports operator decisions waiting in the governed approval queue.',
+      severity: 'warning',
+    });
+  }
+  if (takeovers > 0) {
+    items.push({
+      id: 'core-human-takeovers',
+      kind: 'capability',
+      title: `${String(takeovers)} conversation${takeovers === 1 ? '' : 's'} under human control`,
+      context: 'QuickFurno Core reports active human takeover state on tracked conversations.',
+      severity: 'warning',
+    });
+  }
+  if (paused > 0) {
+    items.push({
+      id: 'core-ai-paused',
+      kind: 'capability',
+      title: `${String(paused)} AI conversation${paused === 1 ? '' : 's'} paused`,
+      context: 'QuickFurno Core reports AI handling paused on tracked conversations.',
+      severity: 'info',
+    });
+  }
+  if (failed24h > 0) {
+    items.push({
+      id: 'core-automation-failed',
+      kind: 'integration',
+      title: `${String(failed24h)} automation job${failed24h === 1 ? '' : 's'} failed in 24h`,
+      context:
+        'QuickFurno Core reports failed, dead-lettered or cancelled automation work in the last 24 hours.',
+      severity: 'critical',
+    });
+  }
+  if (uncertain24h > 0) {
+    items.push({
+      id: 'core-automation-uncertain',
+      kind: 'integration',
+      title: `${String(uncertain24h)} automation outcome${uncertain24h === 1 ? '' : 's'} uncertain in 24h`,
+      context:
+        'QuickFurno Core reports automation outcomes requiring reconciliation in the last 24 hours.',
+      severity: 'critical',
+    });
+  }
+
+  return items;
 }
 
 export function createQuickFurnoOperatorReadSource(
@@ -159,6 +230,7 @@ export function createQuickFurnoOperatorReadSource(
         }
 
         const sections: SectionContributions = Object.freeze({
+          attention: { items: deriveAttention(observation) },
           approvalQueue: { items: observation.approvalQueue },
           approvalBreakdown: { items: observation.approvalBreakdown },
           conversationControl: { items: observation.conversationControl },

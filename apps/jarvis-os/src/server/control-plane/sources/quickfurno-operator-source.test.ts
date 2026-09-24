@@ -102,16 +102,39 @@ describe('QuickFurno operator read source', () => {
           jsonResponse({
             protocol: 'qfj.quickfurno-operator-observation.v1',
             emittedAt: FIXED_NOW.toISOString(),
-            approvalQueue: [],
+            approvalQueue: [
+              {
+                id: '11111111-1111-4111-8111-111111111111',
+                requestedAction: 'vendor.lead_offer',
+                risk: 'client-or-vendor-facing',
+                requestedAuthority: 'QuickFurno Core',
+                sourceAgent: 'JARVIS',
+                subject: 'vendor',
+                state: 'awaiting-operator',
+              },
+            ],
             approvalBreakdown: [{ id: 'waiting', label: 'Awaiting operator', value: 2 }],
-            conversationControl: [],
+            conversationControl: [
+              {
+                id: '22222222-2222-4222-8222-222222222222',
+                subject: 'masked destination',
+                agent: 'RIYA',
+                humanTakeover: true,
+                aiPaused: false,
+                revision: 3,
+              },
+            ],
             conversationActivity: [
               { label: '10:00Z', value: 2 },
               { label: '12:00Z', value: 4 },
             ],
             agentWorkload: [{ id: 'riya', label: 'Riya', value: 4 }],
             businessAnalytics: [{ id: 'leads', label: 'Total leads', value: 9 }],
-            coreAutomationExecution: [{ id: 'queue', label: 'Queued', value: 1 }],
+            coreAutomationExecution: [
+              { id: 'queue', label: 'Queued', value: 1 },
+              { id: 'failed-24h', label: 'Failed 24h', value: 1 },
+              { id: 'uncertain-24h', label: 'Uncertain 24h', value: 2 },
+            ],
           }),
         );
       },
@@ -119,6 +142,7 @@ describe('QuickFurno operator read source', () => {
 
     const source = createQuickFurnoOperatorReadSource(path, () => FIXED_NOW, request);
     expect(source.owns).toStrictEqual([
+      'attention',
       'approvalQueue',
       'approvalBreakdown',
       'conversationControl',
@@ -131,6 +155,12 @@ describe('QuickFurno operator read source', () => {
     expect(result.status).toBe('OBSERVED');
     if (result.status !== 'OBSERVED') return;
     expect(result.sections.businessAnalytics?.items).toHaveLength(1);
+    expect(result.sections.attention?.items.map((item) => item.id)).toStrictEqual([
+      'core-approvals-awaiting',
+      'core-human-takeovers',
+      'core-automation-failed',
+      'core-automation-uncertain',
+    ]);
     expect(result.sections.headlineMetrics).toBeUndefined();
     expect(result.sections.coreSync).toBeUndefined();
   });
