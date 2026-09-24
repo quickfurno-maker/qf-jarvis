@@ -94,6 +94,29 @@ describe('the production image', () => {
     expect(DOCKERFILE_CODE).toContain('--frozen-lockfile');
   });
 
+  it('copies and builds every framework-neutral Jarvis OS workspace dependency', () => {
+    const workspacePackages = [
+      'control-plane-read-contract',
+      'operator-api-contract',
+      'operator-client-core',
+      'quickfurno-operator-command-contract',
+      'quickfurno-operator-observation-contract',
+      'worker-observation-contract',
+    ] as const;
+
+    for (const workspace of workspacePackages) {
+      expect(DOCKERFILE_CODE, workspace).toContain(
+        `COPY packages/${workspace}/package.json packages/${workspace}/`,
+      );
+      expect(DOCKERFILE_CODE, workspace).toContain(
+        `COPY packages/${workspace} packages/${workspace}`,
+      );
+      expect(DOCKERFILE_CODE, workspace).toContain(
+        `pnpm --filter @qf-jarvis/${workspace} build`,
+      );
+    }
+  });
+
   it('strips the build toolchain from the runtime image', () => {
     // Every CRITICAL and HIGH finding in the pre-correction scan was in this toolchain, and none
     // were in the application's traced node_modules. Beyond the CVE count, `npm`/`npx` inside a
