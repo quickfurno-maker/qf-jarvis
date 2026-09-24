@@ -1,0 +1,22 @@
+{
+  "name": "@qf-jarvis/quickfurno-operator-observation-contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Bounded PII-minimised QuickFurno operator observation payload consumed by Jarvis OS.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}

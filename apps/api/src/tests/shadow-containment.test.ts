@@ -653,6 +653,11 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'multimodal-turn-planning',
       // ADR-0158: bounded OpenAI-compatible embedding transport. Policy remains in knowledge-index.
       'openai-compatible-embedding-adapter',
+      // JOS-01G: versioned operator contracts and framework-neutral client core. These packages
+      // contain schemas/client orchestration only; no provider, database, credential or business
+      // authority is introduced by recording them in the exact package set.
+      'operator-api-contract',
+      'operator-client-core',
       // QFJ-P08 (ADR-0081): the durable approval queue and audit. Still an EXACT set match -- this
       // records an authorised addition, it does not relax the assertion.
       'postgres-approval-queue',
@@ -682,6 +687,10 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-S3-I-A (ADR-0072): the versioned prompt registry foundation. Still an EXACT set match --
       // this records an authorised addition, it does not relax the assertion.
       'prompt-registry',
+      // JOS-01F/G: bounded transport schemas for the separately signed Core observation and
+      // operator-command lanes. Contracts only; transport and authority remain outside packages.
+      'quickfurno-operator-command-contract',
+      'quickfurno-operator-observation-contract',
       'rag-provisioning',
       // QFJ-P05.05 (ADR-0079): the governed recommendation runtime -- the producer for contracts
       // that already existed. Still an EXACT set match; it records an authorised addition.

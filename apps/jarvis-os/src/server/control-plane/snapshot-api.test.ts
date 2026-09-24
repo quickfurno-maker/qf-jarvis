@@ -357,8 +357,14 @@ describe('the route file itself', () => {
         continue;
       }
       const code = readFileSync(file, 'utf8');
-      expect(code, `${label}: fetch`).not.toMatch(/\bfetch\s*\(/);
-      expect(code, `${label}: url`).not.toMatch(/https?:\/\/(?!127\.0\.0\.1)/);
+      const networkAllowed = new Set([
+        'src/server/control-plane/sources/quickfurno-operator-source.ts',
+        'src/server/operator/quickfurno-command.ts',
+      ]).has(label);
+      if (!networkAllowed) {
+        expect(code, `${label}: fetch`).not.toMatch(/\bfetch\s*\(/);
+        expect(code, `${label}: url`).not.toMatch(/https?:\/\/(?!127\.0\.0\.1)/);
+      }
       expect(code, `${label}: env`).not.toMatch(/process\s*\.\s*env/);
       const specifiers = [...code.matchAll(/from\s+['"]([^'"]+)['"]/g)].map(
         (match) => match[1] ?? '',
@@ -382,22 +388,22 @@ describe('the route file itself', () => {
     }
   });
 
-  it('locks the API route set to exactly three, all of them accounted for', () => {
-    // An EXACT set. A fourth route file appearing -- a debug endpoint, a session introspection
-    // helper, an auth-config reader -- fails this test rather than shipping quietly.
+  it('locks the API route set to exactly seven, all of them accounted for', () => {
+    // Exact allowlist: adding a debug endpoint, introspection helper or ad-hoc mobile API fails
+    // review. The operator API is versioned and is the shared web/mobile boundary.
     const routes = walk(join(SRC, 'app'))
       .map((file) => file.replace(/\\/g, '/'))
       .filter((file) => /\/route\.tsx?$/.test(file))
       .map((file) => file.split('/src/app/')[1] ?? file)
       .sort();
     expect(routes).toEqual([
-      'api/auth/login/route.ts', // POST only: the sole unauthenticated mutation
-      'api/auth/logout/route.ts', // POST only: session-bound CSRF required
-      'api/control-plane/v1/snapshot/route.ts', // GET only: requires a verified session
-      // ADR-0129. A new contract VERSION, not a new capability: GET only, same session check, same
-      // loader, same composed core. The count moved from three to four because a version was added
-      // -- which is exactly the kind of change this lock exists to make somebody state out loud.
+      'api/auth/login/route.ts',
+      'api/auth/logout/route.ts',
+      'api/control-plane/v1/snapshot/route.ts',
       'api/control-plane/v2/snapshot/route.ts',
+      'api/operator/v1/bootstrap/route.ts',
+      'api/operator/v1/commands/route.ts',
+      'api/operator/v1/snapshot/route.ts',
     ]);
   });
 });

@@ -75,6 +75,8 @@ export interface CompositionOutcome {
    * This is the ONLY thing that may raise the snapshot to `LIVE_ADAPTER` / `REQUEST_TIME`.
    */
   readonly observed: boolean;
+  /** Stable ids of sources that actually contributed request-time observations. */
+  readonly observedSourceIds: readonly string[];
 }
 
 /**
@@ -214,6 +216,7 @@ export function composeSections(
   // below. Sections nobody owns are never touched.
   const sections: Record<string, unknown> = { ...baseline };
   let observed = false;
+  const observedSourceIds = new Set<string>();
 
   /** Degrade one section, preserving whatever identity fields its family requires. */
   const degrade = (
@@ -288,10 +291,15 @@ export function composeSections(
       }
       // Only after a shape-valid, in-window contribution has actually been applied.
       observed = true;
+      observedSourceIds.add(descriptor.id);
     }
   }
 
   // The shared parser is still the authority on shape and still deep-freezes the result; this cast
   // only bridges the guarded writes above.
-  return { sections: sections as unknown as ControlPlaneSections, observed };
+  return {
+    sections: sections as unknown as ControlPlaneSections,
+    observed,
+    observedSourceIds: Object.freeze([...observedSourceIds].sort()),
+  };
 }

@@ -30,26 +30,26 @@ import type { CollectedObservation } from './sources/read-source';
  * `generatedAt` is INJECTED. The builder reads no clock, no environment variable, no file, no
  * network and no database, and it is deterministic: the same instant in gives byte-identical
  * output. That is what lets the HTTP route and the server-rendered page share one implementation
- * and be provably the same — a self-fetching page could drift from its own API, and this cannot.
+ * and be provably the same â€” a self-fetching page could drift from its own API, and this cannot.
  *
  * ### Freshness is DERIVED, not accepted
  *
  * The builder used to take `freshness` alongside the instant, and the route passed `REQUEST_TIME`.
  * That was wrong. Serving a request stamps a new envelope; it re-reads nothing. A deployed binary
  * could be a week old, answer every call with a brand-new timestamp, and still be reciting facts
- * compiled into it at build time — while the payload claimed they were request-fresh.
+ * compiled into it at build time â€” while the payload claimed they were request-fresh.
  *
  * The source block is still never accepted from a caller. JOS-01E makes it DERIVED from what the
  * adopted read sources actually did: `REPOSITORY_BASELINE` / `BUILD_DECLARATION` /
- * `liveOperationalData: false` while nothing has been observed — which is every request in this
- * release, because no source is adopted yet — and `LIVE_ADAPTER` / `REQUEST_TIME` / `true` only
+ * `liveOperationalData: false` while nothing has been observed â€” which is every request in this
+ * release, because no source is adopted yet â€” and `LIVE_ADAPTER` / `REQUEST_TIME` / `true` only
  * once a source genuinely reads something.
  *
  * ### Progressive read sources (JOS-01E, ADR-0089)
  *
  * Sources compose OVER the baseline; they do not replace it. Each declares the sections it may
  * speak for, so adopting one is bounded and reviewable. A source that cannot be read degrades only
- * its own sections to `NOT_CONNECTED` with no rows — never to an empty success, which would read as
+ * its own sections to `NOT_CONNECTED` with no rows â€” never to an empty success, which would read as
  * "nothing is waiting for you". This stays the ONE place a snapshot is assembled and validated: the
  * page and the API both arrive here, and neither can compose its own variant.
  *
@@ -65,8 +65,8 @@ export interface SnapshotRequest {
   /**
    * When this JSON snapshot is being produced. Supplied by the boundary; no clock is read here.
    *
-   * It stamps the envelope and nothing else — see the note above about why freshness is not a
-   * parameter, and §"Progressive read sources" for why an observing source moves freshness and this
+   * It stamps the envelope and nothing else â€” see the note above about why freshness is not a
+   * parameter, and Â§"Progressive read sources" for why an observing source moves freshness and this
    * never does.
    */
   readonly generatedAt: CanonicalInstant;
@@ -84,7 +84,7 @@ export interface SnapshotRequest {
    * ALREADY ACQUIRED is the important word. The builder performs no I/O and awaits nothing, so it
    * stays pure and deterministic; `loadControlPlaneSnapshot` does the impure half and hands the
    * results in. Defaults to none, which is every request in this release because no source is
-   * adopted — so the default output is byte-identical to JOS-01B.
+   * adopted â€” so the default output is byte-identical to JOS-01B.
    */
   readonly collected?: readonly CollectedObservation[];
 }
@@ -92,8 +92,8 @@ export interface SnapshotRequest {
 /**
  * Everything both wire versions share: one composition, one derived source block, one envelope.
  *
- * Extracted when AVG-11 added V2 (ADR-0129). The alternative — a second builder that re-composed
- * sources and re-derived provenance — would have been a second source of truth wearing a version
+ * Extracted when AVG-11 added V2 (ADR-0129). The alternative â€” a second builder that re-composed
+ * sources and re-derived provenance â€” would have been a second source of truth wearing a version
  * number, and the two would have drifted the first time one was edited. What a version is allowed to
  * change is the final wire SHAPE, and nothing else.
  */
@@ -134,13 +134,54 @@ function buildSharedCore(request: SnapshotRequest): SharedSnapshotCore {
    *
    * With no observation the block is exactly what JOS-01B fixed: a compiled-in baseline that a
    * request cannot make fresher. The moment a source genuinely reads something, all three fields
-   * move together — `LIVE_ADAPTER`, `REQUEST_TIME`, `liveOperationalData: true` — because the
+   * move together â€” `LIVE_ADAPTER`, `REQUEST_TIME`, `liveOperationalData: true` â€” because the
    * contract rejects any other combination, and because claiming live data while sourcing none is
    * the exact misrepresentation this snapshot exists to prevent.
    */
   const source = composed.observed
     ? { kind: 'LIVE_ADAPTER', freshness: 'REQUEST_TIME', liveOperationalData: true }
     : { kind: 'REPOSITORY_BASELINE', freshness: 'BUILD_DECLARATION', liveOperationalData: false };
+
+  const observed = new Set(composed.observedSourceIds);
+  const system = BASELINE_SYSTEM.map((component) => {
+    if (observed.has('quickfurno-operator-observation')) {
+      if (component.id === 'quickfurno-core') {
+        return {
+          ...component,
+          state: 'AVAILABLE' as const,
+          detail:
+            'Signed read-only operator snapshot observed this request. Core remains the business-truth authority.',
+        };
+      }
+      if (component.id === 'quickfurno-core-automation') {
+        return {
+          ...component,
+          state: 'AVAILABLE' as const,
+          detail:
+            'Execution state is readable through QuickFurno Core. Jarvis OS receives no execution authority.',
+        };
+      }
+    }
+    if (observed.has('quickfurno-whatsapp-worker-observation')) {
+      if (component.id === 'model-gateway') {
+        return {
+          ...component,
+          state: 'AVAILABLE' as const,
+          detail:
+            'Production model-gateway telemetry was observed through the content-free worker boundary.',
+        };
+      }
+      if (component.id === 'worker-fleet') {
+        return {
+          ...component,
+          state: 'AVAILABLE' as const,
+          detail:
+            'Production WhatsApp worker telemetry was observed this request through the read-only boundary.',
+        };
+      }
+    }
+    return component;
+  });
 
   return {
     envelope: {
@@ -157,7 +198,7 @@ function buildSharedCore(request: SnapshotRequest): SharedSnapshotCore {
         provider: 'DELIVERS_ONLY',
       },
       rollout: { enabled: false, state: 'ROLLOUT_OFF' },
-      system: [...BASELINE_SYSTEM],
+      system,
       capabilities: CAPABILITY_SNAPSHOT.map((capability) => ({
         id: capability.id,
         label: capability.label,
@@ -195,8 +236,8 @@ export function buildControlPlaneSnapshot(request: SnapshotRequest): ControlPlan
  *
  * ### One build, two wire shapes
  *
- * Everything above the `sections` key — the derived source block, the authority boundary, rollout,
- * system, capabilities, agents, roadmap — is produced by exactly the same code as V1, from exactly
+ * Everything above the `sections` key â€” the derived source block, the authority boundary, rollout,
+ * system, capabilities, agents, roadmap â€” is produced by exactly the same code as V1, from exactly
  * the same composed observation set. Only the final wire SHAPING differs, and it differs in the two
  * places the version exists for: the funnel section and the added readiness section.
  *
@@ -212,7 +253,7 @@ export function buildControlPlaneSnapshot(request: SnapshotRequest): ControlPlan
  * would be worse.
  *
  * So V2 takes its funnel from its own reviewed declaration, and REFUSES to proceed if composition
- * ever produced V1 funnel rows. Today it cannot — the section is `PLANNED` and carries none — and if
+ * ever produced V1 funnel rows. Today it cannot â€” the section is `PLANNED` and carries none â€” and if
  * a future adapter populates it, this throws rather than guessing. That is the same treatment
  * `composeSections` gives a structural failure: the composition it would produce is not trustworthy
  * anywhere, so no output is better than a plausible one.

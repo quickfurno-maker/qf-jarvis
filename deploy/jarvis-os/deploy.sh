@@ -21,6 +21,9 @@ fi
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${REPO_DIR:-/srv/qf-jarvis/repo}"
 SECRET="/srv/qf-jarvis/secrets/jarvis-os-auth.json"
+CORE_READ_SECRET="/srv/qf-jarvis/secrets/jarvis-os-core-read.json"
+CORE_COMMAND_SECRET="/srv/qf-jarvis/secrets/jarvis-os-core-command.json"
+OBSERVABILITY="/srv/qf-jarvis/state/observability"
 BASE="$HERE/compose.production.yml"
 
 # ---------------------------------------------------------------------------------------------
@@ -61,6 +64,46 @@ if [[ "$MODE" != "400" && "$MODE" != "600" ]]; then
 fi
 if [[ "$OWNER" != "10001:10001" ]]; then
   echo "FATAL: $SECRET owner is $OWNER; expected 10001:10001." >&2
+  exit 1
+fi
+
+[[ -f "$CORE_READ_SECRET" && ! -L "$CORE_READ_SECRET" ]] || {
+  echo "FATAL: $CORE_READ_SECRET is missing or is a symlink." >&2
+  exit 1
+}
+CORE_READ_MODE="$(stat -c '%a' "$CORE_READ_SECRET")"
+CORE_READ_OWNER="$(stat -c '%u:%g' "$CORE_READ_SECRET")"
+if [[ "$CORE_READ_MODE" != "400" && "$CORE_READ_MODE" != "600" ]]; then
+  echo "FATAL: $CORE_READ_SECRET mode is $CORE_READ_MODE; expected 400 or 600." >&2
+  exit 1
+fi
+if [[ "$CORE_READ_OWNER" != "10001:10001" ]]; then
+  echo "FATAL: $CORE_READ_SECRET owner is $CORE_READ_OWNER; expected 10001:10001." >&2
+  exit 1
+fi
+
+[[ -f "$CORE_COMMAND_SECRET" && ! -L "$CORE_COMMAND_SECRET" ]] || {
+  echo "FATAL: $CORE_COMMAND_SECRET is missing or is a symlink." >&2
+  exit 1
+}
+CORE_COMMAND_MODE="$(stat -c '%a' "$CORE_COMMAND_SECRET")"
+CORE_COMMAND_OWNER="$(stat -c '%u:%g' "$CORE_COMMAND_SECRET")"
+if [[ "$CORE_COMMAND_MODE" != "400" && "$CORE_COMMAND_MODE" != "600" ]]; then
+  echo "FATAL: $CORE_COMMAND_SECRET mode is $CORE_COMMAND_MODE; expected 400 or 600." >&2
+  exit 1
+fi
+if [[ "$CORE_COMMAND_OWNER" != "10001:10001" ]]; then
+  echo "FATAL: $CORE_COMMAND_SECRET owner is $CORE_COMMAND_OWNER; expected 10001:10001." >&2
+  exit 1
+fi
+
+[[ -d "$OBSERVABILITY" && ! -L "$OBSERVABILITY" ]] || {
+  echo "FATAL: $OBSERVABILITY must be a real directory." >&2
+  exit 1
+}
+OBS_GROUP="$(stat -c '%g' "$OBSERVABILITY")"
+if [[ "$OBS_GROUP" != "10002" ]]; then
+  echo "FATAL: $OBSERVABILITY gid is $OBS_GROUP; expected worker observation group 10002." >&2
   exit 1
 fi
 
@@ -128,12 +171,25 @@ prove "published host ports" "" \
   "$(docker inspect qf-jarvis-os --format '{{range $p, $conf := .NetworkSettings.Ports}}{{range $conf}}{{.HostPort}} {{end}}{{end}}')"
 prove "secret mounted read-only" "true" \
   "$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/qf-jarvis-os-auth.json"}}{{not .RW}}{{end}}{{end}}')"
+prove "core read config mounted read-only" "true" \
+  "$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/qf-jarvis-os-core-read.json"}}{{not .RW}}{{end}}{{end}}')"
+prove "core command config mounted read-only" "true" \
+  "$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/qf-jarvis-os-core-command.json"}}{{not .RW}}{{end}}{{end}}')"
+prove "observation mount source" "$OBSERVABILITY" \
+  "$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/observability"}}{{.Source}}{{end}}{{end}}')"
+prove "observation mounted read-only" "true" \
+  "$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/observability"}}{{not .RW}}{{end}}{{end}}')"
+GROUPS="$(docker exec qf-jarvis-os id -G)"
+if [[ " $GROUPS " == *" 10002 "* ]]; then OBS_GROUP_VISIBLE=true; else OBS_GROUP_VISIBLE=false; fi
+prove "observation supplementary group" "true" "$OBS_GROUP_VISIBLE"
 
 # Internal HTTP, from inside the container: the application is not reachable any other way yet.
 IN() { docker exec qf-jarvis-os node -e "fetch('http://127.0.0.1:3000'+process.argv[1],{redirect:'manual'}).then(r=>console.log(r.status)).catch(()=>console.log('ERR'))" "$1"; }
 prove "internal /login" "200" "$(IN /login)"
 prove "internal / (unauth)" "307" "$(IN /)"
 prove "internal snapshot (unauth)" "401" "$(IN /api/control-plane/v1/snapshot)"
+prove "operator bootstrap (unauth)" "401" "$(IN /api/operator/v1/bootstrap)"
+prove "operator snapshot (unauth)" "401" "$(IN /api/operator/v1/snapshot)"
 
 # ---------------------------------------------------------------------------------------------
 # 6. Prove Traefik has NOT picked it up

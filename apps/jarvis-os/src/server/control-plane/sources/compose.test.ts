@@ -122,6 +122,53 @@ describe('the adopted registry', () => {
     expect(loaded.source.kind).toBe('REPOSITORY_BASELINE');
     expect(loaded.sections).toStrictEqual(build([]).sections);
   });
+
+  it('promotes only system components backed by a successful observed source', () => {
+    const core = descriptor('quickfurno-operator-observation', ['businessAnalytics'], () =>
+      observed(OBSERVED, {
+        businessAnalytics: { items: [{ id: 'vendors', label: 'Active vendors', value: 3 }] },
+      }),
+    );
+    const worker = descriptor('quickfurno-whatsapp-worker-observation', ['workers'], () =>
+      observed(OBSERVED, {
+        workers: {
+          items: [
+            {
+              id: 'worker',
+              label: 'WhatsApp worker',
+              kind: 'local-node',
+              state: 'HEALTHY',
+              capacity: 'single-owner',
+              detail: 'Observed worker.',
+            },
+          ],
+        },
+      }),
+    );
+    const snapshot = build([
+      ...collect(core, core.acquire(new AbortController().signal) as ReadSourceResult),
+      ...collect(worker, worker.acquire(new AbortController().signal) as ReadSourceResult),
+    ]);
+    const system = new Map(snapshot.system.map((item) => [item.id, item]));
+    expect(system.get('quickfurno-core')?.state).toBe('AVAILABLE');
+    expect(system.get('quickfurno-core-automation')?.state).toBe('AVAILABLE');
+    expect(system.get('model-gateway')?.state).toBe('AVAILABLE');
+    expect(system.get('worker-fleet')?.state).toBe('AVAILABLE');
+    expect(system.get('production-rollout')?.state).toBe('ROLLOUT_OFF');
+  });
+
+  it('does not promote system health for an unavailable source', () => {
+    const core = descriptor('quickfurno-operator-observation', ['businessAnalytics'], () => ({
+      status: 'UNAVAILABLE',
+      reason: 'SOURCE_UNREACHABLE',
+    }));
+    const snapshot = build(
+      collect(core, core.acquire(new AbortController().signal) as ReadSourceResult),
+    );
+    const system = new Map(snapshot.system.map((item) => [item.id, item]));
+    expect(system.get('quickfurno-core')?.state).toBe('NOT_CONNECTED');
+    expect(system.get('quickfurno-core-automation')?.state).toBe('NOT_CONNECTED');
+  });
 });
 
 describe('item sections', () => {

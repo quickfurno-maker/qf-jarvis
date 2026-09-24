@@ -1,61 +1,121 @@
+import { CommandDeck } from '@/components/command-center/CommandDeck';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
-import { CapabilityBadge } from '@/components/system/StatusPill';
+import { StatusPill, Tag } from '@/components/system/StatusPill';
 import { controlPlane } from '@/lib/control-plane';
 import { ENVIRONMENT_LABEL } from '@/lib/environment';
+import { operatorBootstrap } from '@/server/operator/bootstrap';
 
-/**
- * Settings (JOS-01A).
- *
- * A shell. There is nothing to configure yet, and the honest rendering of that is an empty
- * screen that says why — not a page of switches that write to nothing.
- *
- * The one genuinely useful thing it does show is provenance: which read model this build is
- * rendering, so an operator never has to guess whether a number came from a system or a
- * fixture.
- */
 export default async function SettingsPage() {
   const plane = await controlPlane();
+  const bootstrap = operatorBootstrap();
+  const provenance = plane.provenance();
+  const commandReady = bootstrap.capabilities.some(
+    (capability) => capability.state === 'AVAILABLE',
+  );
 
   return (
     <>
       <PageHeader
         breadcrumb={['Boundary', 'Settings']}
-        title="Settings"
-        purpose="Operator preferences and build provenance. Nothing here is configurable in this release."
-        status={<CapabilityBadge lifecycle="PLANNED" />}
+        title="Settings & authority"
+        purpose="Operator preferences, command readiness and governed configuration boundaries shared by web today and native mobile next."
+        status={<StatusPill state={commandReady ? 'AVAILABLE' : 'DEGRADED'} />}
       />
 
       <div className="space-y-5">
-        <Notice tone="planned" title="No settings exist yet">
-          Operator preferences arrive with the authenticated session boundary in JOS-01C. This
-          release has no session, no stored preference and no writable setting.
+        <Notice tone="info" title="Configuration is split by authority">
+          Operator UI preferences may be device-local. Business and runtime configuration is never
+          changed by a cosmetic switch: it must cross the versioned operator command boundary and
+          remain subject to QuickFurno Core or Jarvis governance.
         </Notice>
 
-        <Panel title="Build provenance" subtitle="Where this screen's data comes from">
-          <dl className="divide-y divide-[var(--color-line)]">
-            <Entry
-              label="Read model"
-              value={plane.kind === 'demo' ? 'Demo (local fixture)' : 'Control-plane API'}
-            />
-            <Entry label="Environment" value={ENVIRONMENT_LABEL} />
-            <Entry label="Production rollout" value="OFF" />
-            <Entry label="Backend connection" value="None — no control-plane API in JOS-01A" />
-            <Entry label="Credentials held" value="None" />
-          </dl>
-        </Panel>
+        <CommandDeck bootstrap={bootstrap} />
 
-        <Panel title="What this application can never do" subtitle="Independent of any setting">
-          <ul className="space-y-2.5 text-[12px] leading-relaxed text-[var(--color-ink-muted)]">
-            <li>Create or answer an approval.</li>
-            <li>Send a communication, or reach a provider.</li>
-            <li>Invoke coreAutomation, or edit a workflow.</li>
-            <li>Mutate QuickFurno Core or any Jarvis durable state.</li>
-            <li>Read a secret, or reach a database.</li>
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+          <Panel title="Runtime provenance" subtitle="What this client is actually connected to">
+            <dl className="divide-y divide-[var(--color-line)]">
+              <Entry label="Operator API" value={'v' + bootstrap.apiVersion} />
+              <Entry
+                label="Snapshot contract"
+                value={'v' + String(bootstrap.client.minimumSnapshotVersion)}
+              />
+              <Entry label="Environment" value={ENVIRONMENT_LABEL} />
+              <Entry label="Source" value={provenance.kind.replaceAll('_', ' ')} />
+              <Entry
+                label="Live operational data"
+                value={provenance.liveOperationalData ? 'YES' : 'NO'}
+              />
+              <Entry label="Web session" value="ACTIVE" />
+              <Entry
+                label="Native mobile session"
+                value={bootstrap.client.mobileDeviceSession ? 'ACTIVE' : 'NEXT'}
+              />
+            </dl>
+          </Panel>
+
+          <Panel
+            title="Governed configuration"
+            subtitle="Visible now; mutable only after its authority path is certified"
+          >
+            <div className="space-y-3 text-[12px] text-[var(--color-ink-muted)]">
+              <SettingRow label="Agent enablement" authority="Jarvis governance" state="LOCKED" />
+              <SettingRow label="Knowledge mode" authority="Jarvis governance" state="LOCKED" />
+              <SettingRow
+                label="Production rollout"
+                authority="Jarvis governance + owner"
+                state="LOCKED"
+              />
+              <SettingRow
+                label="Conversation takeover / pause"
+                authority="QuickFurno Core"
+                state={commandReady ? 'AVAILABLE' : 'NOT CONNECTED'}
+              />
+              <SettingRow
+                label="Approval decisions"
+                authority="QuickFurno Core"
+                state={commandReady ? 'AVAILABLE' : 'NOT CONNECTED'}
+              />
+            </div>
+          </Panel>
+        </div>
+
+        <Panel
+          title="Mobile-ready contract"
+          subtitle="No web business logic is required by the future app"
+        >
+          <ul className="grid gap-3 text-[12px] leading-relaxed text-[var(--color-ink-muted)] sm:grid-cols-2">
+            <li>Bootstrap, snapshot and command APIs are versioned independently from React.</li>
+            <li>Commands carry an explicit WEB / IOS / ANDROID client platform.</li>
+            <li>Read and command trust use separate signing credentials.</li>
+            <li>The shared client core parses the same outcomes on every platform.</li>
+            <li>QuickFurno Core remains authoritative after a mobile command is submitted.</li>
+            <li>Native secure-session storage can be added without changing domain contracts.</li>
           </ul>
         </Panel>
       </div>
     </>
+  );
+}
+
+function SettingRow({
+  label,
+  authority,
+  state,
+}: {
+  readonly label: string;
+  readonly authority: string;
+  readonly state: 'LOCKED' | 'AVAILABLE' | 'NOT CONNECTED';
+}) {
+  const tone = state === 'AVAILABLE' ? 'healthy' : state === 'LOCKED' ? 'warning' : 'offline';
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-control)] border border-[var(--color-line)] px-3.5 py-3">
+      <div>
+        <p className="text-[12.5px] font-medium text-[var(--color-ink)]">{label}</p>
+        <p className="mt-0.5 text-[10.5px] text-[var(--color-ink-faint)]">{authority}</p>
+      </div>
+      <Tag tone={tone}>{state}</Tag>
+    </div>
   );
 }
 

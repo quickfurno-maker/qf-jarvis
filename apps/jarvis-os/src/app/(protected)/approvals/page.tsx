@@ -1,9 +1,10 @@
 import { StackedShare } from '@/components/charts/Charts';
+import { ApprovalDecisionControls } from '@/components/operator/OperatorControls';
 import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
 import { Notice, Panel, SectionHeading } from '@/components/primitives/Panel';
 import type { Tone } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
-import { CapabilityBadge, Tag } from '@/components/system/StatusPill';
+import { Tag } from '@/components/system/StatusPill';
 import { SectionBody, SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
 import type { ApprovalQueueRow } from '@/lib/control-plane/types';
@@ -71,14 +72,21 @@ export default async function ApprovalsPage() {
         breadcrumb={['Operate', 'Approvals']}
         title="Approval desk"
         purpose="Every ask awaiting a human or awaiting QuickFurno Core. A click here is a request for authorization — Core decides, and may refuse."
-        status={<CapabilityBadge lifecycle="NOT_CONNECTED" />}
+        status={<SourceBadge availability={queue.availability} />}
       />
 
       <div className="space-y-5">
-        <Notice tone="offline" title="Backend unavailable — this desk is read-only">
-          The durable approval queue and the Core submission adapter are merged, and Jarvis OS has
-          no control-plane API to reach them. Approve and Reject are disabled everywhere on this
-          page, and no approval decision can be created from this surface.
+        <Notice
+          tone={queue.availability === 'AVAILABLE' ? 'info' : 'offline'}
+          title={
+            queue.availability === 'AVAILABLE'
+              ? 'QuickFurno Core approval queue connected'
+              : 'Approval queue not connected'
+          }
+        >
+          Decisions from this desk are signed operator requests to QuickFurno Core. Jarvis OS never
+          authorizes an action itself, and a decision button stays locked unless the separate
+          command-authority bridge is provisioned.
         </Notice>
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)]">
@@ -133,10 +141,7 @@ export default async function ApprovalsPage() {
                         {STATE_LABEL[row.state]}
                       </Cell>
                       <Cell nowrap>
-                        <span className="flex gap-1.5">
-                          <DisabledAction label="Approve" />
-                          <DisabledAction label="Reject" />
-                        </span>
+                        <ApprovalDecisionControls approvalId={row.id} state={row.state} />
                       </Cell>
                     </Row>
                   ))}
@@ -182,19 +187,5 @@ export default async function ApprovalsPage() {
         </div>
       </div>
     </>
-  );
-}
-
-function DisabledAction({ label }: { readonly label: string }) {
-  return (
-    <button
-      type="button"
-      disabled
-      title="Backend unavailable — no control-plane API in JOS-01A"
-      className="rounded-[var(--radius-control)] border border-[var(--color-line)] px-2 py-[3px] text-[11px] text-[var(--color-ink-faint)] disabled:cursor-not-allowed"
-    >
-      {label}
-      <span className="sr-only"> — disabled, backend unavailable</span>
-    </button>
   );
 }

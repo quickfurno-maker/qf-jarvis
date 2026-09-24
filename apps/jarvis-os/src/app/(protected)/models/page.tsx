@@ -1,9 +1,10 @@
 import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
-import { CapabilityBadge, StatusPill, Tag } from '@/components/system/StatusPill';
+import { StatusPill, Tag } from '@/components/system/StatusPill';
 import { SectionBody, SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
+import { isReadable } from '@/lib/control-plane/types';
 
 /**
  * Models & Providers (JOS-01A).
@@ -24,15 +25,21 @@ export default async function ModelsPage() {
         breadcrumb={['Intelligence', 'Models & Providers']}
         title="Model gateway"
         purpose="Provider-neutral routing, with the data class of each profile stated first. Shadow evaluation only — no candidate output is delivered."
-        status={<CapabilityBadge lifecycle="SHADOW" />}
+        status={<SourceBadge availability={modelsSection.availability} />}
       />
 
       <div className="space-y-5">
-        <Notice tone="shadow" title="Shadow only — and no credential lives here">
-          The gateway compares a candidate against a stable profile and discards the
-          candidate&rsquo;s output. Jarvis OS makes no provider call, holds no API key, and reads no
-          secret.
-        </Notice>
+        {isReadable(modelsSection.availability) ? (
+          <Notice tone="healthy" title="Model gateway observation connected">
+            Jarvis OS reads bounded gateway health and usage telemetry only. It makes no provider
+            call, holds no provider API key, and cannot change routing from this surface.
+          </Notice>
+        ) : (
+          <Notice tone="shadow" title="Model telemetry is not connected">
+            The provider-neutral gateway remains governed independently. Jarvis OS holds no API key
+            and will not invent provider health while its observation source is unavailable.
+          </Notice>
+        )}
 
         <Panel
           title="Profiles"
