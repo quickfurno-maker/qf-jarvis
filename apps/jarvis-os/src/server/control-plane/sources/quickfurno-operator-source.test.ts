@@ -36,6 +36,7 @@ function fixture() {
       keyId: 'jarvis-os-read-test',
       privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
     }),
+    { mode: 0o600 },
   );
   return { path, publicKey };
 }
