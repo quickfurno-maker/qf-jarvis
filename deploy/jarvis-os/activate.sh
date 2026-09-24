@@ -72,6 +72,20 @@ fi
 echo "==> applying stage '${STAGE}' to project qf-jarvis-os only"
 JOS_IMAGE_TAG="$SHA" docker compose -p qf-jarvis-os "${FILES[@]}" up -d
 
+# Compose recreation is asynchronous. Re-prove application health before claiming an ingress
+# stage is active; otherwise the next external smoke can race both Node startup and Traefik's
+# Docker-provider registration.
+STATUS=unknown
+for _ in $(seq 1 30); do
+  STATUS="$(docker inspect qf-jarvis-os --format '{{.State.Health.Status}}' 2>/dev/null || echo unknown)"
+  [[ "$STATUS" == "healthy" ]] && break
+  sleep 1
+done
+[[ "$STATUS" == "healthy" ]] || {
+  echo "FATAL: container did not become healthy after '${STAGE}' activation (last status: $STATUS)." >&2
+  exit 1
+}
+
 RUNNING="$(docker inspect qf-jarvis-os --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
 [[ "$RUNNING" == "$SHA" ]] || {
   echo "FATAL: running revision is $RUNNING, expected $SHA." >&2
