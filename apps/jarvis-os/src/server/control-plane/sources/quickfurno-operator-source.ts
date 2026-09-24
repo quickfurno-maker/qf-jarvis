@@ -49,7 +49,10 @@ function signingInput(args: {
   ].join('\n');
 }
 
-export function createQuickFurnoOperatorReadSource(configPath: string): ReadSourceDescriptor {
+export function createQuickFurnoOperatorReadSource(
+  configPath: string,
+  now: () => Date = () => new Date(),
+): ReadSourceDescriptor {
   if (!isAbsolute(configPath)) {
     throw new TypeError('quickfurno-core-read-config-path-invalid');
   }
@@ -64,7 +67,7 @@ export function createQuickFurnoOperatorReadSource(configPath: string): ReadSour
       try {
         const config = loadCoreReadConfig({ path: configPath });
         const requestId = randomUUID();
-        const issuedAt = new Date().toISOString();
+        const issuedAt = now().toISOString();
         const body = new TextEncoder().encode(
           JSON.stringify({
             protocol: QUICKFURNO_OPERATOR_REQUEST_PROTOCOL,
@@ -129,8 +132,12 @@ export function createQuickFurnoOperatorReadSource(configPath: string): ReadSour
         }
         const observation = parseQuickFurnoOperatorObservation(json);
         const emitted = Date.parse(observation.emittedAt);
-        const now = Date.now();
-        if (!Number.isFinite(emitted) || emitted > now + 1_000 || now - emitted > 30_000) {
+        const observedNow = now().getTime();
+        if (
+          !Number.isFinite(emitted) ||
+          emitted > observedNow + 1_000 ||
+          observedNow - emitted > 30_000
+        ) {
           return Object.freeze({
             status: 'UNAVAILABLE' as const,
             reason: 'SOURCE_RETURNED_UNUSABLE_DATA' as const,

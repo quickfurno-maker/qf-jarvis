@@ -39,6 +39,8 @@ afterEach(() => {
 });
 
 describe('QuickFurno operator read source', () => {
+  const FIXED_NOW = new Date('2026-09-24T12:00:00.000Z');
+
   it('signs a bounded request and contributes only its reviewed sections', async () => {
     const { path, publicKey } = fixture();
 
@@ -82,7 +84,7 @@ describe('QuickFurno operator read source', () => {
         return Promise.resolve(
           Response.json({
             protocol: 'qfj.quickfurno-operator-observation.v1',
-            emittedAt: new Date().toISOString(),
+            emittedAt: FIXED_NOW.toISOString(),
             approvalQueue: [],
             approvalBreakdown: [{ id: 'waiting', label: 'Awaiting operator', value: 2 }],
             conversationControl: [],
@@ -98,7 +100,7 @@ describe('QuickFurno operator read source', () => {
       }),
     );
 
-    const source = createQuickFurnoOperatorReadSource(path);
+    const source = createQuickFurnoOperatorReadSource(path, () => FIXED_NOW);
     expect(source.owns).toStrictEqual([
       'approvalQueue',
       'approvalBreakdown',
@@ -124,7 +126,7 @@ describe('QuickFurno operator read source', () => {
         Promise.resolve(
           Response.json({
             protocol: 'qfj.quickfurno-operator-observation.v1',
-            emittedAt: new Date(Date.now() - 31_000).toISOString(),
+            emittedAt: new Date(FIXED_NOW.getTime() - 31_000).toISOString(),
             approvalQueue: [],
             approvalBreakdown: [],
             conversationControl: [],
@@ -137,7 +139,7 @@ describe('QuickFurno operator read source', () => {
       ),
     );
 
-    const result = await createQuickFurnoOperatorReadSource(path).acquire(
+    const result = await createQuickFurnoOperatorReadSource(path, () => FIXED_NOW).acquire(
       new AbortController().signal,
     );
     expect(result).toStrictEqual({
@@ -154,14 +156,14 @@ describe('QuickFurno operator read source', () => {
         Promise.resolve(
           Response.json({
             protocol: 'qfj.quickfurno-operator-observation.v1',
-            emittedAt: new Date().toISOString(),
+            emittedAt: FIXED_NOW.toISOString(),
             approvalQueue: [{ messageBody: 'must never cross this boundary' }],
           }),
         ),
       ),
     );
 
-    const result = await createQuickFurnoOperatorReadSource(path).acquire(
+    const result = await createQuickFurnoOperatorReadSource(path, () => FIXED_NOW).acquire(
       new AbortController().signal,
     );
     expect(result.status).toBe('UNAVAILABLE');
