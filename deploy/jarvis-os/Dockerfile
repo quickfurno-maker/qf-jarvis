@@ -39,6 +39,7 @@ COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json tsconfig
 COPY packages/control-plane-read-contract/package.json packages/control-plane-read-contract/
 COPY packages/operator-api-contract/package.json packages/operator-api-contract/
 COPY packages/operator-client-core/package.json packages/operator-client-core/
+COPY packages/proactive-intelligence/package.json packages/proactive-intelligence/
 COPY packages/quickfurno-operator-command-contract/package.json packages/quickfurno-operator-command-contract/
 COPY packages/quickfurno-operator-observation-contract/package.json packages/quickfurno-operator-observation-contract/
 COPY packages/release-assurance-observation-contract/package.json packages/release-assurance-observation-contract/
@@ -56,6 +57,7 @@ RUN pnpm install --frozen-lockfile --filter @qf-jarvis/jarvis-os... --filter .
 COPY packages/control-plane-read-contract packages/control-plane-read-contract
 COPY packages/operator-api-contract packages/operator-api-contract
 COPY packages/operator-client-core packages/operator-client-core
+COPY packages/proactive-intelligence packages/proactive-intelligence
 COPY packages/quickfurno-operator-command-contract packages/quickfurno-operator-command-contract
 COPY packages/quickfurno-operator-observation-contract packages/quickfurno-operator-observation-contract
 COPY packages/release-assurance-observation-contract packages/release-assurance-observation-contract
@@ -67,6 +69,7 @@ COPY apps/jarvis-os apps/jarvis-os
 RUN pnpm --filter @qf-jarvis/control-plane-read-contract build \
  && pnpm --filter @qf-jarvis/operator-api-contract build \
  && pnpm --filter @qf-jarvis/operator-client-core build \
+ && pnpm --filter @qf-jarvis/proactive-intelligence build \
  && pnpm --filter @qf-jarvis/quickfurno-operator-command-contract build \
  && pnpm --filter @qf-jarvis/quickfurno-operator-observation-contract build \
  && pnpm --filter @qf-jarvis/release-assurance-observation-contract build \
