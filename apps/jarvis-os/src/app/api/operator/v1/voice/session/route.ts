@@ -6,10 +6,13 @@ import {
 } from '@qf-jarvis/operator-api-contract';
 import { AccessToken } from 'livekit-server-sdk';
 
-import { requireApiOperatorSession } from '@/server/auth/dal';
-import { requireSameOriginMutation } from '@/server/auth/origin/same-origin';
-import { loadLiveKitOperatorConfig } from '@/server/auth/config/loader';
-import { READ_ONLY_HEADERS, UNAUTHENTICATED_BODY } from '@/server/control-plane/route-response';
+import { requireApiOperatorSession } from '../../../../../../server/auth/dal';
+import { requireSameOriginMutation } from '../../../../../../server/auth/origin/same-origin';
+import { loadLiveKitOperatorConfig } from '../../../../../../server/auth/config/loader';
+import {
+  READ_ONLY_HEADERS,
+  UNAUTHENTICATED_BODY,
+} from '../../../../../../server/control-plane/route-response';
 
 export const dynamic = 'force-dynamic';
 

@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { authConfigV1Schema } from './config/schema';
 import type { AuthConfigV1 } from './config/schema';
-import { AUTH_CONFIG_PATH_VAR, loadAuthConfig } from './config/loader';
+import { AUTH_CONFIG_PATH_VAR, LIVEKIT_CONFIG_PATH_VAR, loadAuthConfig } from './config/loader';
 import { getOptionalOperatorSession } from './dal';
 import { newSessionClaims, sealSession } from './session/token';
 import { totpCodeForStep, decodeBase32 } from './totp/totp';
@@ -117,6 +117,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   Reflect.deleteProperty(process.env, AUTH_CONFIG_PATH_VAR);
+  Reflect.deleteProperty(process.env, LIVEKIT_CONFIG_PATH_VAR);
   cookieValue = undefined;
 });
 
@@ -539,6 +540,186 @@ describe('POST /api/auth/login', () => {
   it('exports no GET handler', async () => {
     const route = (await import('../../app/api/auth/login/route')) as Record<string, unknown>;
     expect(route['GET']).toBeUndefined();
+  });
+});
+
+describe('POST /api/operator/v1/voice/session', () => {
+  const liveKitConfig = (): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'qfj-livekit-route-'));
+    const path = join(dir, 'livekit.json');
+    writeFileSync(
+      path,
+      JSON.stringify({
+        protocol: 'qfj.jarvis-os.livekit.v1',
+        serverUrl: 'wss://unit-test.livekit.cloud',
+        apiKey: 'test-key',
+        apiSecret: 'test-api-secret-placeholder-only',
+        agentName: 'qfj-jarvis-operator-voice',
+      }),
+      { mode: 0o600 },
+    );
+    process.env[LIVEKIT_CONFIG_PATH_VAR] = path;
+    return path;
+  };
+
+  const post = async ({
+    csrf,
+    headers = localHeaders(),
+    url = 'http://127.0.0.1/api/operator/v1/voice/session',
+    body,
+  }: {
+    readonly csrf?: string | undefined;
+    readonly headers?: Record<string, string>;
+    readonly url?: string;
+    readonly body?: string | undefined;
+  } = {}): Promise<Response> => {
+    const { POST } = await import('../../app/api/operator/v1/voice/session/route');
+    const requestHeaders = { ...headers };
+    if (csrf !== undefined) requestHeaders['x-qfj-csrf'] = csrf;
+    return POST(
+      new Request(url, {
+        method: 'POST',
+        headers: requestHeaders,
+        body,
+      }),
+    );
+  };
+
+  const authenticated = () => {
+    const claims = newSessionClaims({ config, nowSeconds: Math.floor(Date.now() / 1000) });
+    cookieValue = sealSession(config, claims);
+    return claims;
+  };
+
+  it('refuses an unauthenticated request before consulting LiveKit configuration', async () => {
+    const response = await post();
+    expect(response.status).toBe(401);
+    expect((await response.json()) as object).toMatchObject({ error: 'unauthenticated' });
+  });
+
+  it('refuses missing/wrong CSRF and cross-origin requests', async () => {
+    const claims = authenticated();
+    liveKitConfig();
+
+    expect((await post()).status).toBe(403);
+    expect((await post({ csrf: 'wrong-token' })).status).toBe(403);
+    expect(
+      (
+        await post({
+          csrf: claims.csrfToken,
+          headers: localHeaders({ origin: 'http://evil.example' }),
+        })
+      ).status,
+    ).toBe(403);
+  });
+
+  it('fails closed when LiveKit is not provisioned', async () => {
+    const claims = authenticated();
+    const response = await post({ csrf: claims.csrfToken });
+    expect(response.status).toBe(503);
+    expect((await response.json()) as object).toMatchObject({
+      error: 'operator-voice-unavailable',
+    });
+  });
+
+  it('refuses query parameters and request bodies', async () => {
+    const claims = authenticated();
+    liveKitConfig();
+
+    expect(
+      (
+        await post({
+          csrf: claims.csrfToken,
+          url: 'http://127.0.0.1/api/operator/v1/voice/session?extra=1',
+        })
+      ).status,
+    ).toBe(400);
+    expect((await post({ csrf: claims.csrfToken, body: '{}' })).status).toBe(400);
+  });
+
+  it('mints a ten-minute opaque microphone-only read-only room token', async () => {
+    const claims = authenticated();
+    liveKitConfig();
+
+    const response = await post({ csrf: claims.csrfToken });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      readonly serverUrl: string;
+      readonly roomName: string;
+      readonly participantIdentity: string;
+      readonly participantToken: string;
+      readonly agentName: string;
+      readonly expiresInSeconds: number;
+      readonly mode: string;
+      readonly executionAuthority: string;
+      readonly businessEffect: boolean;
+    };
+
+    expect(body.serverUrl).toBe('wss://unit-test.livekit.cloud');
+    expect(body.roomName).toMatch(/^qfj-operator-voice-[0-9a-f-]{36}$/u);
+    expect(body.participantIdentity).toMatch(/^operator-[0-9a-f-]{36}$/u);
+    expect(body.agentName).toBe('qfj-jarvis-operator-voice');
+    expect(body.expiresInSeconds).toBe(600);
+    expect(body.mode).toBe('READ_ONLY');
+    expect(body.executionAuthority).toBe('NONE');
+    expect(body.businessEffect).toBe(false);
+
+    const jwtParts = body.participantToken.split('.');
+    expect(jwtParts).toHaveLength(3);
+    const payload = JSON.parse(Buffer.from(jwtParts[1] ?? '', 'base64url').toString('utf8')) as {
+      readonly iss?: string;
+      readonly sub?: string;
+      readonly exp?: number;
+      readonly nbf?: number;
+      readonly video?: {
+        readonly roomJoin?: boolean;
+        readonly room?: string;
+        readonly canPublish?: boolean;
+        readonly canPublishSources?: readonly string[];
+        readonly canSubscribe?: boolean;
+        readonly canPublishData?: boolean;
+        readonly canUpdateOwnMetadata?: boolean;
+        readonly roomAdmin?: boolean;
+        readonly roomRecord?: boolean;
+        readonly ingressAdmin?: boolean;
+      };
+      readonly roomConfig?: {
+        readonly maxParticipants?: number;
+        readonly agents?: readonly { readonly agentName?: string }[];
+      };
+    };
+
+    expect(payload.iss).toBe('test-key');
+    expect(payload.sub).toBe(body.participantIdentity);
+    expect((payload.exp ?? 0) - (payload.nbf ?? 0)).toBe(600);
+    expect(payload.video).toMatchObject({
+      roomJoin: true,
+      room: body.roomName,
+      canPublish: true,
+      canPublishSources: ['microphone'],
+      canSubscribe: true,
+      canPublishData: true,
+      canUpdateOwnMetadata: false,
+      roomAdmin: false,
+      roomRecord: false,
+      ingressAdmin: false,
+    });
+    expect(payload.roomConfig?.maxParticipants).toBe(2);
+    expect(payload.roomConfig?.agents).toEqual([
+      expect.objectContaining({ agentName: 'qfj-jarvis-operator-voice' }),
+    ]);
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    expect(response.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('exports no GET/PUT/PATCH/DELETE handler', async () => {
+    const route = (await import('../../app/api/operator/v1/voice/session/route')) as Record<
+      string,
+      unknown
+    >;
+    for (const method of ['GET', 'PUT', 'PATCH', 'DELETE']) {
+      expect(route[method], method).toBeUndefined();
+    }
   });
 });
 
