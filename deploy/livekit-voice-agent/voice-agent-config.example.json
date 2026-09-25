@@ -1,16 +1,9 @@
 {
-  "protocol": "qfj.livekit.operator-voice-agent.v1",
+  "protocol": "qfj.livekit.operator-voice-transport.v1",
   "livekit": {
     "wsUrl": "wss://YOUR_PROJECT.livekit.cloud",
     "apiKey": "REPLACE_WITH_LIVEKIT_API_KEY",
     "apiSecret": "REPLACE_WITH_LIVEKIT_API_SECRET",
     "agentName": "qfj-jarvis-operator-voice"
-  },
-  "inference": {
-    "sttModel": "assemblyai/universal-3-5-pro",
-    "language": "en",
-    "llmModel": "google/gemma-4-31b-it",
-    "ttsModel": "fishaudio/s2.1-pro",
-    "ttsVoice": "fa4c9eb3dccc4806b382b40d61c6b10a"
   }
 }

@@ -5,15 +5,9 @@ import { z } from 'zod';
 const MAX_CONFIG_BYTES = 16 * 1024;
 export const VOICE_AGENT_CONFIG_PATH_VAR = 'QFJ_LIVEKIT_VOICE_AGENT_CONFIG_FILE';
 
-const modelRef = z
-  .string()
-  .min(1)
-  .max(160)
-  .regex(/^[A-Za-z0-9._:/-]+$/u);
-
 export const voiceAgentConfigSchema = z
   .object({
-    protocol: z.literal('qfj.livekit.operator-voice-agent.v1'),
+    protocol: z.literal('qfj.livekit.operator-voice-transport.v1'),
     livekit: z
       .object({
         wsUrl: z
@@ -30,19 +24,6 @@ export const voiceAgentConfigSchema = z
           .min(1)
           .max(64)
           .regex(/^[A-Za-z0-9._:-]+$/u),
-      })
-      .strict(),
-    inference: z
-      .object({
-        sttModel: modelRef,
-        language: z
-          .string()
-          .min(2)
-          .max(16)
-          .regex(/^[A-Za-z-]+$/u),
-        llmModel: modelRef,
-        ttsModel: modelRef,
-        ttsVoice: z.string().min(1).max(160),
       })
       .strict(),
   })

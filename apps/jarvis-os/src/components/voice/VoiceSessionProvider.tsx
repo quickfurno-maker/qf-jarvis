@@ -1,12 +1,7 @@
 'use client';
 
-import {
-  OPERATOR_VOICE_INTELLIGENCE_RPC,
-  operatorVoiceRpcRequestSchema,
-  operatorVoiceRpcResponseSchema,
-  parseOperatorVoiceSession,
-} from '@qf-jarvis/operator-api-contract';
-import { Room, RoomEvent, Track, type RemoteTrack, type RpcInvocationData } from 'livekit-client';
+import { parseOperatorVoiceSession } from '@qf-jarvis/operator-api-contract';
+import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 export type VoiceState =
@@ -22,15 +17,6 @@ interface VoiceSessionContextValue {
 }
 
 const VoiceSessionContext = createContext<VoiceSessionContextValue | undefined>(undefined);
-
-function operationalAnswer(body: unknown): string {
-  const parsed = operatorVoiceRpcResponseSchema.parse({
-    ...(typeof body === 'object' && body !== null && !Array.isArray(body) ? body : {}),
-    executionAuthority: 'NONE',
-    businessEffect: false,
-  });
-  return JSON.stringify(parsed);
-}
 
 export function VoiceSessionProvider({
   children,
@@ -100,28 +86,6 @@ export function VoiceSessionProvider({
         adaptiveStream: true,
         dynacast: true,
       });
-
-      room.registerRpcMethod(
-        OPERATOR_VOICE_INTELLIGENCE_RPC,
-        async (data: RpcInvocationData): Promise<string> => {
-          const caller = room.remoteParticipants.get(data.callerIdentity);
-          if (caller?.isAgent !== true) throw new TypeError('voice-rpc-caller-not-agent');
-
-          const request = operatorVoiceRpcRequestSchema.parse(JSON.parse(data.payload));
-          const response = await globalThis.fetch('/api/operator/v1/intelligence', {
-            method: 'POST',
-            credentials: 'same-origin',
-            cache: 'no-store',
-            headers: {
-              Accept: 'application/json',
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(request),
-          });
-          if (!response.ok) throw new TypeError('voice-intelligence-unavailable');
-          return operationalAnswer(await response.json());
-        },
-      );
 
       room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
         if (track.kind === Track.Kind.Audio && audioRef.current !== null) {
