@@ -63,11 +63,13 @@ services:
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
       PORT: '3000'
-      # Paths only. Secret material never enters environment variables.
+      # Paths plus the public immutable release SHA only. Secret material never enters environment variables.
       QFJ_JOS_AUTH_CONFIG_FILE: /run/secrets/qf-jarvis-os-auth.json
       QFJ_JOS_CORE_READ_CONFIG_FILE: /run/secrets/qf-jarvis-os-core-read.json
       QFJ_JOS_CORE_COMMAND_CONFIG_FILE: /run/secrets/qf-jarvis-os-core-command.json
       QFJ_WORKER_OBSERVATION_FILE: /run/observability/whatsapp-worker.json
+      QFJ_RELEASE_ASSURANCE_OBSERVATION_FILE: /run/release-assurance/current.json
+      QFJ_JOS_RELEASE_SHA: '${JOS_IMAGE_TAG:?JOS_IMAGE_TAG must be the exact merged git SHA}'
 
     volumes:
       - type: bind
@@ -87,6 +89,12 @@ services:
       - type: bind
         source: /srv/qf-jarvis/state/observability
         target: /run/observability
+        read_only: true
+      # Final-release assurance is published by atomic rename after the external final smoke.
+      # Mount the directory, not a single file, so the running container sees each new receipt.
+      - type: bind
+        source: /srv/qf-jarvis/state/release-assurance
+        target: /run/release-assurance
         read_only: true
 
     # --- resources -----------------------------------------------------------------------------

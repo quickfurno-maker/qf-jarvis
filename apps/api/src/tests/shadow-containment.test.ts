@@ -695,6 +695,10 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-P05.05 (ADR-0079): the governed recommendation runtime -- the producer for contracts
       // that already existed. Still an EXACT set match; it records an authorised addition.
       'recommendation-runtime',
+      // ADR-0166: framework-neutral, content-free exact-release assurance observations for Jarvis OS
+      // and the future mobile client. It carries no log, credential, provider, database or authority;
+      // recording it here preserves the EXACT package-set lock rather than weakening containment.
+      'release-assurance-observation-contract',
       // QFJ-S3-C (ADR-0067): the Riya client-sales behaviour package. Still an EXACT set match --
       // this records an authorised addition, it does not relax the assertion.
       'riya-agent',

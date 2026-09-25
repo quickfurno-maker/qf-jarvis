@@ -17,6 +17,7 @@
     "@qf-jarvis/operator-client-core": "workspace:*",
     "@qf-jarvis/quickfurno-operator-command-contract": "workspace:*",
     "@qf-jarvis/quickfurno-operator-observation-contract": "workspace:*",
+    "@qf-jarvis/release-assurance-observation-contract": "workspace:*",
     "@qf-jarvis/worker-observation-contract": "workspace:*",
     "next": "16.2.11",
     "react": "19.2.0",

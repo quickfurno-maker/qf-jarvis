@@ -189,6 +189,9 @@ importers:
       '@qf-jarvis/quickfurno-operator-observation-contract':
         specifier: workspace:*
         version: link:../../packages/quickfurno-operator-observation-contract
+      '@qf-jarvis/release-assurance-observation-contract':
+        specifier: workspace:*
+        version: link:../../packages/release-assurance-observation-contract
       '@qf-jarvis/worker-observation-contract':
         specifier: workspace:*
         version: link:../../packages/worker-observation-contract
@@ -924,6 +927,12 @@ importers:
       '@qf-jarvis/contracts':
         specifier: workspace:*
         version: link:../contracts
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  packages/release-assurance-observation-contract:
+    dependencies:
       zod:
         specifier: 4.4.3
         version: 4.4.3

@@ -110,7 +110,7 @@ fi
 echo "==> stage '${STAGE}' active on revision $RUNNING"
 echo "    verify externally before going further:"
 if [[ "$STAGE" == "ingress" ]]; then
-  echo "      ./smoke.sh pre-hsts jarvis.quickfurno.in"
+  echo "      ./deploy/jarvis-os/external-smoke.sh pre-hsts jarvis.quickfurno.in ${SHA}"
 else
-  echo "      ./smoke.sh final jarvis.quickfurno.in"
+  echo "      ./deploy/jarvis-os/external-smoke.sh final jarvis.quickfurno.in ${SHA}"
 fi

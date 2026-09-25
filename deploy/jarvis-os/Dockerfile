@@ -41,6 +41,7 @@ COPY packages/operator-api-contract/package.json packages/operator-api-contract/
 COPY packages/operator-client-core/package.json packages/operator-client-core/
 COPY packages/quickfurno-operator-command-contract/package.json packages/quickfurno-operator-command-contract/
 COPY packages/quickfurno-operator-observation-contract/package.json packages/quickfurno-operator-observation-contract/
+COPY packages/release-assurance-observation-contract/package.json packages/release-assurance-observation-contract/
 COPY packages/worker-observation-contract/package.json packages/worker-observation-contract/
 COPY apps/jarvis-os/package.json apps/jarvis-os/
 
@@ -57,6 +58,7 @@ COPY packages/operator-api-contract packages/operator-api-contract
 COPY packages/operator-client-core packages/operator-client-core
 COPY packages/quickfurno-operator-command-contract packages/quickfurno-operator-command-contract
 COPY packages/quickfurno-operator-observation-contract packages/quickfurno-operator-observation-contract
+COPY packages/release-assurance-observation-contract packages/release-assurance-observation-contract
 COPY packages/worker-observation-contract packages/worker-observation-contract
 COPY apps/jarvis-os apps/jarvis-os
 
@@ -67,6 +69,7 @@ RUN pnpm --filter @qf-jarvis/control-plane-read-contract build \
  && pnpm --filter @qf-jarvis/operator-client-core build \
  && pnpm --filter @qf-jarvis/quickfurno-operator-command-contract build \
  && pnpm --filter @qf-jarvis/quickfurno-operator-observation-contract build \
+ && pnpm --filter @qf-jarvis/release-assurance-observation-contract build \
  && pnpm --filter @qf-jarvis/worker-observation-contract build \
  && pnpm --filter @qf-jarvis/jarvis-os build
 

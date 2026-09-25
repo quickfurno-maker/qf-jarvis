@@ -33,6 +33,7 @@ MODE="${1:-}"
 HOST="${2:-}"
 SHA="${3:-}"
 REPO_DIR="${4:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+SSH_TARGET="${QFJ_JOS_SSH_TARGET:-qf-staging}"
 
 REL_PATH='deploy/jarvis-os/smoke.sh'
 
@@ -94,3 +95,11 @@ fi
 
 echo "==> running $REL_PATH from $SHA (verified) against $HOST, mode $MODE"
 "${BASH:?BASH must identify the current interpreter}" "$SMOKE" "$MODE" "$HOST"
+
+if [[ "$MODE" == "final" ]]; then
+  command -v ssh >/dev/null 2>&1 || die "ssh is required to publish exact-release assurance."
+  REMOTE_PUBLISH="/srv/qf-jarvis/releases/$SHA/jarvis-os/publish-assurance.sh"
+  echo "==> external final smoke passed; publishing exact-release assurance via $SSH_TARGET"
+  ssh "$SSH_TARGET" "$REMOTE_PUBLISH $SHA EXTERNAL_SMOKE_PASSED" ||
+    die "external smoke passed, but release assurance publication failed closed."
+fi

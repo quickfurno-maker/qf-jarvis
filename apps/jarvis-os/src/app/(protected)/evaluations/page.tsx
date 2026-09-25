@@ -18,13 +18,18 @@ export default async function EvaluationsPage() {
   const dimensionsSection = (await controlPlane()).evaluations();
   // No count is computed from an unreadable source. Summing an empty list would print
   // "0 cases across 0 dimensions", which reads as a measurement rather than as a missing one.
-  const subtitle = isReadable(dimensionsSection.availability)
-    ? formatCount(
-        dimensionsSection.items.reduce((sum, dimension) => sum + dimension.caseCount, 0),
-      ) +
-      ' cases across ' +
-      String(dimensionsSection.items.length) +
-      ' dimensions'
+  const readable = isReadable(dimensionsSection.availability);
+  const measuredCounts = dimensionsSection.items
+    .map((dimension) => dimension.caseCount)
+    .filter((count): count is number => count !== null);
+  const subtitle = readable
+    ? measuredCounts.length === dimensionsSection.items.length
+      ? formatCount(measuredCounts.reduce((sum, count) => sum + count, 0)) +
+        ' cases across ' +
+        String(dimensionsSection.items.length) +
+        ' dimensions'
+      : String(dimensionsSection.items.length) +
+        ' live assurance dimensions · numeric case totals not asserted by this source'
     : 'Suite evidence is not readable from this surface';
 
   return (
@@ -64,7 +69,9 @@ export default async function EvaluationsPage() {
                   <Row key={dimension.id}>
                     <Cell nowrap>{dimension.label}</Cell>
                     <Cell muted nowrap>
-                      <span className="tabular">{formatCount(dimension.caseCount)}</span>
+                      <span className="tabular">
+                        {dimension.caseCount === null ? '—' : formatCount(dimension.caseCount)}
+                      </span>
                     </Cell>
                     <Cell nowrap>
                       <StatusPill state={dimension.state} />

@@ -30,11 +30,13 @@ import type { AuthConfigV1 } from './schema';
  * synchronous read of a file the OS already has in page cache.
  */
 
-/** The only environment variables this application reads. All contain paths, never secrets. */
+/** The only environment variables this application reads. They contain paths or the public release SHA, never secret material. */
 export const AUTH_CONFIG_PATH_VAR = 'QFJ_JOS_AUTH_CONFIG_FILE';
 export const WORKER_OBSERVATION_PATH_VAR = 'QFJ_WORKER_OBSERVATION_FILE';
 export const CORE_READ_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_READ_CONFIG_FILE';
 export const CORE_COMMAND_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_COMMAND_CONFIG_FILE';
+export const RELEASE_ASSURANCE_OBSERVATION_PATH_VAR = 'QFJ_RELEASE_ASSURANCE_OBSERVATION_FILE';
+export const RELEASE_SHA_VAR = 'QFJ_JOS_RELEASE_SHA';
 
 /**
  * Read the optional content-free worker observation path through the same reviewed environment
@@ -54,6 +56,16 @@ export function readCoreReadConfigPathFromEnvironment(): string | undefined {
 export function readCoreCommandConfigPathFromEnvironment(): string | undefined {
   const value = process.env[CORE_COMMAND_CONFIG_PATH_VAR];
   return value === undefined || value.trim() === '' ? undefined : value;
+}
+
+export function readReleaseAssuranceObservationPathFromEnvironment(): string | undefined {
+  const value = process.env[RELEASE_ASSURANCE_OBSERVATION_PATH_VAR];
+  return value === undefined || value.trim() === '' ? undefined : value;
+}
+
+export function readReleaseShaFromEnvironment(): string | undefined {
+  const value = process.env[RELEASE_SHA_VAR];
+  return value === undefined || value.trim() === '' ? undefined : value.trim();
 }
 
 export interface LoaderOptions {
