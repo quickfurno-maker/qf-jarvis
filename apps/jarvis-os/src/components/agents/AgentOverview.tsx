@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { MetricStrip } from '@/components/analytics/MetricStrip';
+import { AgentCockpit } from '@/components/agents/AgentCockpit';
 import type { MetricSummary, Section } from '@/lib/control-plane/types';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
@@ -8,6 +9,7 @@ import { CapabilityBadge, StatusPill } from '@/components/system/StatusPill';
 import { capability, LIFECYCLE_PRESENTATION } from '@/lib/capabilities/catalog';
 import { HEALTH_PRESENTATION } from '@/lib/control-plane/types';
 import type { AgentSummary } from '@/lib/control-plane/types';
+import type { AgentCockpitView } from '@/lib/control-plane/agent-live';
 
 /**
  * The reusable agent surface (JOS-01A).
@@ -37,10 +39,12 @@ function fixtureMetrics(metrics: readonly MetricSummary[]): Section<MetricSummar
 export function AgentOverview({
   agent,
   metricsSection,
+  cockpit,
   children,
 }: {
   readonly agent: AgentSummary;
   readonly metricsSection?: Section<MetricSummary> | undefined;
+  readonly cockpit?: AgentCockpitView | undefined;
   readonly children?: ReactNode;
 }) {
   const entry = capability(agent.capabilityId);
@@ -84,6 +88,8 @@ export function AgentOverview({
         ) : agent.metrics.length > 0 ? (
           <MetricStrip section={fixtureMetrics(agent.metrics)} />
         ) : null}
+
+        {cockpit === undefined ? null : <AgentCockpit cockpit={cockpit} />}
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Panel title="Scope and boundary" subtitle="What this agent may and may not do">

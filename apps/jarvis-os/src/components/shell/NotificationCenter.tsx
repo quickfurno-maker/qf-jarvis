@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useState } from 'react';
 
 import type { AttentionItem } from '@/lib/control-plane/types';
@@ -102,6 +104,17 @@ export function NotificationCenter({ items }: { readonly items: readonly Attenti
                     <p className="mt-2 font-mono text-[9.5px] text-[var(--color-ink-faint)]">
                       {item.kind} · {item.age}
                     </p>
+                    {item.href === undefined ? null : (
+                      <Link
+                        href={item.href}
+                        onClick={() => {
+                          setOpen(false);
+                        }}
+                        className="mt-2 inline-flex text-[10.5px] font-semibold text-[var(--color-accent-bright)] hover:underline"
+                      >
+                        Open operating surface ?
+                      </Link>
+                    )}
                   </article>
                 ))
               )}

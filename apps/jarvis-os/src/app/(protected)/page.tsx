@@ -8,6 +8,7 @@ import { MetricStrip } from '@/components/analytics/MetricStrip';
 import { CommandDeck } from '@/components/command-center/CommandDeck';
 import { MissionControlHero } from '@/components/command-center/MissionControlHero';
 import { ActivityFeed } from '@/components/operations/ActivityFeed';
+import { DecisionLineage } from '@/components/operations/DecisionLineage';
 import { AttentionRail } from '@/components/operations/AttentionRail';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
@@ -20,6 +21,7 @@ import {
 } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
 import { operationalAttention } from '@/lib/control-plane/operational-attention';
+import { decisionLineage } from '@/lib/control-plane/decision-lineage';
 import { operatorBootstrap } from '@/server/operator/bootstrap';
 
 /**
@@ -85,6 +87,8 @@ export default async function OverviewPage() {
         <MetricStrip section={plane.headlineMetrics()} />
 
         <CommandDeck bootstrap={bootstrap} />
+
+        <DecisionLineage stages={decisionLineage(plane)} />
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
           <div className="space-y-5">

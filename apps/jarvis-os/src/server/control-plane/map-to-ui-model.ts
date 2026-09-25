@@ -165,6 +165,14 @@ export function mapSnapshotToReadModel(snapshot: ControlPlaneSnapshotV2): Contro
     context: item.context,
     age: '—',
     severity: item.severity,
+    href:
+      item.kind === 'governance'
+        ? '/governance'
+        : item.kind === 'integration'
+          ? '/integrations'
+          : item.kind === 'rollout'
+            ? '/governance'
+            : '/operations',
   }));
   const activity: Section<ActivityEntry> = section(sections.activity, (entry) => ({
     id: entry.id,

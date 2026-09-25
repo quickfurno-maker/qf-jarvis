@@ -594,6 +594,7 @@ describe('live operator capability remains contained behind reviewed seams', () 
     const ENABLED_CONTROL_FILES: readonly string[] = Object.freeze([
       'src/components/shell/AppShell.tsx', // drawer open/close: navigation only
       'src/components/shell/CommandPalette.tsx', // local route navigation only
+      'src/components/shell/LiveRefreshController.tsx', // router refresh/pause only; no command boundary
       'src/components/shell/MobileDock.tsx', // route navigation only
       'src/components/shell/NotificationCenter.tsx', // local attention drawer only
       'src/components/shell/OperatorMenu.tsx', // menu toggle + sign-out submit
@@ -611,6 +612,24 @@ describe('live operator capability remains contained behind reviewed seams', () 
       for (const button of buttons) {
         expect(button, `${label}: ${button.slice(0, 60)}`).toContain('disabled');
       }
+    }
+  });
+
+  it('keeps the live refresh controller outside every business-command seam', () => {
+    const code = codeOnly(
+      readFileSync(join(SRC, 'components', 'shell', 'LiveRefreshController.tsx'), 'utf8'),
+    );
+    expect(code).toContain('router.refresh()');
+    for (const forbidden of [
+      '@qf-jarvis/operator-client-core',
+      '/api/operator/v1/commands',
+      'APPROVAL_DECIDE',
+      'CONVERSATION_TAKEOVER',
+      'CONVERSATION_PAUSE_AI',
+      'CONVERSATION_RESUME_AI',
+      'fetch(',
+    ]) {
+      expect(code, forbidden).not.toContain(forbidden);
     }
   });
 });

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { Tag } from '@/components/system/StatusPill';
 import type { Tone } from '@/components/primitives/Panel';
 import type { AttentionItem } from '@/lib/control-plane/types';
@@ -55,6 +57,14 @@ export function AttentionRail({ items }: { readonly items: readonly AttentionIte
               <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--color-ink-faint)]">
                 {item.context}
               </p>
+              {item.href === undefined ? null : (
+                <Link
+                  href={item.href}
+                  className="mt-1.5 inline-flex text-[10.5px] font-semibold text-[var(--color-accent-bright)] hover:underline"
+                >
+                  Investigate ?
+                </Link>
+              )}
             </div>
             <span className="tabular shrink-0 self-start text-[11px] text-[var(--color-ink-faint)]">
               {item.age}
@@ -63,8 +73,9 @@ export function AttentionRail({ items }: { readonly items: readonly AttentionIte
         ))}
       </ul>
       <p className="mt-4 border-t border-[var(--color-line)] pt-3 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-        Read-only. Jarvis OS has no control-plane API in this release, so no item here can be
-        actioned from this surface.
+        Attention items deep-link to the relevant operating surface. Any mutation still crosses the
+        separate versioned operator-command boundary and remains subject to QuickFurno Core
+        authority.
       </p>
     </div>
   );

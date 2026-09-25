@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { AgentOverview } from '@/components/agents/AgentOverview';
 import { controlPlane } from '@/lib/control-plane';
-import { agentOperationalMetrics } from '@/lib/control-plane/agent-live';
+import { agentCockpit, agentOperationalMetrics } from '@/lib/control-plane/agent-live';
 
 export default async function RiyaAgentPage() {
   const plane = await controlPlane();
@@ -10,5 +10,11 @@ export default async function RiyaAgentPage() {
   if (agent === undefined) {
     notFound();
   }
-  return <AgentOverview agent={agent} metricsSection={agentOperationalMetrics(plane, 'riya')} />;
+  return (
+    <AgentOverview
+      agent={agent}
+      metricsSection={agentOperationalMetrics(plane, 'riya')}
+      cockpit={agentCockpit(plane, 'riya')}
+    />
+  );
 }

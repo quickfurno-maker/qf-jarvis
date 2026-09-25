@@ -8,6 +8,7 @@ import { OperatorMenu } from '@/components/shell/OperatorMenu';
 import { OperatorCommandProvider } from '@/components/operator/OperatorCommandProvider';
 import { CommandPalette } from '@/components/shell/CommandPalette';
 import { MobileDock } from '@/components/shell/MobileDock';
+import { LiveRefreshController } from '@/components/shell/LiveRefreshController';
 import { SideNav } from '@/components/navigation/SideNav';
 import { BrandLockup } from '@/components/shell/Brand';
 import type { AttentionItem } from '@/lib/control-plane/types';
@@ -170,6 +171,8 @@ function TopBar({
           <span className="hidden rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-[var(--color-base-900)] px-2.5 py-[3px] text-[10.5px] font-semibold tracking-[0.05em] text-[var(--color-ink-muted)] uppercase md:inline-flex">
             {ENVIRONMENT_LABEL}
           </span>
+
+          <LiveRefreshController />
 
           <NotificationCenter items={attention} />
 

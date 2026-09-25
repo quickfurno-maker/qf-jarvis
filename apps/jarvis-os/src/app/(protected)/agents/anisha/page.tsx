@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { AgentOverview } from '@/components/agents/AgentOverview';
 import { Notice } from '@/components/primitives/Panel';
 import { controlPlane } from '@/lib/control-plane';
-import { agentOperationalMetrics } from '@/lib/control-plane/agent-live';
+import { agentCockpit, agentOperationalMetrics } from '@/lib/control-plane/agent-live';
 
 /**
  * Anisha — REGISTERED-vendor relationship, support and success.
@@ -20,7 +20,11 @@ export default async function AnishaAgentPage() {
     notFound();
   }
   return (
-    <AgentOverview agent={agent} metricsSection={agentOperationalMetrics(plane, 'anisha')}>
+    <AgentOverview
+      agent={agent}
+      metricsSection={agentOperationalMetrics(plane, 'anisha')}
+      cockpit={agentCockpit(plane, 'anisha')}
+    >
       <Notice tone="info" title="Anisha is not Aarohi">
         Anisha works with vendors QuickFurno Core has already registered — support, onboarding,
         success and retention. Acquiring vendors who are not yet registered belongs to Aarohi, on a

@@ -7,8 +7,9 @@ function item(
   title: string,
   context: string,
   severity: AttentionItem['severity'],
+  href: string,
 ): AttentionItem {
-  return { id, kind, title, context, severity, age: 'now' };
+  return { id, kind, title, context, severity, age: 'now', href };
 }
 
 export function operationalAttention(plane: ControlPlaneReadModel): readonly AttentionItem[] {
@@ -25,6 +26,7 @@ export function operationalAttention(plane: ControlPlaneReadModel): readonly Att
           String(pending) + ' approval' + (pending === 1 ? '' : 's') + ' awaiting operator',
           'QuickFurno Core is waiting for an operator decision on the signed approval queue.',
           pending >= 10 ? 'critical' : 'warning',
+          '/approvals',
         ),
       );
     }
@@ -45,6 +47,7 @@ export function operationalAttention(plane: ControlPlaneReadModel): readonly Att
             ' under human control',
           'These conversations are currently held by a human operator in QuickFurno Core.',
           'warning',
+          '/operations',
         ),
       );
     }
@@ -56,6 +59,7 @@ export function operationalAttention(plane: ControlPlaneReadModel): readonly Att
           String(paused) + ' AI conversation' + (paused === 1 ? '' : 's') + ' paused',
           'Automation is suspended for these observed conversations until Core state changes.',
           'warning',
+          '/operations',
         ),
       );
     }
@@ -70,6 +74,7 @@ export function operationalAttention(plane: ControlPlaneReadModel): readonly Att
         'Worker telemetry unavailable',
         'Jarvis OS cannot currently prove production worker health from the observation boundary.',
         'critical',
+        '/workers',
       ),
     );
   } else if (workers.items.some((node) => node.state === 'DEGRADED')) {
@@ -80,6 +85,7 @@ export function operationalAttention(plane: ControlPlaneReadModel): readonly Att
         'Production worker degraded',
         'At least one observed Jarvis worker is reporting a degraded health state.',
         'critical',
+        '/workers',
       ),
     );
   }
@@ -93,6 +99,7 @@ export function operationalAttention(plane: ControlPlaneReadModel): readonly Att
         'Model telemetry unavailable',
         'Provider/model health cannot currently be proven from the worker observation boundary.',
         'warning',
+        '/models',
       ),
     );
   } else if (models.items.some((model) => model.state === 'DEGRADED')) {
@@ -103,6 +110,7 @@ export function operationalAttention(plane: ControlPlaneReadModel): readonly Att
         'Model gateway degraded',
         'The observed production model gateway is reporting a degraded state.',
         'critical',
+        '/models',
       ),
     );
   }
@@ -122,6 +130,7 @@ export function operationalAttention(plane: ControlPlaneReadModel): readonly Att
             String(uncertain) +
             ' uncertain jobs were observed in the last 24 hours.',
           uncertain > 0 ? 'critical' : 'warning',
+          '/execution',
         ),
       );
     }

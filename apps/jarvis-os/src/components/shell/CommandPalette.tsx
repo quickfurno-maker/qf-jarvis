@@ -5,6 +5,141 @@ import { useRouter } from 'next/navigation';
 
 import { NAV_ITEMS } from '@/lib/navigation/catalog';
 
+interface SmartIntent {
+  readonly href: string;
+  readonly label: string;
+  readonly reason: string;
+  readonly keywords: readonly string[];
+}
+
+const SMART_INTENTS: readonly SmartIntent[] = Object.freeze([
+  {
+    href: '/approvals',
+    label: 'Open approval desk',
+    reason: 'Risk, pending decisions and Core-authorized approval requests.',
+    keywords: ['approval', 'approve', 'reject', 'pending', 'risk', 'oldest', 'decision'],
+  },
+  {
+    href: '/operations',
+    label: 'Open human-control operations',
+    reason: 'Takeovers, paused AI and operator control posture.',
+    keywords: ['takeover', 'pause', 'resume', 'human', 'escalation', 'operator', 'control'],
+  },
+  {
+    href: '/conversations',
+    label: 'Open conversation inventory',
+    reason: 'Current conversation ownership and control state.',
+    keywords: ['conversation', 'customer', 'vendor', 'chat', 'thread', 'assigned'],
+  },
+  {
+    href: '/agents/riya',
+    label: 'Inspect Riya',
+    reason: 'Customer-conversation scope, workload and live control posture.',
+    keywords: ['riya', 'customer', 'qualification'],
+  },
+  {
+    href: '/agents/anisha',
+    label: 'Inspect Anisha',
+    reason: 'Registered-vendor care, workload and control posture.',
+    keywords: ['anisha', 'registered', 'vendor', 'success', 'support'],
+  },
+  {
+    href: '/agents/aarohi',
+    label: 'Inspect Aarohi',
+    reason: 'Vendor-growth readiness and governed acquisition boundaries.',
+    keywords: ['aarohi', 'acquisition', 'prospect', 'growth', 'outreach'],
+  },
+  {
+    href: '/agents/jarvis',
+    label: 'Inspect Jarvis',
+    reason: 'Orchestration, coordination and system-level operating posture.',
+    keywords: ['jarvis', 'orchestration', 'coordination', 'supervisor'],
+  },
+  {
+    href: '/models',
+    label: 'Inspect model gateway',
+    reason: 'Provider state, latency, circuits and data-class routing.',
+    keywords: ['model', 'provider', 'latency', 'circuit', 'fallback', 'routing', 'groq', 'nara'],
+  },
+  {
+    href: '/knowledge',
+    label: 'Inspect governed knowledge',
+    reason: 'RAG namespaces, grounding and knowledge availability.',
+    keywords: ['rag', 'knowledge', 'retrieval', 'grounding', 'freshness', 'context'],
+  },
+  {
+    href: '/evaluations',
+    label: 'Inspect evaluations',
+    reason: 'Quality, safety and certification evidence.',
+    keywords: ['evaluation', 'eval', 'quality', 'safety', 'test', 'certify', 'regression'],
+  },
+  {
+    href: '/execution',
+    label: 'Inspect execution fabric',
+    reason: 'Authorized execution outcomes, failed and uncertain jobs.',
+    keywords: ['execution', 'failed', 'uncertain', 'dispatch', 'automation', 'job', 'effect'],
+  },
+  {
+    href: '/core-sync',
+    label: 'Inspect Core authority boundary',
+    reason: 'Source-of-truth ownership and Core/Jarvis separation.',
+    keywords: ['core', 'truth', 'authority', 'sync', 'disagree', 'ownership'],
+  },
+  {
+    href: '/workers',
+    label: 'Inspect worker fleet',
+    reason: 'Worker health, node capacity and production observation.',
+    keywords: ['worker', 'fleet', 'gpu', 'node', 'capacity'],
+  },
+  {
+    href: '/analytics',
+    label: 'Open intelligence & analytics',
+    reason: 'Business aggregates beside operational trends.',
+    keywords: ['analytics', 'trend', 'business', 'performance', 'metric', 'today', 'yesterday'],
+  },
+  {
+    href: '/governance',
+    label: 'Inspect governance',
+    reason: 'Capability lifecycle, rollout and standing authority rules.',
+    keywords: ['governance', 'rollout', 'capability', 'policy', 'authority', 'roadmap'],
+  },
+]);
+
+function tokens(value: string): readonly string[] {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, ' ')
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean);
+}
+
+function smartMatches(query: string): readonly SmartIntent[] {
+  const queryTokens = tokens(query);
+  if (queryTokens.length === 0) return [];
+  return SMART_INTENTS.map((intent) => ({
+    intent,
+    score: queryTokens.reduce(
+      (total, token) =>
+        total +
+        intent.keywords.reduce(
+          (keywordScore, keyword) =>
+            keyword === token
+              ? keywordScore + 4
+              : keyword.includes(token) || token.includes(keyword)
+                ? keywordScore + 1
+                : keywordScore,
+          0,
+        ),
+      0,
+    ),
+  }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
+    .map((entry) => entry.intent);
+}
+
 export function CommandPalette() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -27,13 +162,11 @@ export function CommandPalette() {
   }, []);
 
   useEffect(() => {
-    if (open) {
-      requestAnimationFrame(() => inputRef.current?.focus());
-    } else {
-      setQuery('');
-    }
+    if (open) requestAnimationFrame(() => inputRef.current?.focus());
+    else setQuery('');
   }, [open]);
 
+  const smart = useMemo(() => smartMatches(query), [query]);
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return NAV_ITEMS;
@@ -54,17 +187,17 @@ export function CommandPalette() {
         onClick={() => {
           setOpen(true);
         }}
-        className="command-trigger flex w-full max-w-[460px] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-line)] px-3 py-2 text-left text-[12px] text-[var(--color-ink-faint)]"
+        className="command-trigger flex w-full max-w-[500px] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-line)] px-3 py-2 text-left text-[12px] text-[var(--color-ink-faint)]"
       >
         <span aria-hidden="true">⌕</span>
-        <span className="flex-1 truncate">Navigate Jarvis OS</span>
+        <span className="flex-1 truncate">Search or describe what you need</span>
         <kbd className="rounded border border-[var(--color-line)] px-1.5 py-[1px] text-[10px]">
           ⌘K
         </kbd>
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/70 px-4 pt-[12vh] backdrop-blur-sm">
+        <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/70 px-4 pt-[10vh] backdrop-blur-sm">
           <button
             type="button"
             aria-label="Close command palette"
@@ -76,7 +209,7 @@ export function CommandPalette() {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Jarvis OS command palette"
+            aria-label="Jarvis OS intelligent navigator"
             className="relative z-10 w-full max-w-2xl overflow-hidden rounded-[16px] border border-[var(--color-line-strong)] bg-[var(--color-base-900)] shadow-2xl"
           >
             <div className="border-b border-[var(--color-line)] p-3">
@@ -86,11 +219,48 @@ export function CommandPalette() {
                 onChange={(event) => {
                   setQuery(event.target.value);
                 }}
-                placeholder="Search modules, agents, analytics, controls…"
+                placeholder="Try “oldest approval”, “why is Riya degraded?”, or “model latency”…"
                 className="w-full rounded-[10px] border border-[var(--color-line)] bg-[var(--color-base-850)] px-3 py-3 text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"
               />
+              <p className="mt-2 px-1 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">
+                Deterministic navigation intelligence only. It never executes a command or changes
+                authority.
+              </p>
             </div>
-            <div className="max-h-[56vh] overflow-y-auto p-2">
+            <div className="max-h-[62vh] overflow-y-auto p-2">
+              {query.trim() && smart.length > 0 ? (
+                <div className="mb-2 border-b border-[var(--color-line)] pb-2">
+                  <p className="px-3 py-1.5 text-[9.5px] font-semibold tracking-[0.1em] text-[var(--color-accent-bright)] uppercase">
+                    Suggested
+                  </p>
+                  {smart.map((intent) => (
+                    <button
+                      key={'smart:' + intent.href}
+                      type="button"
+                      onClick={() => {
+                        navigate(intent.href);
+                      }}
+                      className="flex w-full items-start justify-between gap-4 rounded-[10px] px-3 py-2.5 text-left hover:bg-[var(--color-base-800)]"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-[12.5px] font-semibold text-[var(--color-ink)]">
+                          {intent.label}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
+                          {intent.reason}
+                        </span>
+                      </span>
+                      <span className="font-mono text-[10px] text-[var(--color-ink-faint)]">
+                        {intent.href}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <p className="px-3 py-1.5 text-[9.5px] font-semibold tracking-[0.1em] text-[var(--color-ink-faint)] uppercase">
+                Modules
+              </p>
               {items.length === 0 ? (
                 <p className="px-3 py-6 text-center text-[12px] text-[var(--color-ink-faint)]">
                   No matching Jarvis OS module.

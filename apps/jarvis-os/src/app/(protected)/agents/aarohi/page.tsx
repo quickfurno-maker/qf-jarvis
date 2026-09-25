@@ -6,7 +6,7 @@ import { Notice, Panel } from '@/components/primitives/Panel';
 import { CapabilityBadge, StatusPill } from '@/components/system/StatusPill';
 import { SectionBody } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
-import { agentOperationalMetrics } from '@/lib/control-plane/agent-live';
+import { agentCockpit, agentOperationalMetrics } from '@/lib/control-plane/agent-live';
 import type { AarohiReadinessKind, AarohiReadinessRow } from '@/lib/control-plane/types';
 
 /**
@@ -48,7 +48,11 @@ export default async function AarohiAgentPage() {
   const readinessSection = plane.aarohiReadiness();
 
   return (
-    <AgentOverview agent={agent} metricsSection={agentOperationalMetrics(plane, 'aarohi')}>
+    <AgentOverview
+      agent={agent}
+      metricsSection={agentOperationalMetrics(plane, 'aarohi')}
+      cockpit={agentCockpit(plane, 'aarohi')}
+    >
       <Notice tone="critical" title="No autonomous outreach exists">
         Aarohi has no runtime, no channel and no credential. It cannot contact a prospect, and it
         could not do so even if a human asked: outreach requires QuickFurno Core authorization, and
