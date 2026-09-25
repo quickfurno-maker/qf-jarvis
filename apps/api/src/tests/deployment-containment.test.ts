@@ -45,6 +45,9 @@ const DOCKERFILE = read('deploy/jarvis-os/Dockerfile');
 const COMPOSE = read('deploy/jarvis-os/compose.production.yml');
 const INGRESS = read('deploy/jarvis-os/compose.ingress.yml');
 const HSTS = read('deploy/jarvis-os/compose.hsts.yml');
+const JARVIS_OS_MANIFEST = JSON.parse(read('apps/jarvis-os/package.json')) as {
+  readonly dependencies?: Readonly<Record<string, string>>;
+};
 
 /** Strip `#` comment lines so a scan reads DIRECTIVES, not the prose explaining them. */
 const directives = (text: string): string =>
@@ -94,16 +97,15 @@ describe('the production image', () => {
     expect(DOCKERFILE_CODE).toContain('--frozen-lockfile');
   });
 
-  it('copies and builds every framework-neutral Jarvis OS workspace dependency', () => {
-    const workspacePackages = [
-      'control-plane-read-contract',
-      'operator-api-contract',
-      'operator-client-core',
-      'quickfurno-operator-command-contract',
-      'quickfurno-operator-observation-contract',
-      'worker-observation-contract',
-    ] as const;
+  it('copies and builds every direct Jarvis OS workspace dependency', () => {
+    const workspacePackages = Object.entries(JARVIS_OS_MANIFEST.dependencies ?? {})
+      .filter(
+        ([name, version]) => name.startsWith('@qf-jarvis/') && version.startsWith('workspace:'),
+      )
+      .map(([name]) => name.slice('@qf-jarvis/'.length))
+      .sort();
 
+    expect(workspacePackages.length).toBeGreaterThan(0);
     for (const workspace of workspacePackages) {
       expect(DOCKERFILE_CODE, workspace).toContain(
         `COPY packages/${workspace}/package.json packages/${workspace}/`,
