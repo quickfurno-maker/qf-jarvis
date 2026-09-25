@@ -580,7 +580,7 @@ describe('POST /api/operator/v1/voice/session', () => {
       new Request(url, {
         method: 'POST',
         headers: requestHeaders,
-        body,
+        ...(body === undefined ? {} : { body }),
       }),
     );
   };
