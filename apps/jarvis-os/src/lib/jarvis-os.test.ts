@@ -649,8 +649,8 @@ describe('live operator capability remains contained behind reviewed seams', () 
       join(SRC, 'app', 'api', 'operator', 'v1', 'voice', 'session', 'route.ts'),
     ];
     const code = files.map((file) => codeOnly(readFileSync(file, 'utf8'))).join('\n');
-    expect(code).toContain('OPERATOR_VOICE_INTELLIGENCE_RPC');
-    expect(code).toContain('/api/operator/v1/intelligence');
+    expect(code).not.toContain('OPERATOR_VOICE_INTELLIGENCE_RPC');
+    expect(code).not.toContain('/api/operator/v1/intelligence');
     expect(code).toContain('canPublishSources');
     expect(code).toContain('TrackSource.MICROPHONE');
     expect(code).toContain('maxParticipants: 2');

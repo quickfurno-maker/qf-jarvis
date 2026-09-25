@@ -17,9 +17,9 @@ export function LiveVoiceConsole() {
               {state === 'CONNECTED'
                 ? muted
                   ? 'Connected · muted'
-                  : 'Connected · listening'
+                  : 'Connected · mic streaming'
                 : state === 'WAITING_FOR_AGENT'
-                  ? 'Room connected · Jarvis joining'
+                  ? 'Room connected · transport joining'
                   : state === 'RECONNECTING'
                     ? 'Reconnecting…'
                     : state === 'CONNECTING'
@@ -29,9 +29,9 @@ export function LiveVoiceConsole() {
                         : 'Voice offline'}
             </h2>
             <p className="mt-2 max-w-2xl text-[11.5px] leading-relaxed text-[var(--color-ink-muted)]">
-              Once started, the voice session stays connected while you navigate Jarvis OS. It can
-              ask about governed operational state, but cannot approve, execute, send, call
-              customers or vendors, or mutate QuickFurno Core.
+              Once started, LiveKit keeps the realtime operator audio transport connected while you
+              navigate Jarvis OS. This phase carries microphone audio only; speech understanding,
+              speech generation and Jarvis reasoning remain separate capabilities.
             </p>
           </div>
 
@@ -75,8 +75,8 @@ export function LiveVoiceConsole() {
 
       <div className="grid gap-2 md:grid-cols-3">
         {[
-          ['Authority', 'None', 'Voice cannot authorize a Core mutation.'],
-          ['Business effect', 'False', 'This phase is operator intelligence only.'],
+          ['Authority', 'None', 'Voice transport cannot authorize a Core mutation.'],
+          ['Inference', 'None', 'LiveKit carries audio only; no STT, LLM or TTS runs here.'],
           [
             'Microphone',
             'User initiated',

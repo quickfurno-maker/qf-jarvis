@@ -1,22 +1,24 @@
-# Jarvis LiveKit operator voice deployment
+# Jarvis LiveKit operator voice transport
 
-This package deploys the private LiveKit agent used by Jarvis OS operator voice.
+This package deploys the private LiveKit participant used by Jarvis OS operator voice.
 
-It is intentionally separate from Jarvis OS and from every QuickFurno business worker.
+LiveKit is deliberately used as realtime WebRTC transport only. The worker has no STT, TTS,
+LLM, LiveKit Inference model, Jarvis reasoning credential, QuickFurno Core credential,
+operator-command credential, Action Kernel, SIP/telephony configuration, or outbound-call authority.
 
-## Authority
-
-The voice agent has LiveKit Cloud credentials and LiveKit Inference model configuration only. It has no QuickFurno Core credential, no operator-command credential, no Action Kernel or execution transport, no SIP/telephony configuration, and no customer/vendor outbound-call capability.
-
-Operational questions are forwarded by LiveKit RPC to the authenticated Jarvis OS browser, which uses the existing read-only Jarvis Intelligence endpoint.
+The worker joins the named LiveKit room, subscribes only to operator microphone audio, and keeps
+the transport session alive until the operator leaves. Speech understanding and speech generation
+are separate Jarvis capabilities and are not activated by this deployment.
 
 ## Required secret
 
-Provision `/srv/qf-jarvis/secrets/qf-jarvis-livekit-voice-agent.json` as mode `0400` or `0600`, owned by `10004:10004`.
+Provision `/srv/qf-jarvis/secrets/qf-jarvis-livekit-voice-agent.json` as mode `0400` or `0600`,
+owned by `10004:10004`.
 
 Do not commit or paste the secret.
 
-The JSON protocol is `qfj.livekit.operator-voice-agent.v1` and contains the LiveKit Cloud `wss://...livekit.cloud` URL, a project API key/secret, and reviewed STT/LLM/TTS model references.
+The JSON protocol is `qfj.livekit.operator-voice-transport.v1` and contains only the LiveKit Cloud
+`wss://...livekit.cloud` URL, project API key/secret, and the reviewed agent dispatch name.
 
 ## Deployment
 

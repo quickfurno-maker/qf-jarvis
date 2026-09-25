@@ -17,19 +17,12 @@ function configFile(value: unknown, mode = 0o600): string {
 }
 
 const VALID = Object.freeze({
-  protocol: 'qfj.livekit.operator-voice-agent.v1',
+  protocol: 'qfj.livekit.operator-voice-transport.v1',
   livekit: {
     wsUrl: 'wss://example.livekit.cloud',
     apiKey: 'test-api-key-placeholder',
     apiSecret: 'test-api-secret-placeholder-only',
     agentName: 'qfj-jarvis-operator-voice',
-  },
-  inference: {
-    sttModel: 'assemblyai/universal-3-5-pro',
-    language: 'en',
-    llmModel: 'google/gemma-4-31b-it',
-    ttsModel: 'fishaudio/s2.1-pro',
-    ttsVoice: 'voice-id',
   },
 });
 
@@ -37,7 +30,7 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-describe('LiveKit voice-agent configuration boundary', () => {
+describe('LiveKit voice-transport configuration boundary', () => {
   it('accepts a private bounded file with secure websocket transport', () => {
     const value = loadVoiceAgentConfig(configFile(VALID));
     expect(value.livekit.wsUrl).toBe('wss://example.livekit.cloud');

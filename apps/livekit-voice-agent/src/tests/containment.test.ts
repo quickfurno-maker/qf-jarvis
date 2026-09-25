@@ -16,7 +16,7 @@ function files(dir: string): string[] {
     .filter((path) => path.endsWith('.ts') && !path.endsWith('.test.ts'));
 }
 
-describe('LiveKit operator voice containment', () => {
+describe('LiveKit operator voice transport containment', () => {
   it('contains no Core, execution, operator-command, SIP, telephony or outbound-business-call seam', () => {
     const code = files(ROOT)
       .map((path) => readFileSync(path, 'utf8'))
@@ -42,11 +42,19 @@ describe('LiveKit operator voice containment', () => {
     }
   });
 
-  it('forwards operational questions only to the reviewed read-only RPC', () => {
+  it('is a raw audio transport participant with no inference or Jarvis-intelligence coupling', () => {
     const code = readFileSync(join(ROOT, 'agent.ts'), 'utf8');
-    expect(code).toContain('OPERATOR_VOICE_INTELLIGENCE_RPC');
-    expect(code).toContain('execution ability');
-    expect(code).toContain('voice is read-only');
+    expect(code).toContain('AutoSubscribe.AUDIO_ONLY');
+    expect(code).toContain('ctx.waitForParticipant()');
+    for (const forbidden of [
+      'AgentSession',
+      'OPERATOR_VOICE_INTELLIGENCE_RPC',
+      'performRpc',
+      'inference.',
+      'generateReply',
+    ]) {
+      expect(code, forbidden).not.toContain(forbidden);
+    }
   });
 
   it('reads only a file-path environment variable, never LiveKit secret values from ambient env', () => {

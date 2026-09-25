@@ -8,7 +8,7 @@ export default function VoicePage() {
       <PageHeader
         breadcrumb={['Control', 'Voice']}
         title="Jarvis Voice"
-        purpose="LiveKit-powered realtime operator voice. It reuses Jarvis Intelligence and the existing authority model; it is not outbound business calling."
+        purpose="LiveKit-powered realtime audio transport for Jarvis. LiveKit carries voice; Jarvis intelligence remains outside the LiveKit layer."
       />
 
       <div className="space-y-5">
@@ -20,9 +20,9 @@ export default function VoicePage() {
         >
           <div className="grid gap-3 text-[11px] leading-relaxed text-[var(--color-ink-muted)] md:grid-cols-2">
             <p>
-              <strong className="text-[var(--color-ink)]">Operator voice:</strong> ask about current
-              system state, incidents, agents, approvals, models, execution and capabilities through
-              the same authenticated read-only intelligence contract used by Jarvis OS.
+              <strong className="text-[var(--color-ink)]">Operator voice transport:</strong> LiveKit
+              provides the authenticated realtime room, microphone transport and agent dispatch. No
+              speech model or Jarvis reasoning runs inside LiveKit.
             </p>
             <p>
               <strong className="text-[var(--color-ink)]">Business voice:</strong> customer/vendor

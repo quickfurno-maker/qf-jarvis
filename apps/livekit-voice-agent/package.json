@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "description": "LiveKit operator-voice participant for Jarvis. It transports speech and forwards operational questions to the authenticated Jarvis OS browser over LiveKit RPC; it holds no Core or execution authority.",
+  "description": "LiveKit transport-only operator-voice participant for Jarvis. It carries realtime audio only and holds no model, inference, Core or execution authority.",
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "start": "node dist/agent.js start",
