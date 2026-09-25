@@ -62,6 +62,30 @@ const SMART_INTENTS: readonly SmartIntent[] = Object.freeze([
     keywords: ['model', 'provider', 'latency', 'circuit', 'fallback', 'routing', 'groq', 'nara'],
   },
   {
+    href: '/intelligence',
+    label: 'Ask Jarvis Intelligence',
+    reason: 'Read-only proactive reasoning over the current governed operator snapshot.',
+    keywords: ['jarvis', 'ask', 'why', 'attention', 'explain', 'intelligence'],
+  },
+  {
+    href: '/memory',
+    label: 'Inspect governed memory',
+    reason: 'Long-term memory activation, retention and erasure posture.',
+    keywords: ['memory', 'remember', 'retention', 'erasure', 'durable'],
+  },
+  {
+    href: '/simulation',
+    label: 'Open Digital Twin',
+    reason: 'Zero-effect replay and candidate-change rehearsal.',
+    keywords: ['simulation', 'simulate', 'twin', 'replay', 'rehearsal'],
+  },
+  {
+    href: '/release',
+    label: 'Open Release & Certification',
+    reason: 'Release identity, assurance, evaluation, digital-twin and rollout gates.',
+    keywords: ['release', 'certification', 'deploy', 'promotion', 'sha', 'build'],
+  },
+  {
     href: '/knowledge',
     label: 'Inspect governed knowledge',
     reason: 'RAG namespaces, grounding and knowledge availability.',
@@ -180,6 +204,13 @@ export function CommandPalette() {
     router.push(href);
   };
 
+  const askJarvis = (): void => {
+    const bounded = query.trim();
+    if (bounded.length === 0 || bounded.length > 500) return;
+    setOpen(false);
+    router.push('/intelligence?query=' + encodeURIComponent(bounded));
+  };
+
   return (
     <>
       <button
@@ -213,18 +244,37 @@ export function CommandPalette() {
             className="relative z-10 w-full max-w-2xl overflow-hidden rounded-[16px] border border-[var(--color-line-strong)] bg-[var(--color-base-900)] shadow-2xl"
           >
             <div className="border-b border-[var(--color-line)] p-3">
-              <input
-                ref={inputRef}
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                }}
-                placeholder="Try “oldest approval”, “why is Riya degraded?”, or “model latency”…"
-                className="w-full rounded-[10px] border border-[var(--color-line)] bg-[var(--color-base-850)] px-3 py-3 text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"
-              />
+              <div className="flex gap-2">
+                <input
+                  ref={inputRef}
+                  value={query}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      askJarvis();
+                    }
+                  }}
+                  maxLength={500}
+                  placeholder={'Ask ?what needs me??, ?why is Riya degraded??, or ?model health??'}
+                  className="min-w-0 flex-1 rounded-[10px] border border-[var(--color-line)] bg-[var(--color-base-850)] px-3 py-3 text-[13px] text-[var(--color-ink)] outline-none placeholder:text-[var(--color-ink-faint)]"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    askJarvis();
+                  }}
+                  disabled={query.trim().length === 0}
+                  className="rounded-[10px] border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 px-3 text-[11px] font-semibold text-[var(--color-accent-bright)] disabled:opacity-40"
+                >
+                  Ask Jarvis
+                </button>
+              </div>
               <p className="mt-2 px-1 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">
-                Deterministic navigation intelligence only. It never executes a command or changes
-                authority.
+                Read-only operator intelligence from the current governed snapshot. It can explain
+                and navigate; it never executes a command or changes authority.
               </p>
             </div>
             <div className="max-h-[62vh] overflow-y-auto p-2">

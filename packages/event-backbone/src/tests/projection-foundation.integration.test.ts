@@ -136,7 +136,7 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe('migrations apply in order, idempotently, with 0001–0007 unchanged', () => {
-  it('records exactly 0001..0014 in order with the immutable checksums intact', async () => {
+  it('records exactly 0001..0015 in order with the immutable checksums intact', async () => {
     const rows = await withClient(admin, async (client) => {
       const r = await client.query<{ version: number; filename: string; checksum: Buffer }>(
         `SELECT version, filename, checksum FROM qf_jarvis.schema_migration ORDER BY version ASC`,
@@ -159,6 +159,7 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
       '0012_riya_logical_turn_idempotency.sql',
       '0013_communication_state_projection.sql',
       '0014_conversation_prospect_party_type.sql',
+      '0015_correlation_timeline_projection.sql',
     ]);
     // RWC-P8 (ADR-0104) added 0012; QFJ-P09 D5 (ADR-0142) added 0013; the JF-4B/C/D owner correction
     // (ADR-0150 §34) adds 0014, the party CHECK widened to hold PROSPECT. One authorized addition each.

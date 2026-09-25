@@ -7,6 +7,7 @@ import {
 import { MetricStrip } from '@/components/analytics/MetricStrip';
 import { CommandDeck } from '@/components/command-center/CommandDeck';
 import { MissionControlHero } from '@/components/command-center/MissionControlHero';
+import { NowBrief } from '@/components/command-center/NowBrief';
 import { ActivityFeed } from '@/components/operations/ActivityFeed';
 import { DecisionLineage } from '@/components/operations/DecisionLineage';
 import { AttentionRail } from '@/components/operations/AttentionRail';
@@ -22,6 +23,7 @@ import {
 import { controlPlane } from '@/lib/control-plane';
 import { operationalAttention } from '@/lib/control-plane/operational-attention';
 import { decisionLineage } from '@/lib/control-plane/decision-lineage';
+import { proactiveNowBrief } from '@/lib/control-plane/proactive';
 import { operatorBootstrap } from '@/server/operator/bootstrap';
 
 /**
@@ -83,6 +85,8 @@ export default async function OverviewPage() {
         )}
 
         <StatusStrip components={health.components} />
+
+        <NowBrief brief={proactiveNowBrief(plane)} />
 
         <MetricStrip section={plane.headlineMetrics()} />
 

@@ -93,9 +93,9 @@ describe('migration 0012 is the ONE authorized addition, and it is not a transcr
     const sql = readdirSync(MIGRATIONS_DIR)
       .filter((name) => name.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(14);
+    expect(sql).toHaveLength(15);
     expect(sql[11]).toBe('0012_riya_logical_turn_idempotency.sql');
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 14)).toBe(false);
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 15)).toBe(false);
     expect(
       createHash('sha256')
         .update(readFileSync(join(MIGRATIONS_DIR, '0011_riya_conversation_continuity.sql')))

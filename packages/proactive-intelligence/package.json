@@ -1,0 +1,19 @@
+{
+  "name": "@qf-jarvis/proactive-intelligence",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Pure proactive operating intelligence: prioritized attention, bounded anomaly detection, efficiency assessment, recovery recommendations and continuous-evaluation posture. It authorizes and executes nothing.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  }
+}

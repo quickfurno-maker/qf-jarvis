@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Jarvis OS — the premium operator control plane for QF Jarvis. It renders governed live/read-model snapshots and submits only versioned operator commands through separate trust lanes; it holds no business authority, database credential, provider credential or direct execution path. QuickFurno Core authorizes and owns business truth, QuickFurno Core Automation executes approved intents, and providers deliver. The web UI is the first client of the same framework-neutral operator API intended for future iOS/Android clients.",
+  "description": "Jarvis OS \u2014 the premium operator control plane for QF Jarvis. It renders governed live/read-model snapshots and submits only versioned operator commands through separate trust lanes; it holds no business authority, database credential, provider credential or direct execution path. QuickFurno Core authorizes and owns business truth, QuickFurno Core Automation executes approved intents, and providers deliver. The web UI is the first client of the same framework-neutral operator API intended for future iOS/Android clients.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -15,6 +15,7 @@
     "@qf-jarvis/control-plane-read-contract": "workspace:*",
     "@qf-jarvis/operator-api-contract": "workspace:*",
     "@qf-jarvis/operator-client-core": "workspace:*",
+    "@qf-jarvis/proactive-intelligence": "workspace:*",
     "@qf-jarvis/quickfurno-operator-command-contract": "workspace:*",
     "@qf-jarvis/quickfurno-operator-observation-contract": "workspace:*",
     "@qf-jarvis/release-assurance-observation-contract": "workspace:*",

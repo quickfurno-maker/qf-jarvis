@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./internal/jao5-ambient": {
+      "types": "./dist/jao/controlled-ambient-operations/public.d.ts",
+      "default": "./dist/jao/controlled-ambient-operations/public.js"
     }
   },
   "scripts": {

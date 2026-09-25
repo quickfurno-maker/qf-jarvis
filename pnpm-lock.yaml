@@ -183,6 +183,9 @@ importers:
       '@qf-jarvis/operator-client-core':
         specifier: workspace:*
         version: link:../../packages/operator-client-core
+      '@qf-jarvis/proactive-intelligence':
+        specifier: workspace:*
+        version: link:../../packages/proactive-intelligence
       '@qf-jarvis/quickfurno-operator-command-contract':
         specifier: workspace:*
         version: link:../../packages/quickfurno-operator-command-contract
@@ -220,6 +223,18 @@ importers:
       tailwindcss:
         specifier: 4.3.0
         version: 4.3.0
+
+  apps/proactive-worker:
+    dependencies:
+      '@qf-jarvis/event-backbone':
+        specifier: workspace:*
+        version: link:../../packages/event-backbone
+      '@qf-jarvis/model-gateway':
+        specifier: workspace:*
+        version: link:../../packages/model-gateway
+      '@qf-jarvis/worker':
+        specifier: workspace:*
+        version: link:../worker
 
   apps/quickfurno-gateway: {}
 
@@ -891,6 +906,8 @@ importers:
       '@types/pg':
         specifier: 8.20.0
         version: 8.20.0
+
+  packages/proactive-intelligence: {}
 
   packages/prompt-registry:
     dependencies:

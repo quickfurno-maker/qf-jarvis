@@ -1,5 +1,6 @@
 import type { AttentionItem, ControlPlaneReadModel } from './types';
 import { isReadable } from './types';
+import { proactiveNowBrief } from './proactive';
 
 function item(
   id: string,
@@ -14,6 +15,28 @@ function item(
 
 export function operationalAttention(plane: ControlPlaneReadModel): readonly AttentionItem[] {
   const merged: AttentionItem[] = [...plane.attention().items];
+
+  for (const finding of proactiveNowBrief(plane).findings) {
+    merged.unshift({
+      id: 'proactive:' + finding.id,
+      kind:
+        finding.domain === 'AUTHORITY'
+          ? 'approval'
+          : finding.domain === 'CONVERSATION'
+            ? 'escalation'
+            : finding.domain === 'WORKER'
+              ? 'worker'
+              : finding.domain === 'EXECUTION'
+                ? 'blocked'
+                : 'warning',
+      title: finding.title,
+      context: finding.summary,
+      age: 'now',
+      severity:
+        finding.priority === 'P0' ? 'critical' : finding.priority === 'P1' ? 'warning' : 'info',
+      href: finding.route,
+    });
+  }
 
   const approvals = plane.approvalQueue();
   if (isReadable(approvals.availability)) {

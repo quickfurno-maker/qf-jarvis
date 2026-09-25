@@ -134,8 +134,6 @@ describe('capability lifecycle', () => {
     // a surface look finished, and thereby rendering a live-looking control.
     const mustNotBeAvailable: readonly CapabilityLifecycle[] = ['AVAILABLE'];
     for (const id of [
-      'approval.submit',
-      'conversation.control.write',
       'communication.live-send',
       'execution.core-automation.bridge',
       'aarohi.vendor-growth',
@@ -170,6 +168,7 @@ describe('navigation', () => {
       '/approvals',
       '/conversations',
       '/execution',
+      '/intelligence',
       '/knowledge',
       '/evaluations',
       '/models',
@@ -562,6 +561,7 @@ describe('live operator capability remains contained behind reviewed seams', () 
       '@qf-jarvis/control-plane-read-contract',
       '@qf-jarvis/operator-api-contract',
       '@qf-jarvis/operator-client-core',
+      '@qf-jarvis/proactive-intelligence',
       '@qf-jarvis/quickfurno-operator-command-contract',
       '@qf-jarvis/quickfurno-operator-observation-contract',
       '@qf-jarvis/release-assurance-observation-contract',
@@ -612,6 +612,30 @@ describe('live operator capability remains contained behind reviewed seams', () 
       for (const button of buttons) {
         expect(button, `${label}: ${button.slice(0, 60)}`).toContain('disabled');
       }
+    }
+  });
+
+  it('keeps operator intelligence read-only and provider-free', () => {
+    const files = [
+      join(SRC, 'lib', 'control-plane', 'operator-intelligence.ts'),
+      join(SRC, 'app', 'api', 'operator', 'v1', 'intelligence', 'route.ts'),
+    ];
+    const code = files.map((file) => codeOnly(readFileSync(file, 'utf8'))).join('\n');
+    expect(code).toContain('answerOperatorQuestion');
+    expect(code).toContain('@qf-jarvis/proactive-intelligence');
+    expect(code).not.toContain('/api/operator/v1/commands');
+    for (const forbidden of [
+      '@qf-jarvis/operator-client-core',
+      'APPROVAL_DECIDE',
+      'CONVERSATION_TAKEOVER',
+      'CONVERSATION_PAUSE_AI',
+      'CONVERSATION_RESUME_AI',
+      'fetch(',
+      'openai',
+      'groq',
+      'whatsapp',
+    ]) {
+      expect(code.toLowerCase(), forbidden).not.toContain(forbidden.toLowerCase());
     }
   });
 

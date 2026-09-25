@@ -269,13 +269,13 @@ describe('JF-4B/C/D repository boundaries', () => {
     }
   });
 
-  it('(J93) migrations are unchanged: 0001-0014, and no 0015', () => {
+  it('(J93) migrations are unchanged: 0001-0014, and no 0016', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(14);
-    expect(sql.some((n) => n.startsWith('0015'))).toBe(false);
+    expect(sql).toHaveLength(15);
+    expect(sql.some((n) => n.startsWith('0016'))).toBe(false);
   });
 
   it('(J91,J92) D5 is neither activated nor granted new permissions by this lane', () => {
@@ -478,7 +478,7 @@ describe('JF-4 correction: there is ONE governed RAG, not three', () => {
     }
   });
 
-  it('(§17) the migration ledger is exactly 0001-0014, in order, with no gap', () => {
+  it('(§17) the migration ledger is exactly 0001-0015, in order, with no gap', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((name) => name.endsWith('.sql'))
@@ -498,9 +498,10 @@ describe('JF-4 correction: there is ONE governed RAG, not three', () => {
       '0012',
       '0013',
       '0014',
+      '0015',
     ]);
-    // One new migration in this correction, and it is the party widening.
     expect(sql[13]).toBe('0014_conversation_prospect_party_type.sql');
+    expect(sql[14]).toBe('0015_correlation_timeline_projection.sql');
   });
 
   it('(§17) 0014 is the ONLY migration that mentions PROSPECT, and it adds no table or grant', () => {

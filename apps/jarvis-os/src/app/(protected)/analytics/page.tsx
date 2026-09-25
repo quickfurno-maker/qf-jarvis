@@ -1,10 +1,12 @@
 import { AreaTrend, BarDistribution, StackedShare } from '@/components/charts/Charts';
+import { EfficiencyIntelligence } from '@/components/analytics/EfficiencyIntelligence';
 import { MetricStrip } from '@/components/analytics/MetricStrip';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
 import { StatusPill } from '@/components/system/StatusPill';
 import { SectionBody, SeriesBody, SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
+import { efficiencySignals } from '@/lib/control-plane/efficiency';
 import { isReadable } from '@/lib/control-plane/types';
 
 export default async function AnalyticsPage() {
@@ -37,6 +39,8 @@ export default async function AnalyticsPage() {
         </Notice>
 
         <MetricStrip section={plane.headlineMetrics()} />
+
+        <EfficiencyIntelligence signals={efficiencySignals(plane.headlineMetrics())} />
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
           <Panel

@@ -10,17 +10,21 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./internal/correlation-read": {
+      "types": "./dist/projections/correlation-timeline-read.d.ts",
+      "default": "./dist/projections/correlation-timeline-read.js"
+    },
     "./internal/event-write": {
       "types": "./dist/persistence/event-write.d.ts",
       "default": "./dist/persistence/event-write.js"
     },
-    "./internal/projection-worker-cli": {
-      "types": "./dist/projections/projection-worker-cli.d.ts",
-      "default": "./dist/projections/projection-worker-cli.js"
-    },
     "./internal/projection-inspection-cli": {
       "types": "./dist/projections/projection-inspection-cli.d.ts",
       "default": "./dist/projections/projection-inspection-cli.js"
+    },
+    "./internal/projection-worker-cli": {
+      "types": "./dist/projections/projection-worker-cli.d.ts",
+      "default": "./dist/projections/projection-worker-cli.js"
     }
   },
   "scripts": {

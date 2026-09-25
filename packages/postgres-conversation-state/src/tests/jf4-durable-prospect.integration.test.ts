@@ -411,7 +411,7 @@ describe('applying 0014 to a database already at 0013', () => {
     expect(result.migration.applied.map((migration) => migration.filename)).toEqual([
       '0014_conversation_prospect_party_type.sql',
     ]);
-    expect(await applied()).toHaveLength(14);
+    expect(await applied()).toHaveLength(15);
 
     // Every pre-existing row survived, at its original revision, party type and instant.
     const upgraded = createPostgresConversationStateAdapter({ pool });

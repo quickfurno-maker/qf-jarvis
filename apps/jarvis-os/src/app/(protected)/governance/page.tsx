@@ -1,11 +1,12 @@
 import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
-import { CapabilityBadge, Tag } from '@/components/system/StatusPill';
-import { CAPABILITY_SNAPSHOT } from '@/lib/capabilities/catalog';
+import { CapabilityBadge, StatusPill, Tag } from '@/components/system/StatusPill';
 import { controlPlane } from '@/lib/control-plane';
 import type { RoadmapMarker } from '@/lib/control-plane/types';
 import type { Tone } from '@/components/primitives/Panel';
+import { runtimeCapabilities } from '@/lib/control-plane/proactive';
+import { operatorBootstrap } from '@/server/operator/bootstrap';
 
 /**
  * Governance (JOS-01A).
@@ -36,7 +37,9 @@ const STATE_LABEL: Readonly<Record<RoadmapMarker['state'], string>> = {
 };
 
 export default async function GovernancePage() {
-  const roadmap = (await controlPlane()).roadmap();
+  const plane = await controlPlane();
+  const roadmap = plane.roadmap();
+  const capabilities = runtimeCapabilities(plane, operatorBootstrap());
 
   return (
     <>
@@ -96,9 +99,9 @@ export default async function GovernancePage() {
         >
           <DataTable
             caption="Every capability Jarvis OS knows about, with its lifecycle state and reason."
-            head={['Capability', 'Label', 'Lifecycle', 'Why']}
+            head={['Capability', 'Label', 'Declared', 'Effective now', 'Evidence', 'Why']}
           >
-            {CAPABILITY_SNAPSHOT.map((entry) => (
+            {capabilities.map((entry) => (
               <Row key={entry.id}>
                 <Cell nowrap>
                   <span className="font-mono text-[11.5px]">{entry.id}</span>
@@ -107,7 +110,13 @@ export default async function GovernancePage() {
                   {entry.label}
                 </Cell>
                 <Cell nowrap>
-                  <CapabilityBadge lifecycle={entry.lifecycle} />
+                  <CapabilityBadge lifecycle={entry.declaration} />
+                </Cell>
+                <Cell nowrap>
+                  <StatusPill state={entry.effective} />
+                </Cell>
+                <Cell muted nowrap>
+                  {entry.source.replaceAll('_', ' ')}
                 </Cell>
                 <Cell muted>{entry.note}</Cell>
               </Row>
