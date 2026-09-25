@@ -45,6 +45,7 @@ const DOCKERFILE = read('deploy/jarvis-os/Dockerfile');
 const COMPOSE = read('deploy/jarvis-os/compose.production.yml');
 const INGRESS = read('deploy/jarvis-os/compose.ingress.yml');
 const HSTS = read('deploy/jarvis-os/compose.hsts.yml');
+const VOICE = read('deploy/jarvis-os/compose.voice.yml');
 const JARVIS_OS_MANIFEST = JSON.parse(read('apps/jarvis-os/package.json')) as {
   readonly dependencies?: Readonly<Record<string, string>>;
 };
@@ -70,6 +71,7 @@ const yaml = (text: string): string => directives(text).replace(/'/gu, '"');
 const COMPOSE_CODE = yaml(COMPOSE);
 const INGRESS_CODE = yaml(INGRESS);
 const HSTS_CODE = yaml(HSTS);
+const VOICE_CODE = yaml(VOICE);
 
 /**
  * Bash executable for the real script exercises below.
@@ -187,7 +189,7 @@ describe('the private base topology', () => {
   it('publishes NO port — Traefik reaches the container by its private IP', () => {
     // The single most important assertion in this file. A `ports:` stanza would put the
     // application on a host interface, bypassing Traefik, TLS and the rate limits entirely.
-    for (const file of [COMPOSE_CODE, INGRESS_CODE, HSTS_CODE]) {
+    for (const file of [COMPOSE_CODE, INGRESS_CODE, HSTS_CODE, VOICE_CODE]) {
       expect(file).not.toMatch(/^\s*ports:/mu);
       expect(file).not.toContain('0.0.0.0:3000');
       expect(file).not.toMatch(/"\d+:3000"/u);
@@ -286,9 +288,28 @@ describe('the private base topology', () => {
       'graph.facebook.com',
       'api.groq.com',
     ]) {
-      for (const file of [COMPOSE_CODE, INGRESS_CODE, HSTS_CODE, DOCKERFILE_CODE]) {
+      for (const file of [COMPOSE_CODE, INGRESS_CODE, HSTS_CODE, VOICE_CODE, DOCKERFILE_CODE]) {
         expect(file, forbidden).not.toContain(forbidden);
       }
+    }
+  });
+});
+
+describe('the optional LiveKit voice overlay', () => {
+  it('adds only the reviewed file-backed token-minting configuration', () => {
+    expect(VOICE_CODE).toMatch(/^services:\s*$/mu);
+    expect(VOICE_CODE).toContain('jarvis-os:');
+    expect(VOICE_CODE).toContain(
+      'QFJ_JOS_LIVEKIT_CONFIG_FILE: /run/secrets/qf-jarvis-os-livekit.json',
+    );
+    expect(VOICE_CODE).toContain('source: /srv/qf-jarvis/secrets/qf-jarvis-os-livekit.json');
+    expect(VOICE_CODE).toContain('target: /run/secrets/qf-jarvis-os-livekit.json');
+    expect(VOICE_CODE).toContain('read_only: true');
+    expect(VOICE_CODE).not.toMatch(/^\s*ports:/mu);
+    expect(VOICE_CODE).not.toContain('traefik.http.');
+    expect(VOICE_CODE).not.toContain('traefik.enable');
+    for (const forbidden of ['apiSecret:', 'apiKey:', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET']) {
+      expect(VOICE_CODE, forbidden).not.toContain(forbidden);
     }
   });
 });
@@ -392,7 +413,7 @@ describe('no static CSP is ever injected at the edge', () => {
     // The application emits a per-request nonce policy. A static CSP from Traefik cannot know the
     // nonce, so it would break every script on every page; and two CSP headers intersect to the
     // strictest, which breaks it the same way.
-    for (const file of [COMPOSE_CODE, INGRESS_CODE, HSTS_CODE]) {
+    for (const file of [COMPOSE_CODE, INGRESS_CODE, HSTS_CODE, VOICE_CODE]) {
       expect(file).not.toContain('contentSecurityPolicy');
       expect(file).not.toContain('customResponseHeaders.Content-Security-Policy');
       expect(file).not.toContain('customResponseHeaders.content-security-policy');
@@ -958,6 +979,21 @@ describe('deployment configuration is bound to the release SHA', () => {
     expect(ACTIVATE).toContain('RUNNING_BEFORE');
     expect(ACTIVATE).toContain('"$RUNNING_BEFORE" == "$SHA"');
     expect(ACTIVATE.indexOf('RUNNING_BEFORE')).toBeLessThan(ACTIVATE.indexOf('docker compose'));
+  });
+
+  it('voice activation is additive, credential-file gated and preserves HSTS', () => {
+    expect(ACTIVATE).toContain('compose.voice.yml');
+    expect(ACTIVATE).toContain('/srv/qf-jarvis/secrets/qf-jarvis-os-livekit.json');
+    expect(ACTIVATE).toContain('expected 10001:10001');
+    expect(ACTIVATE).toContain('expected 400 or 600');
+    expect(ACTIVATE).toContain('qf-jarvis-livekit-voice-agent');
+    expect(ACTIVATE).toContain('VOICE_AGENT_RUNNING');
+    expect(ACTIVATE).toContain('VOICE_AGENT_REVISION');
+    expect(ACTIVATE).toContain(
+      'QFJ_JOS_LIVEKIT_CONFIG_FILE=/run/secrets/qf-jarvis-os-livekit.json',
+    );
+    expect(ACTIVATE).toContain('VOICE_RW');
+    expect(ACTIVATE).toContain('"$STAGE" == "hsts" || "$STAGE" == "voice"');
   });
 
   it('rollback uses the PREVIOUS release package, not the running script directory', () => {

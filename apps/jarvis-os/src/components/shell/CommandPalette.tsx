@@ -62,6 +62,12 @@ const SMART_INTENTS: readonly SmartIntent[] = Object.freeze([
     keywords: ['model', 'provider', 'latency', 'circuit', 'fallback', 'routing', 'groq', 'nara'],
   },
   {
+    href: '/voice',
+    label: 'Open Jarvis Voice',
+    reason: 'Start the read-only LiveKit operator voice channel.',
+    keywords: ['voice', 'talk', 'speak', 'microphone', 'mic', 'listen', 'livekit'],
+  },
+  {
     href: '/intelligence',
     label: 'Ask Jarvis Intelligence',
     reason: 'Read-only proactive reasoning over the current governed operator snapshot.',

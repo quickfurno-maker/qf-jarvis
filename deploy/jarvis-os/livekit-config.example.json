@@ -1,0 +1,7 @@
+{
+  "protocol": "qfj.jarvis-os.livekit.v1",
+  "serverUrl": "wss://YOUR_PROJECT.livekit.cloud",
+  "apiKey": "REPLACE_WITH_LIVEKIT_API_KEY",
+  "apiSecret": "REPLACE_WITH_LIVEKIT_API_SECRET",
+  "agentName": "qfj-jarvis-operator-voice"
+}

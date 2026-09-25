@@ -421,7 +421,7 @@ describe('the route file itself', () => {
     }
   });
 
-  it('locks the API route set to exactly eight, all of them accounted for', () => {
+  it('locks the API route set to exactly nine, all of them accounted for', () => {
     // Exact allowlist: adding a debug endpoint, introspection helper or ad-hoc mobile API fails
     // review. The operator API is versioned and is the shared web/mobile boundary.
     const routes = walk(join(SRC, 'app'))
@@ -438,6 +438,7 @@ describe('the route file itself', () => {
       'api/operator/v1/commands/route.ts',
       'api/operator/v1/intelligence/route.ts',
       'api/operator/v1/snapshot/route.ts',
+      'api/operator/v1/voice/session/route.ts',
     ]);
   });
 });

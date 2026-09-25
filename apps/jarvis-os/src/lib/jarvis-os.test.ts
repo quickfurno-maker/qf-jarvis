@@ -51,6 +51,7 @@ const SCANNERS: readonly string[] = Object.freeze([
   'src/server/auth/auth-crypto.test.ts',
   'src/server/auth/auth-http.test.ts',
   'src/server/auth/proxy-csp.test.ts',
+  'src/server/auth/livekit-config.test.ts',
   'src/server/control-plane/sources/quickfurno-operator-source.test.ts',
   'src/server/control-plane/sources/release-assurance-source.test.ts',
 ]);
@@ -480,6 +481,7 @@ describe('live operator capability remains contained behind reviewed seams', () 
         'src/server/control-plane/sources/quickfurno-operator-source.ts',
         'src/server/operator/quickfurno-command.ts',
         'src/components/operator/OperatorCommandProvider.tsx',
+        'src/components/voice/VoiceSessionProvider.tsx',
       ]).has(label);
       if (!networkAllowed) {
         expect(code, `${label}: fetch`).not.toMatch(/\bfetch\s*\(/);
@@ -600,6 +602,8 @@ describe('live operator capability remains contained behind reviewed seams', () 
       'src/components/shell/OperatorMenu.tsx', // menu toggle + sign-out submit
       'src/components/auth/LoginForm.tsx', // sign-in submit
       'src/components/operator/OperatorControls.tsx', // versioned commands only; Core authorizes
+      'src/components/voice/LiveVoiceConsole.tsx', // voice media/session controls only
+      'src/components/voice/VoiceStatusButton.tsx', // start/navigation control only
     ]);
 
     for (const file of sourceFiles()) {
@@ -636,6 +640,37 @@ describe('live operator capability remains contained behind reviewed seams', () 
       'whatsapp',
     ]) {
       expect(code.toLowerCase(), forbidden).not.toContain(forbidden.toLowerCase());
+    }
+  });
+
+  it('keeps LiveKit operator voice read-only and outside every business-command seam', () => {
+    const files = [
+      join(SRC, 'components', 'voice', 'VoiceSessionProvider.tsx'),
+      join(SRC, 'app', 'api', 'operator', 'v1', 'voice', 'session', 'route.ts'),
+    ];
+    const code = files.map((file) => codeOnly(readFileSync(file, 'utf8'))).join('\n');
+    expect(code).toContain('OPERATOR_VOICE_INTELLIGENCE_RPC');
+    expect(code).toContain('/api/operator/v1/intelligence');
+    expect(code).toContain('canPublishSources');
+    expect(code).toContain('TrackSource.MICROPHONE');
+    expect(code).toContain('maxParticipants: 2');
+    expect(code).toContain('roomRecord: false');
+    expect(code).toContain('ingressAdmin: false');
+    expect(code).toContain('requireSameOriginMutation');
+    expect(code).toContain("request.headers.get('x-qfj-csrf')");
+    for (const forbidden of [
+      '/api/operator/v1/commands',
+      '@qf-jarvis/operator-client-core',
+      'APPROVAL_DECIDE',
+      'CONVERSATION_TAKEOVER',
+      'CONVERSATION_PAUSE_AI',
+      'CONVERSATION_RESUME_AI',
+      'RoomServiceClient',
+      'SipClient',
+      'roomRecord: true',
+      'ingressAdmin: true',
+    ]) {
+      expect(code, forbidden).not.toContain(forbidden);
     }
   });
 

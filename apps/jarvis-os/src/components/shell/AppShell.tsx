@@ -10,6 +10,8 @@ import { CommandPalette } from '@/components/shell/CommandPalette';
 import { MobileDock } from '@/components/shell/MobileDock';
 import { LiveRefreshController } from '@/components/shell/LiveRefreshController';
 import { SideNav } from '@/components/navigation/SideNav';
+import { VoiceSessionProvider } from '@/components/voice/VoiceSessionProvider';
+import { VoiceStatusButton } from '@/components/voice/VoiceStatusButton';
 import { BrandLockup } from '@/components/shell/Brand';
 import type { AttentionItem } from '@/lib/control-plane/types';
 import { ENVIRONMENT_LABEL } from '@/lib/environment';
@@ -68,60 +70,62 @@ export function AppShell({
 
   return (
     <OperatorCommandProvider csrfToken={csrfToken}>
-      <div className="flex min-h-screen bg-[var(--color-base-950)]">
-        <a
-          href="#jos-main"
-          className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-[var(--radius-control)] focus:bg-[var(--color-base-800)] focus:px-3 focus:py-2 focus:text-[12px] focus:text-[var(--color-ink)]"
-        >
-          Skip to content
-        </a>
+      <VoiceSessionProvider csrfToken={csrfToken}>
+        <div className="flex min-h-screen bg-[var(--color-base-950)]">
+          <a
+            href="#jos-main"
+            className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-[var(--radius-control)] focus:bg-[var(--color-base-800)] focus:px-3 focus:py-2 focus:text-[12px] focus:text-[var(--color-ink)]"
+          >
+            Skip to content
+          </a>
 
-        {/* Fixed rail — desktop and up. */}
-        <aside className="hidden w-[248px] shrink-0 border-r border-[var(--color-line)] bg-[var(--color-base-900)] lg:block">
-          <div className="sticky top-0 h-screen">
-            <SideNav />
-          </div>
-        </aside>
+          {/* Fixed rail — desktop and up. */}
+          <aside className="hidden w-[248px] shrink-0 border-r border-[var(--color-line)] bg-[var(--color-base-900)] lg:block">
+            <div className="sticky top-0 h-screen">
+              <SideNav />
+            </div>
+          </aside>
 
-        {/* Drawer — below lg. */}
-        {drawerOpen ? (
-          <div className="fixed inset-0 z-40 lg:hidden">
-            <button
-              type="button"
-              aria-label="Close navigation"
-              onClick={() => {
-                setDrawerOpen(false);
-              }}
-              className="absolute inset-0 bg-black/70"
-            />
-            <div className="absolute inset-y-0 left-0 w-[268px] border-r border-[var(--color-line)] bg-[var(--color-base-900)]">
-              <SideNav
-                onNavigate={() => {
+          {/* Drawer — below lg. */}
+          {drawerOpen ? (
+            <div className="fixed inset-0 z-40 lg:hidden">
+              <button
+                type="button"
+                aria-label="Close navigation"
+                onClick={() => {
                   setDrawerOpen(false);
                 }}
+                className="absolute inset-0 bg-black/70"
               />
+              <div className="absolute inset-y-0 left-0 w-[268px] border-r border-[var(--color-line)] bg-[var(--color-base-900)]">
+                <SideNav
+                  onNavigate={() => {
+                    setDrawerOpen(false);
+                  }}
+                />
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar
-            onOpenDrawer={() => {
-              setDrawerOpen(true);
-            }}
-            operator={operator}
-            csrfToken={csrfToken}
-            attention={attention}
-          />
-          <main
-            id="jos-main"
-            className="min-w-0 flex-1 px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:py-7 lg:pb-7"
-          >
-            <div className="mx-auto w-full max-w-[1600px]">{children}</div>
-          </main>
-          <MobileDock />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <TopBar
+              onOpenDrawer={() => {
+                setDrawerOpen(true);
+              }}
+              operator={operator}
+              csrfToken={csrfToken}
+              attention={attention}
+            />
+            <main
+              id="jos-main"
+              className="min-w-0 flex-1 px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:py-7 lg:pb-7"
+            >
+              <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+            </main>
+            <MobileDock />
+          </div>
         </div>
-      </div>
+      </VoiceSessionProvider>
     </OperatorCommandProvider>
   );
 }
@@ -171,6 +175,8 @@ function TopBar({
           <span className="hidden rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-[var(--color-base-900)] px-2.5 py-[3px] text-[10.5px] font-semibold tracking-[0.05em] text-[var(--color-ink-muted)] uppercase md:inline-flex">
             {ENVIRONMENT_LABEL}
           </span>
+
+          <VoiceStatusButton />
 
           <LiveRefreshController />
 

@@ -261,9 +261,9 @@ export const CAPABILITY_SNAPSHOT: readonly Capability[] = Object.freeze([
   },
   {
     id: 'interface.voice',
-    label: 'Always-connected voice interface',
-    lifecycle: 'PLANNED',
-    note: 'Voice is intentionally deferred until proactive intelligence and the read-only operator reasoning contract are stable. It will reuse the same authority boundaries.',
+    label: 'Operator voice interface',
+    lifecycle: 'NOT_CONNECTED',
+    note: 'LiveKit operator voice and the read-only Jarvis Intelligence bridge are implemented. Runtime stays disconnected until reviewed LiveKit credentials and the matching voice agent exist; voice carries no Core or execution authority.',
   },
 ]);
 

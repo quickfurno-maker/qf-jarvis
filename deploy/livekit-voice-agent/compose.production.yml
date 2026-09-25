@@ -1,0 +1,47 @@
+name: qf-jarvis-livekit-voice-agent
+
+services:
+  livekit-voice-agent:
+    image: 'qf-jarvis-livekit-voice-agent:${QFJ_VOICE_IMAGE_TAG:?QFJ_VOICE_IMAGE_TAG must be the exact merged git SHA}'
+    container_name: qf-jarvis-livekit-voice-agent
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s
+    user: '10004:10004'
+    environment:
+      NODE_ENV: production
+      QFJ_LIVEKIT_VOICE_AGENT_CONFIG_FILE: /run/secrets/qf-jarvis-livekit-voice-agent.json
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    volumes:
+      - type: bind
+        source: /srv/qf-jarvis/secrets/qf-jarvis-livekit-voice-agent.json
+        target: /run/secrets/qf-jarvis-livekit-voice-agent.json
+        read_only: true
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024m
+          pids: 256
+        reservations:
+          memory: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+    networks:
+      - voice
+    labels:
+      traefik.enable: 'false'
+
+networks:
+  voice:
+    name: qf-jarvis-livekit-voice-agent_voice
+    driver: bridge

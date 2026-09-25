@@ -4,6 +4,8 @@ import { AuthFailure } from '../errors';
 
 import { coreReadConfigV1Schema } from './core-read-schema';
 import type { CoreReadConfigV1 } from './core-read-schema';
+import { liveKitOperatorConfigV1Schema } from './livekit-schema';
+import type { LiveKitOperatorConfigV1 } from './livekit-schema';
 import { MAX_AUTH_CONFIG_BYTES, authConfigV1Schema } from './schema';
 import type { AuthConfigV1 } from './schema';
 
@@ -36,6 +38,7 @@ export const WORKER_OBSERVATION_PATH_VAR = 'QFJ_WORKER_OBSERVATION_FILE';
 export const CORE_READ_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_READ_CONFIG_FILE';
 export const CORE_COMMAND_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_COMMAND_CONFIG_FILE';
 export const RELEASE_ASSURANCE_OBSERVATION_PATH_VAR = 'QFJ_RELEASE_ASSURANCE_OBSERVATION_FILE';
+export const LIVEKIT_CONFIG_PATH_VAR = 'QFJ_JOS_LIVEKIT_CONFIG_FILE';
 export const RELEASE_SHA_VAR = 'QFJ_JOS_RELEASE_SHA';
 
 /**
@@ -63,6 +66,11 @@ export function readReleaseAssuranceObservationPathFromEnvironment(): string | u
   return value === undefined || value.trim() === '' ? undefined : value;
 }
 
+export function readLiveKitConfigPathFromEnvironment(): string | undefined {
+  const value = process.env[LIVEKIT_CONFIG_PATH_VAR];
+  return value === undefined || value.trim() === '' ? undefined : value;
+}
+
 export function readReleaseShaFromEnvironment(): string | undefined {
   const value = process.env[RELEASE_SHA_VAR];
   return value === undefined || value.trim() === '' ? undefined : value.trim();
@@ -83,6 +91,23 @@ export function loadCoreReadConfig(options: LoaderOptions = {}): CoreReadConfigV
 export function loadCoreCommandConfig(options: LoaderOptions = {}): CoreReadConfigV1 {
   const path = options.path ?? readCoreCommandConfigPathFromEnvironment();
   return loadCoreTransportConfig(path, options.platform, 'core-command');
+}
+
+export function loadLiveKitOperatorConfig(options: LoaderOptions = {}): LiveKitOperatorConfigV1 {
+  const path = options.path ?? readLiveKitConfigPathFromEnvironment();
+  if (path === undefined || path.trim() === '') {
+    throw new TypeError('livekit-config-path-unset');
+  }
+  const raw = readBoundedRegularFile(path, options.platform ?? process.platform);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new TypeError('livekit-config-malformed');
+  }
+  const result = liveKitOperatorConfigV1Schema.safeParse(parsed);
+  if (!result.success) throw new TypeError('livekit-config-invalid');
+  return result.data;
 }
 
 function loadCoreTransportConfig(

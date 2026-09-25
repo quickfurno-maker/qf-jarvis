@@ -17,6 +17,7 @@
 #   compose.production.yml                     -> private. No router.
 #   + compose.ingress.yml                      -> public router, TLS, rate limits.
 #   + compose.ingress.yml + compose.hsts.yml   -> the above plus HSTS, after TLS is proven.
+#   + compose.voice.yml                        -> the above plus a read-only LiveKit token config mount.
 #
 # Each overlay is additive and touches ONLY the qf-jarvis-os project. Shared Traefik is never
 # restarted, recreated, pulled or upgraded; it discovers and drops the router from these labels.
