@@ -406,12 +406,13 @@ describe('applying 0014 to a database already at 0013', () => {
       constraint: PARTY_CHECK,
     });
 
-    // Forward exactly one migration, over the rows that are already there.
-    const result = await migrateWithPreflight(pool, config, MIGRATIONS_DIR);
+    // Forward exactly one migration, over the rows that are already there. Keep this historical
+    // 0014 proof bounded so later migrations cannot silently broaden what this test is asserting.
+    const result = await migrateWithPreflight(pool, config, MIGRATIONS_DIR, { throughVersion: 14 });
     expect(result.migration.applied.map((migration) => migration.filename)).toEqual([
       '0014_conversation_prospect_party_type.sql',
     ]);
-    expect(await applied()).toHaveLength(15);
+    expect(await applied()).toHaveLength(14);
 
     // Every pre-existing row survived, at its original revision, party type and instant.
     const upgraded = createPostgresConversationStateAdapter({ pool });

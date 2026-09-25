@@ -151,6 +151,8 @@ describe('db:migrate runs the preflight automatically', () => {
       // the party CHECK widened to hold PROSPECT. LOCAL/CI only; the managed database still carries
       // 0001 alone and JF-6 owns that parity.
       14,
+      // ADR-0167: privacy-bounded correlation timeline projection. LOCAL/CI only.
+      15,
     ]);
   });
 
