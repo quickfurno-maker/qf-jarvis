@@ -69,6 +69,7 @@ minimumReleaseAgeIgnoreMissingTime: false
 # does not grant either package install-time code execution. Any future unlisted build
 # script fails closed under pnpm's strict dependency-build policy.
 allowBuilds:
+  '@livekit/local-inference': false
   '@swc/core': false
   protobufjs: false
 
