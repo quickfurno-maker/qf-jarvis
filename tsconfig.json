@@ -11,6 +11,7 @@
     { "path": "./apps/api/tsconfig.build.json" },
     { "path": "./apps/worker/tsconfig.build.json" },
     { "path": "./apps/proactive-worker/tsconfig.build.json" },
+    { "path": "./apps/livekit-voice-agent/tsconfig.build.json" },
     { "path": "./apps/temporal-worker/tsconfig.build.json" },
     { "path": "./apps/quickfurno-gateway/tsconfig.build.json" },
     { "path": "./packages/contracts" },

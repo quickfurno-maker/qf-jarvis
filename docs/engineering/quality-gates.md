@@ -66,7 +66,7 @@ ESLint catches an unused variable, an unsafe `any`, a floating promise. It will 
 
 The rule set is small and maintained (typescript-eslint's `strictTypeChecked` and `stylisticTypeChecked`, plus two documented overrides). Type-aware rules are enabled, which is what makes the `no-unsafe-*` family work — and those are the rules that stop `any` from silently spreading and disabling the type checker we depend on.
 
-**Zero warnings.** CI runs `eslint . --max-warnings=0`. A warning fails the build exactly as an error does.
+**Zero warnings.** CI runs `pnpm lint`, which applies the same flat ESLint configuration with `--max-warnings=0` in bounded workspace batches. A warning fails exactly like an error; batching only releases type-aware ESLint state between workspace groups so the monorepo gate has bounded memory.
 
 There is no "warning" severity in practice, and pretending otherwise is how a codebase acquires four hundred of them. A rule is either worth enforcing — an error — or it is not enabled. **A tolerated warning is a rule everyone has agreed to ignore, which is worse than no rule, because it trains people to scroll past output.**
 

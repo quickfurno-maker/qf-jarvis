@@ -119,9 +119,9 @@ const REDUCER_FORBIDDEN_IO_IMPORTS = [
  * list. A large hand-rolled rule set is a maintenance burden that nobody
  * updates and that drifts out of agreement with the compiler.
  *
- * CI runs `eslint . --max-warnings=0`, so a warning fails the build exactly as
- * an error does. There is no "warning" severity in practice — a rule is either
- * worth enforcing or it is not enabled.
+ * CI runs `pnpm lint`, which invokes this same config in bounded workspace batches with
+ * `--max-warnings=0`; a warning still fails exactly like an error. Batching changes only process
+ * lifetime/memory, never rules or coverage. There is no warning severity in practice.
  *
  * See docs/engineering/quality-gates.md.
  */

@@ -1,0 +1,9 @@
+services:
+  jarvis-os:
+    environment:
+      QFJ_JOS_LIVEKIT_CONFIG_FILE: /run/secrets/qf-jarvis-os-livekit.json
+    volumes:
+      - type: bind
+        source: /srv/qf-jarvis/secrets/qf-jarvis-os-livekit.json
+        target: /run/secrets/qf-jarvis-os-livekit.json
+        read_only: true

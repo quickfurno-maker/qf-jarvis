@@ -97,12 +97,18 @@ describe('the Content-Security-Policy', () => {
     expect(production).toContain("base-uri 'none'");
     expect(production).toContain("form-action 'self'");
     expect(production).toContain("object-src 'none'");
-    expect(production).toContain("connect-src 'self'");
+    expect(production).toContain(
+      "connect-src 'self' https://*.livekit.cloud wss://*.livekit.cloud",
+    );
   });
 
-  it('names no external host and no wildcard anywhere', () => {
-    expect(production).not.toMatch(/https?:\/\//u);
-    expect(production).not.toContain('*');
+  it('allows only the reviewed LiveKit Cloud realtime origin outside self', () => {
+    const connect = production
+      .split('; ')
+      .find((directive) => directive.startsWith('connect-src '));
+    expect(connect).toBe("connect-src 'self' https://*.livekit.cloud wss://*.livekit.cloud");
+    expect(production).not.toContain('http://');
+    expect(production.replaceAll('*.livekit.cloud', '')).not.toContain('*');
   });
 
   it('permits exactly the development relaxations, and only in development', () => {
@@ -127,9 +133,11 @@ describe('security headers', () => {
     expect(SECURITY_HEADERS['Cross-Origin-Resource-Policy']).toBe('same-origin');
   });
 
-  it('denies the sensitive device permissions', () => {
+  it('permits only same-origin microphone/autoplay and keeps the other sensitive features denied', () => {
     const policy = SECURITY_HEADERS['Permissions-Policy'] ?? '';
-    for (const feature of ['camera', 'microphone', 'geolocation', 'payment', 'usb']) {
+    expect(policy).toContain('microphone=(self)');
+    expect(policy).toContain('autoplay=(self)');
+    for (const feature of ['camera', 'geolocation', 'payment', 'usb', 'display-capture']) {
       expect(policy, feature).toContain(`${feature}=()`);
     }
   });
@@ -159,6 +167,7 @@ describe('protected pages are never prerendered', () => {
       'app/api/auth/logout/route.ts',
       'app/api/control-plane/v1/snapshot/route.ts',
       'app/api/control-plane/v2/snapshot/route.ts',
+      'app/api/operator/v1/voice/session/route.ts',
     ]) {
       const code = readFileSync(join(SRC, relative), 'utf8');
       expect(code, relative).toContain("export const dynamic = 'force-dynamic'");
@@ -196,9 +205,10 @@ describe('secret containment in application source', () => {
     expect(loader).toContain(
       "RELEASE_ASSURANCE_OBSERVATION_PATH_VAR = 'QFJ_RELEASE_ASSURANCE_OBSERVATION_FILE'",
     );
+    expect(loader).toContain("LIVEKIT_CONFIG_PATH_VAR = 'QFJ_JOS_LIVEKIT_CONFIG_FILE'");
     expect(loader).toContain("RELEASE_SHA_VAR = 'QFJ_JOS_RELEASE_SHA'");
     const envReads = loader.match(/process\.env\[/gu) ?? [];
-    expect(envReads).toHaveLength(6);
+    expect(envReads).toHaveLength(7);
   });
 
   it('imports node:fs only in the auth config loader', () => {

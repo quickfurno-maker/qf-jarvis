@@ -826,10 +826,12 @@ describe('(133-148) the declared budget and every prior lock', () => {
     // EXACT set match -- this records authorised additions, it does not relax the assertion.
     // Jarvis OS is a POWERLESS read surface. quickfurno-gateway is a separate, narrowly-scoped
     // machine ingress: it authenticates QuickFurno with Ed25519 but owns no database, provider,
-    // business authority, or Jarvis OS session surface.
+    // business authority, or Jarvis OS session surface. ADR-0168 adds one private outbound-only
+    // LiveKit operator-voice participant with no Core, command, SIP, send or execution credential.
     expect(dirs('apps')).toEqual([
       'api',
       'jarvis-os',
+      'livekit-voice-agent',
       'proactive-worker',
       'quickfurno-gateway',
       'temporal-worker',

@@ -3,9 +3,11 @@
 #
 #   activate.sh ingress <exact-merged-git-sha>   # make the router live
 #   activate.sh hsts    <exact-merged-git-sha>   # attach HSTS, AFTER TLS is proven
+#   activate.sh voice   <exact-merged-git-sha>   # add LiveKit token config after voice worker exists
 #
 # Each stage recreates ONLY the qf-jarvis-os container by re-applying the reviewed compose files
-# with one more additive overlay. Shared Traefik is never restarted, recreated, pulled or upgraded:
+# with one more additive overlay. Voice activation is last: it preserves ingress + HSTS and adds
+# only the protected LiveKit token-minting configuration after the private voice worker is running. Shared Traefik is never restarted, recreated, pulled or upgraded:
 # it discovers the new labels through the Docker provider it is already watching.
 #
 # Nothing here edits a live configuration by hand. Both stages are exactly the artefacts that were
@@ -18,7 +20,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${REPO_DIR:-/srv/qf-jarvis/repo}"
 
 usage() {
-  echo "usage: activate.sh <ingress|hsts> <exact-merged-git-sha>" >&2
+  echo "usage: activate.sh <ingress|hsts|voice> <exact-merged-git-sha>" >&2
   exit 2
 }
 [[ -n "$STAGE" && -n "$SHA" ]] || usage
@@ -28,6 +30,7 @@ case "$STAGE" in
   # HSTS is additive on top of ingress, never instead of it. Applying the HSTS overlay without the
   # ingress overlay would define the middleware and attach it to routers that do not exist.
   hsts) FILES=(-f "$HERE/compose.production.yml" -f "$HERE/compose.ingress.yml" -f "$HERE/compose.hsts.yml") ;;
+  voice) FILES=(-f "$HERE/compose.production.yml" -f "$HERE/compose.ingress.yml" -f "$HERE/compose.hsts.yml" -f "$HERE/compose.voice.yml") ;;
   *) usage ;;
 esac
 
@@ -56,6 +59,35 @@ RUNNING_BEFORE="$(docker inspect qf-jarvis-os --format '{{ index .Config.Labels 
   echo "       Run deploy.sh $SHA from that release directory first." >&2
   exit 1
 }
+
+if [[ "$STAGE" == "voice" ]]; then
+  LIVEKIT_CONFIG='/srv/qf-jarvis/secrets/qf-jarvis-os-livekit.json'
+  [[ -f "$LIVEKIT_CONFIG" && ! -L "$LIVEKIT_CONFIG" ]] || {
+    echo "FATAL: $LIVEKIT_CONFIG must be a regular non-symlink file." >&2
+    exit 1
+  }
+  LIVEKIT_MODE="$(stat -c '%a' "$LIVEKIT_CONFIG")"
+  LIVEKIT_OWNER="$(stat -c '%u:%g' "$LIVEKIT_CONFIG")"
+  [[ "$LIVEKIT_MODE" == "400" || "$LIVEKIT_MODE" == "600" ]] || {
+    echo "FATAL: $LIVEKIT_CONFIG mode is $LIVEKIT_MODE; expected 400 or 600." >&2
+    exit 1
+  }
+  [[ "$LIVEKIT_OWNER" == "10001:10001" ]] || {
+    echo "FATAL: $LIVEKIT_CONFIG owner is $LIVEKIT_OWNER; expected 10001:10001." >&2
+    exit 1
+  }
+
+  VOICE_AGENT_RUNNING="$(docker inspect qf-jarvis-livekit-voice-agent --format '{{.State.Running}}' 2>/dev/null || echo false)"
+  [[ "$VOICE_AGENT_RUNNING" == "true" ]] || {
+    echo "FATAL: qf-jarvis-livekit-voice-agent must be running before Jarvis OS voice is enabled." >&2
+    exit 1
+  }
+  VOICE_AGENT_REVISION="$(docker inspect qf-jarvis-livekit-voice-agent --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null || true)"
+  [[ "$VOICE_AGENT_REVISION" == "$SHA" ]] || {
+    echo "FATAL: voice agent revision '$VOICE_AGENT_REVISION' does not match Jarvis OS release '$SHA'." >&2
+    exit 1
+  }
+fi
 
 if [[ "$STAGE" == "hsts" ]]; then
   cat <<'EOF'
@@ -98,13 +130,28 @@ ENABLED="$(docker inspect qf-jarvis-os --format '{{ index .Config.Labels "traefi
   exit 1
 }
 
-if [[ "$STAGE" == "hsts" ]]; then
+if [[ "$STAGE" == "hsts" || "$STAGE" == "voice" ]]; then
   STS="$(docker inspect qf-jarvis-os --format '{{ index .Config.Labels "traefik.http.middlewares.qf-jarvis-os-hsts.headers.stsSeconds" }}')"
   [[ "$STS" == "31536000" ]] || {
     echo "FATAL: HSTS max-age label is '$STS', expected 31536000." >&2
     exit 1
   }
   echo "==> HSTS middleware present (max-age=$STS)"
+fi
+
+if [[ "$STAGE" == "voice" ]]; then
+  VOICE_ENV="$(docker inspect qf-jarvis-os --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^QFJ_JOS_LIVEKIT_CONFIG_FILE=' || true)"
+  [[ "$VOICE_ENV" == "QFJ_JOS_LIVEKIT_CONFIG_FILE=/run/secrets/qf-jarvis-os-livekit.json" ]] || {
+    echo "FATAL: LiveKit config environment path is not active." >&2
+    exit 1
+  }
+  VOICE_SOURCE="$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/qf-jarvis-os-livekit.json"}}{{.Source}}{{end}}{{end}}')"
+  VOICE_RW="$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/qf-jarvis-os-livekit.json"}}{{.RW}}{{end}}{{end}}')"
+  [[ "$VOICE_SOURCE" == "/srv/qf-jarvis/secrets/qf-jarvis-os-livekit.json" && "$VOICE_RW" == "false" ]] || {
+    echo "FATAL: LiveKit config mount is absent or writable." >&2
+    exit 1
+  }
+  echo "==> LiveKit token config mounted read-only"
 fi
 
 echo "==> stage '${STAGE}' active on revision $RUNNING"

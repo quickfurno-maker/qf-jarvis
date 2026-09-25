@@ -440,7 +440,7 @@ describe('(10) no application consumes the web channel', () => {
     expect(scannableCode(index).trim()).toBe('export {};');
   });
 
-  it('the only HTTP routes remain the operator-plane read routes', () => {
+  it('the only HTTP routes remain the reviewed operator-plane routes', () => {
     const routes = walk(join(REPO_ROOT, 'apps', 'jarvis-os', 'src', 'app'), false)
       .map((file) => file.replace(/\\/gu, '/'))
       .filter((file) => /\/route\.tsx?$/u.test(file))
@@ -453,12 +453,15 @@ describe('(10) no application consumes the web channel', () => {
       // AVG-11 / ADR-0129: a second CONTRACT VERSION of the same read-only snapshot, not a second
       // capability. GET only, the same session check, the same loader, the same composed core --
       // and V1 is served unchanged beside it, because ADR-0086 forbids editing a shipped shape in
-      // place. Seven reviewed operator-plane routes, including the versioned command submission boundary.
+      // place. Nine reviewed operator-plane routes, including the command and voice-session boundaries.
       'api/control-plane/v2/snapshot/route.ts',
       'api/operator/v1/bootstrap/route.ts',
       'api/operator/v1/commands/route.ts',
       'api/operator/v1/intelligence/route.ts',
       'api/operator/v1/snapshot/route.ts',
+      // ADR-0168: authenticated operator-only LiveKit token minting. It creates no WEB customer
+      // ingress, carries no Core/business authority, and the token is microphone-only/read-only.
+      'api/operator/v1/voice/session/route.ts',
     ]);
   });
 });

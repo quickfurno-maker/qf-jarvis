@@ -34,20 +34,22 @@ host-network Traefik reaches them by container IP. Jarvis OS uses that exact pat
 
 ## Files
 
-| File                          | Purpose                                                                                       |
-| ----------------------------- | --------------------------------------------------------------------------------------------- |
-| `Dockerfile`                  | Multi-stage build. Base pinned by **digest**; non-root `10001:10001`; no secret; no npm/perl. |
-| `compose.production.yml`      | The **private** container. No published port, `traefik.enable=false`. Reachable by nobody.    |
-| `compose.ingress.yml`         | Additive overlay: routers, TLS, rate limits. **This is what makes it public.**                |
-| `compose.hsts.yml`            | Additive overlay: HSTS, applied only after TLS is proven.                                     |
-| `verify-merged-sha.sh`        | Fails closed unless a SHA is well-formed, exists, and is contained in `origin/main`.          |
-| `prepare-release.sh`          | Materialises the immutable release package for one SHA and prints its path.                   |
-| `verify-release-artifacts.sh` | Proves a release directory IS that commit's configuration, byte for byte.                     |
-| `deploy.sh`                   | Gate 2 step 1. Builds one exact merged SHA and starts it **privately**, then proves it.       |
-| `activate.sh`                 | Gate 2 steps 2 and 4. Applies the `ingress` then `hsts` overlay, recreating **only** JOS.     |
-| `rollback.sh`                 | Gate 2. Re-points **only** the JOS project at a previous immutable tag, at an explicit stage. |
-| `smoke.sh`                    | Gate 2. External checks in `pre-hsts` and `final` modes. Fails closed.                        |
-| `external-smoke.sh`           | Gate 2. Runs `smoke.sh` from an exact-SHA copy on the **operator's own machine**.             |
+| File                          | Purpose                                                                                         |
+| ----------------------------- | ----------------------------------------------------------------------------------------------- |
+| `Dockerfile`                  | Multi-stage build. Base pinned by **digest**; non-root `10001:10001`; no secret; no npm/perl.   |
+| `compose.production.yml`      | The **private** container. No published port, `traefik.enable=false`. Reachable by nobody.      |
+| `compose.ingress.yml`         | Additive overlay: routers, TLS, rate limits. **This is what makes it public.**                  |
+| `compose.hsts.yml`            | Additive overlay: HSTS, applied only after TLS is proven.                                       |
+| `compose.voice.yml`           | Optional additive overlay: read-only LiveKit token-config mount after the voice worker is live. |
+| `livekit-config.example.json` | Non-secret shape for the Jarvis OS LiveKit token-minting config.                                |
+| `verify-merged-sha.sh`        | Fails closed unless a SHA is well-formed, exists, and is contained in `origin/main`.            |
+| `prepare-release.sh`          | Materialises the immutable release package for one SHA and prints its path.                     |
+| `verify-release-artifacts.sh` | Proves a release directory IS that commit's configuration, byte for byte.                       |
+| `deploy.sh`                   | Gate 2 step 1. Builds one exact merged SHA and starts it **privately**, then proves it.         |
+| `activate.sh`                 | Applies `ingress`, `hsts`, and optional `voice` overlays, always recreating **only** JOS.       |
+| `rollback.sh`                 | Gate 2. Re-points **only** the JOS project at a previous immutable tag, at an explicit stage.   |
+| `smoke.sh`                    | Gate 2. External checks in `pre-hsts` and `final` modes. Fails closed.                          |
+| `external-smoke.sh`           | Gate 2. Runs `smoke.sh` from an exact-SHA copy on the **operator's own machine**.               |
 
 ### Why the container and its router are separate files
 
@@ -155,6 +157,17 @@ ssh qf-staging "$RELEASE/activate.sh hsts $SHA"
 #    a bounded release-assurance receipt for Jarvis OS. Override the SSH alias only when required:
 #      QFJ_JOS_SSH_TARGET=<alias> ./deploy/jarvis-os/external-smoke.sh final ...
 ./deploy/jarvis-os/external-smoke.sh final jarvis.quickfurno.in "$SHA"
+
+# 9. OPTIONAL VOICE ACTIVATION, only after the private LiveKit voice worker is running and the
+#    protected Jarvis OS LiveKit config is installed with owner 10001:10001 and mode 0400/0600.
+ssh qf-staging "$RELEASE/activate.sh voice $SHA"
+
+# 10. Re-run the exact-SHA final smoke because voice activation recreated Jarvis OS. This republishes
+#     release assurance for the post-voice container.
+./deploy/jarvis-os/external-smoke.sh final jarvis.quickfurno.in "$SHA"
+
+# 11. Authenticated media smoke: open /voice, Start voice, confirm Voice live, ask a current-state
+#     question, verify a mutation request is refused, then Disconnect and confirm mic capture stops.
 ```
 
 The final assurance receipt lives at

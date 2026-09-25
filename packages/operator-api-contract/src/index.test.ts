@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { OPERATOR_MODULES, operatorBootstrapSchema, parseOperatorCommand } from './index.js';
+import {
+  OPERATOR_MODULES,
+  operatorBootstrapSchema,
+  operatorVoiceRpcResponseSchema,
+  operatorVoiceSessionSchema,
+  parseOperatorCommand,
+} from './index.js';
 
 describe('operator api contract', () => {
   it('parses a mobile-safe command without carrying authority', () => {
@@ -39,5 +45,48 @@ describe('operator api contract', () => {
       ],
     });
     expect(value.capabilities[0]?.state).toBe('LOCKED');
+  });
+
+  it('makes voice intelligence evidence structurally read-only', () => {
+    const evidence = operatorVoiceRpcResponseSchema.parse({
+      headline: 'Attention needed',
+      summary: 'One approval is waiting.',
+      facts: ['Approval queue: 1'],
+      executionAuthority: 'NONE',
+      businessEffect: false,
+    });
+    expect(evidence.executionAuthority).toBe('NONE');
+    expect(evidence.businessEffect).toBe(false);
+    expect(() =>
+      operatorVoiceRpcResponseSchema.parse({
+        ...evidence,
+        executionAuthority: 'CORE',
+      }),
+    ).toThrow();
+  });
+
+  it('makes operator voice structurally read-only', () => {
+    const value = operatorVoiceSessionSchema.parse({
+      protocol: 'qfj.operator.voice.session.v1',
+      serverUrl: 'wss://example.livekit.cloud',
+      roomName: 'qfj-operator-voice-test',
+      participantIdentity: 'operator-test',
+      participantToken: 'opaque-token',
+      agentName: 'qfj-jarvis-operator-voice',
+      expiresInSeconds: 600,
+      mode: 'READ_ONLY',
+      executionAuthority: 'NONE',
+      businessEffect: false,
+    });
+    expect(value.mode).toBe('READ_ONLY');
+    expect(value.executionAuthority).toBe('NONE');
+    expect(value.businessEffect).toBe(false);
+
+    expect(() =>
+      operatorVoiceSessionSchema.parse({
+        ...value,
+        businessEffect: true,
+      }),
+    ).toThrow();
   });
 });

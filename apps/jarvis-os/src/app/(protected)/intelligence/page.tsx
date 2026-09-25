@@ -53,7 +53,7 @@ export default async function IntelligencePage({
       <div className="space-y-5">
         <Panel
           title="Ask Jarvis"
-          subtitle="Use ⌘K anywhere, or choose one of these prompts. Voice will later call this same read-only intelligence contract."
+          subtitle="Use ⌘K anywhere, choose a prompt, or use Jarvis Voice. All three call the same read-only intelligence contract."
         >
           <div className="flex flex-wrap gap-2">
             {SUGGESTED_QUESTIONS.map((question) => (
@@ -70,7 +70,7 @@ export default async function IntelligencePage({
 
         <Panel
           title="Intelligence fabric"
-          subtitle="Implementation readiness versus effective runtime state. Voice remains deliberately last."
+          subtitle="Implementation readiness versus effective runtime state. LiveKit voice stays disconnected until credentials and the agent runtime are provisioned."
         >
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
             {fabric.map((capability) => (

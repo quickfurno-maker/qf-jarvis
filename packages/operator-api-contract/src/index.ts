@@ -2,6 +2,9 @@ import { z } from 'zod';
 
 export const OPERATOR_API_VERSION = '1' as const;
 export const OPERATOR_COMMAND_PROTOCOL = 'qfj.operator.command.v1' as const;
+export const OPERATOR_VOICE_SESSION_PROTOCOL = 'qfj.operator.voice.session.v1' as const;
+export const OPERATOR_VOICE_INTELLIGENCE_RPC = 'qfj.operator.intelligence.v1' as const;
+export const OPERATOR_VOICE_AGENT_NAME = 'qfj-jarvis-operator-voice' as const;
 
 const instant = z.iso.datetime({ offset: false });
 const uuid = z.uuid();
@@ -17,6 +20,7 @@ export const operatorModuleSchema = z
   .object({
     id: z.enum([
       'overview',
+      'voice',
       'jarvis',
       'riya',
       'aarohi',
@@ -54,6 +58,14 @@ export const OPERATOR_MODULES = Object.freeze([
     label: 'Overview',
     scope: 'System-wide operational picture',
     webPath: '/',
+    mobilePrimary: true,
+  },
+  {
+    id: 'voice',
+    group: 'CONTROL',
+    label: 'Voice',
+    scope: 'LiveKit operator voice — read-only intelligence transport',
+    webPath: '/voice',
     mobilePrimary: true,
   },
   {
@@ -226,6 +238,37 @@ export const OPERATOR_MODULES = Object.freeze([
   },
 ] as const);
 
+export const operatorVoiceRpcRequestSchema = z
+  .object({
+    query: z.string().min(1).max(500),
+  })
+  .strict();
+
+export const operatorVoiceRpcResponseSchema = z
+  .object({
+    headline: z.string().min(1).max(160),
+    summary: z.string().min(1).max(1200),
+    facts: z.array(z.string().min(1).max(600)).max(6),
+    executionAuthority: z.literal('NONE'),
+    businessEffect: z.literal(false),
+  })
+  .strict();
+
+export const operatorVoiceSessionSchema = z
+  .object({
+    protocol: z.literal(OPERATOR_VOICE_SESSION_PROTOCOL),
+    serverUrl: z.url().refine((value) => value.startsWith('wss://'), 'wss-required'),
+    roomName: ref,
+    participantIdentity: ref,
+    participantToken: z.string().min(1).max(4096),
+    agentName: ref,
+    expiresInSeconds: z.number().int().positive().max(3600),
+    mode: z.literal('READ_ONLY'),
+    executionAuthority: z.literal('NONE'),
+    businessEffect: z.literal(false),
+  })
+  .strict();
+
 export const operatorActionSchema = z.enum([
   'APPROVAL_DECIDE',
   'CONVERSATION_TAKEOVER',
@@ -366,6 +409,8 @@ export const operatorCommandResultSchema = z
   })
   .strict();
 
+export type OperatorVoiceRpcRequest = z.infer<typeof operatorVoiceRpcRequestSchema>;
+export type OperatorVoiceSession = z.infer<typeof operatorVoiceSessionSchema>;
 export type OperatorClientPlatform = z.infer<typeof operatorClientPlatformSchema>;
 export type OperatorModule = z.infer<typeof operatorModuleSchema>;
 export type OperatorAction = z.infer<typeof operatorActionSchema>;
@@ -373,6 +418,10 @@ export type OperatorCapability = z.infer<typeof operatorCapabilitySchema>;
 export type OperatorBootstrap = z.infer<typeof operatorBootstrapSchema>;
 export type OperatorCommand = z.infer<typeof operatorCommandSchema>;
 export type OperatorCommandResult = z.infer<typeof operatorCommandResultSchema>;
+
+export function parseOperatorVoiceSession(value: unknown): OperatorVoiceSession {
+  return operatorVoiceSessionSchema.parse(value);
+}
 
 export function parseOperatorBootstrap(value: unknown): OperatorBootstrap {
   return operatorBootstrapSchema.parse(value);
