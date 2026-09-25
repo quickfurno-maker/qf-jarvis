@@ -684,6 +684,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // canonical conversation across replicas, and a logical message that cannot run twice. Still
       // an EXACT set match; it records an authorised addition, it does not relax the assertion.
       'postgres-riya-turn-coordinator',
+      // ADR-0167: pure proactive operator intelligence; ranks attention, anomalies, efficiency,
+      // recovery and evaluation posture. It owns no scheduler, provider, Core authority or effect.
+      'proactive-intelligence',
       // QFJ-S3-I-A (ADR-0072): the versioned prompt registry foundation. Still an EXACT set match --
       // this records an authorised addition, it does not relax the assertion.
       'prompt-registry',
@@ -827,6 +830,7 @@ describe('(133-148) the declared budget and every prior lock', () => {
     expect(dirs('apps')).toEqual([
       'api',
       'jarvis-os',
+      'proactive-worker',
       'quickfurno-gateway',
       'temporal-worker',
       'worker',

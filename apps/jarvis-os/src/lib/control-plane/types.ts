@@ -203,6 +203,8 @@ export interface AttentionItem {
   readonly context: string;
   readonly age: string;
   readonly severity: 'critical' | 'warning' | 'info';
+  /** Optional deep-link to the operating surface that can investigate this item. */
+  readonly href?: string;
 }
 
 /** One provenance-labelled activity entry. */

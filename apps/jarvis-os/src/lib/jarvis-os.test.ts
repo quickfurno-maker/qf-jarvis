@@ -134,8 +134,6 @@ describe('capability lifecycle', () => {
     // a surface look finished, and thereby rendering a live-looking control.
     const mustNotBeAvailable: readonly CapabilityLifecycle[] = ['AVAILABLE'];
     for (const id of [
-      'approval.submit',
-      'conversation.control.write',
       'communication.live-send',
       'execution.core-automation.bridge',
       'aarohi.vendor-growth',
@@ -170,6 +168,7 @@ describe('navigation', () => {
       '/approvals',
       '/conversations',
       '/execution',
+      '/intelligence',
       '/knowledge',
       '/evaluations',
       '/models',
@@ -562,6 +561,7 @@ describe('live operator capability remains contained behind reviewed seams', () 
       '@qf-jarvis/control-plane-read-contract',
       '@qf-jarvis/operator-api-contract',
       '@qf-jarvis/operator-client-core',
+      '@qf-jarvis/proactive-intelligence',
       '@qf-jarvis/quickfurno-operator-command-contract',
       '@qf-jarvis/quickfurno-operator-observation-contract',
       '@qf-jarvis/release-assurance-observation-contract',
@@ -594,6 +594,7 @@ describe('live operator capability remains contained behind reviewed seams', () 
     const ENABLED_CONTROL_FILES: readonly string[] = Object.freeze([
       'src/components/shell/AppShell.tsx', // drawer open/close: navigation only
       'src/components/shell/CommandPalette.tsx', // local route navigation only
+      'src/components/shell/LiveRefreshController.tsx', // router refresh/pause only; no command boundary
       'src/components/shell/MobileDock.tsx', // route navigation only
       'src/components/shell/NotificationCenter.tsx', // local attention drawer only
       'src/components/shell/OperatorMenu.tsx', // menu toggle + sign-out submit
@@ -611,6 +612,48 @@ describe('live operator capability remains contained behind reviewed seams', () 
       for (const button of buttons) {
         expect(button, `${label}: ${button.slice(0, 60)}`).toContain('disabled');
       }
+    }
+  });
+
+  it('keeps operator intelligence read-only and provider-free', () => {
+    const files = [
+      join(SRC, 'lib', 'control-plane', 'operator-intelligence.ts'),
+      join(SRC, 'app', 'api', 'operator', 'v1', 'intelligence', 'route.ts'),
+    ];
+    const code = files.map((file) => codeOnly(readFileSync(file, 'utf8'))).join('\n');
+    expect(code).toContain('answerOperatorQuestion');
+    expect(code).toContain('@qf-jarvis/proactive-intelligence');
+    expect(code).not.toContain('/api/operator/v1/commands');
+    for (const forbidden of [
+      '@qf-jarvis/operator-client-core',
+      'APPROVAL_DECIDE',
+      'CONVERSATION_TAKEOVER',
+      'CONVERSATION_PAUSE_AI',
+      'CONVERSATION_RESUME_AI',
+      'fetch(',
+      'openai',
+      'groq',
+      'whatsapp',
+    ]) {
+      expect(code.toLowerCase(), forbidden).not.toContain(forbidden.toLowerCase());
+    }
+  });
+
+  it('keeps the live refresh controller outside every business-command seam', () => {
+    const code = codeOnly(
+      readFileSync(join(SRC, 'components', 'shell', 'LiveRefreshController.tsx'), 'utf8'),
+    );
+    expect(code).toContain('router.refresh()');
+    for (const forbidden of [
+      '@qf-jarvis/operator-client-core',
+      '/api/operator/v1/commands',
+      'APPROVAL_DECIDE',
+      'CONVERSATION_TAKEOVER',
+      'CONVERSATION_PAUSE_AI',
+      'CONVERSATION_RESUME_AI',
+      'fetch(',
+    ]) {
+      expect(code, forbidden).not.toContain(forbidden);
     }
   });
 });

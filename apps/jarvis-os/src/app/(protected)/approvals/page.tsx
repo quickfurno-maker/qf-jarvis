@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { StackedShare } from '@/components/charts/Charts';
 import { ApprovalDecisionControls } from '@/components/operator/OperatorControls';
 import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
@@ -62,9 +64,26 @@ const STATE_LABEL: Readonly<Record<ApprovalQueueRow['state'], string>> = {
   answered: 'Answered',
 };
 
-export default async function ApprovalsPage() {
+function InspectorRow({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-[var(--color-line)] pb-2 last:border-0 last:pb-0">
+      <dt className="text-[var(--color-ink-faint)]">{label}</dt>
+      <dd className="max-w-[62%] text-right font-medium text-[var(--color-ink)]">{value}</dd>
+    </div>
+  );
+}
+
+export default async function ApprovalsPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<{ readonly approval?: string | string[] | undefined }>;
+}) {
   const plane = await controlPlane();
   const queue = plane.approvalQueue();
+  const query = await searchParams;
+  const selectedId = typeof query.approval === 'string' ? query.approval : undefined;
+  const selected =
+    selectedId === undefined ? undefined : queue.items.find((row) => row.id === selectedId);
 
   return (
     <>
@@ -114,7 +133,12 @@ export default async function ApprovalsPage() {
                   {rows.map((row) => (
                     <Row key={row.id}>
                       <Cell>
-                        <span className="block max-w-[30ch] truncate">{row.requestedAction}</span>
+                        <Link
+                          href={'/approvals?approval=' + row.id}
+                          className="block max-w-[30ch] truncate font-semibold text-[var(--color-accent-bright)] hover:underline"
+                        >
+                          {row.requestedAction}
+                        </Link>
                         <span className="tabular mt-0.5 block text-[10.5px] text-[var(--color-ink-faint)]">
                           {row.id}
                         </span>
@@ -161,16 +185,49 @@ export default async function ApprovalsPage() {
               </SectionBody>
             </Panel>
 
-            <Panel title="Inspector" subtitle="Detail pane — arrives with the control-plane API">
-              <SectionHeading
-                title="No request selected"
-                caption="Row selection arrives with the authenticated control-plane API."
-              />
-              <p className="text-[12px] leading-relaxed text-[var(--color-ink-faint)]">
-                The inspector will show the recommendation an ask was made about, the recomputed
-                action fingerprint, the requested authority and the policy cited — the evidence an
-                approver needs, rendered beside the decision rather than behind it.
-              </p>
+            <Panel
+              title="Inspector"
+              subtitle={
+                selected === undefined
+                  ? 'Select a request to inspect its governed snapshot evidence.'
+                  : 'Snapshot evidence for the selected approval request.'
+              }
+            >
+              {selected === undefined ? (
+                <>
+                  <SectionHeading
+                    title={selectedId === undefined ? 'No request selected' : 'Request not present'}
+                    caption={
+                      selectedId === undefined
+                        ? 'Choose a request from the queue to inspect it.'
+                        : 'The selected request is no longer present in this snapshot. It may have changed state.'
+                    }
+                  />
+                  <p className="text-[12px] leading-relaxed text-[var(--color-ink-faint)]">
+                    Jarvis OS never reconstructs missing approval evidence. Refresh or choose a
+                    current row.
+                  </p>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <SectionHeading title={selected.requestedAction} caption={selected.id} />
+                  <dl className="space-y-2.5 text-[11.5px]">
+                    <InspectorRow label="Risk" value={RISK_LABEL[selected.risk]} />
+                    <InspectorRow label="Requested authority" value={selected.requestedAuthority} />
+                    <InspectorRow label="Source agent" value={selected.sourceAgent} />
+                    <InspectorRow label="Subject" value={selected.subject} />
+                    <InspectorRow label="State" value={STATE_LABEL[selected.state]} />
+                    <InspectorRow label="SLA" value={SLA_LABEL[selected.slaState]} />
+                  </dl>
+                  <div className="border-t border-[var(--color-line)] pt-3">
+                    <ApprovalDecisionControls approvalId={selected.id} state={selected.state} />
+                  </div>
+                  <p className="border-t border-[var(--color-line)] pt-3 text-[10.5px] leading-relaxed text-[var(--color-ink-faint)]">
+                    Recommendation fingerprint, cited policy and per-event decision lineage are not
+                    exposed by the current Core snapshot, so this inspector does not invent them.
+                  </p>
+                </div>
+              )}
             </Panel>
 
             <Panel title="What an approval is not" subtitle="Two separate yeses are required">

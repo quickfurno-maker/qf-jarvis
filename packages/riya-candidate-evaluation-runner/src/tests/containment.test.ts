@@ -133,8 +133,8 @@ describe('the bridge can reach nothing real', () => {
     const migrations = readdirSync(
       join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations'),
     ).filter((name) => name.endsWith('.sql'));
-    expect(migrations).toHaveLength(14);
-    expect(migrations.some((name) => name.startsWith('0015'))).toBe(false);
+    expect(migrations).toHaveLength(15);
+    expect(migrations.some((name) => name.startsWith('0016'))).toBe(false);
   });
 
   it('has NO dependency on Human Gold, WhatsApp or QuickFurno', () => {

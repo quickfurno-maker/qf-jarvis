@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { AgentOverview } from '@/components/agents/AgentOverview';
 import { controlPlane } from '@/lib/control-plane';
-import { agentOperationalMetrics } from '@/lib/control-plane/agent-live';
+import { agentCockpit, agentOperationalMetrics } from '@/lib/control-plane/agent-live';
 
 export default async function JarvisAgentPage() {
   const plane = await controlPlane();
@@ -10,5 +10,11 @@ export default async function JarvisAgentPage() {
   if (agent === undefined) {
     notFound();
   }
-  return <AgentOverview agent={agent} metricsSection={agentOperationalMetrics(plane, 'jarvis')} />;
+  return (
+    <AgentOverview
+      agent={agent}
+      metricsSection={agentOperationalMetrics(plane, 'jarvis')}
+      cockpit={agentCockpit(plane, 'jarvis')}
+    />
+  );
 }

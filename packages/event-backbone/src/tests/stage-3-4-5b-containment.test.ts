@@ -105,7 +105,7 @@ describe('destructive/reset operations are absent from ALL production projection
 // (QFJ-P08-B2), 0009 (QFJ-P08 durable approval queue) and now 0010 (QFJ-P09.03 durable execution
 // replay claim). This guard bounds it at 0001–0011.
 describe('migrations are bounded at 0001–0012 with no 0014', () => {
-  it('the migrations directory holds EXACTLY the twelve approved SQL files', () => {
+  it('the migrations directory holds exactly the approved SQL files through 0015', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((name) => name.endsWith('.sql'))
       .sort();
@@ -125,36 +125,39 @@ describe('migrations are bounded at 0001–0012 with no 0014', () => {
       '0012_riya_logical_turn_idempotency.sql',
       '0013_communication_state_projection.sql',
       '0014_conversation_prospect_party_type.sql',
+      '0015_correlation_timeline_projection.sql',
     ]);
   });
 
-  it('no migration numbered 0013 or higher exists', () => {
+  it('no migration numbered 0016 or higher exists', () => {
     // Compared NUMERICALLY rather than by prefix. The previous form was `/^0010|^0[1-9]\d\d/`,
     // which named 0010 and 0100–0999 but silently missed everything from 0011 to 0099 — the exact
     // range the very next migration would land in. Moving the bound is the moment to close that.
     const files = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql'));
     // RWC-P8 (ADR-0104): the bound moves to 0012, the ONE owner-authorized addition. The lock
     // still says exactly what it said -- no unauthorized migration exists.
-    const beyond = files.filter((name) => Number.parseInt(name.slice(0, 4), 10) > 14);
+    const beyond = files.filter((name) => Number.parseInt(name.slice(0, 4), 10) > 15);
     expect(beyond).toEqual([]);
   });
 });
 
-describe('the package exports map exposes only the root and narrow internal CLI subpaths', () => {
+describe('the package exports map exposes only the root and narrow internal subpaths', () => {
   const manifest = JSON.parse(readFileSync(fileURLToPath(PACKAGE_MANIFEST), 'utf8')) as {
     readonly exports: Record<string, unknown>;
     readonly scripts: Record<string, string>;
   };
 
-  it('publishes exactly the root and the three narrow internal subpaths — no bypass subpath', () => {
+  it('publishes exactly the root and the four narrow internal subpaths — no bypass subpath', () => {
     // QFJ-P03.07G added the read-only inspection CLI as a second narrowly scoped internal subpath.
-    // D2a (ADR-0138) added the third: the governed accepted-event write capability, which was moved
-    // OFF the root barrel precisely so it stops being reachable by every package. The containment
+    // D2a (ADR-0138) added the governed accepted-event write capability. ADR-0167 adds the fourth
+    // narrow subpath: read-only correlation timeline metadata. Both remain exact-file internal seams.
+    // The event-write capability stays off the root barrel so it is not reachable by every package. The containment
     // property this test protects is unchanged: no wildcard, and no subpath KEY naming persistence
     // or the migration runner — a `./persistence/...` key would re-open the deep-import bypass,
     // whereas `./internal/event-write` names one module and resolves to exactly one file.
     expect(Object.keys(manifest.exports).sort()).toStrictEqual([
       '.',
+      './internal/correlation-read',
       './internal/event-write',
       './internal/projection-inspection-cli',
       './internal/projection-worker-cli',
@@ -172,10 +175,15 @@ describe('the package exports map exposes only the root and narrow internal CLI 
 });
 
 describe('the production registry stays within scope', () => {
-  it('registers exactly the three approved projections, including subject-activity (QFJ-P03.09)', () => {
+  it('registers exactly the four approved projections, including correlation-timeline', () => {
     const names = createProductionProjectionRegistry()
       .list()
       .map((d) => d.name);
-    expect(names).toEqual(['daily-event-acceptance', 'event-type-activity', 'subject-activity']);
+    expect(names).toEqual([
+      'correlation-timeline',
+      'daily-event-acceptance',
+      'event-type-activity',
+      'subject-activity',
+    ]);
   });
 });

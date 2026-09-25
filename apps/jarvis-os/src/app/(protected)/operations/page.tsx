@@ -1,12 +1,14 @@
 import { ConversationCommandControls } from '@/components/operator/OperatorControls';
 import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
 import { ActivityFeed } from '@/components/operations/ActivityFeed';
+import { DecisionLineage } from '@/components/operations/DecisionLineage';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
 import { Tag } from '@/components/system/StatusPill';
 import { SectionBody, SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
 import { isReadable } from '@/lib/control-plane/types';
+import { decisionLineage } from '@/lib/control-plane/decision-lineage';
 
 /**
  * Operations Center.
@@ -37,6 +39,8 @@ export default async function OperationsPage() {
       />
 
       <div className="space-y-5">
+        <DecisionLineage stages={decisionLineage(plane)} />
+
         <Notice
           tone={control.availability === 'AVAILABLE' ? 'info' : 'offline'}
           title={

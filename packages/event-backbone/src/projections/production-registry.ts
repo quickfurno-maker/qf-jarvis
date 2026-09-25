@@ -6,7 +6,7 @@
  * of its own — it reuses the merged Stage 3.4.2 `createProjectionRegistry`, which snapshots, validates,
  * copies, freezes, deterministically name-orders, and rejects duplicate names (even across versions).
  *
- * Exactly THREE production definitions, and nothing else:
+ * Exactly FOUR production definitions, and nothing else:
  *   - `event-type-activity` v1  → `qf_jarvis.rm_event_type_activity`
  *   - `daily-event-acceptance` v1 → `qf_jarvis.rm_daily_event_acceptance`
  *   - `subject-activity` v1      → `qf_jarvis.rm_subject_activity` (QFJ-P03.09, ADR-0044)
@@ -20,13 +20,14 @@
  * production worker composition (`projection-worker-cli.ts`) constructs this registry internally;
  * synthetic tests continue to build their own registries directly from `createProjectionRegistry`.
  */
+import { correlationTimelineProjection } from './handlers/correlation-timeline.js';
 import { dailyEventAcceptanceProjection } from './handlers/daily-event-acceptance.js';
 import { eventTypeActivityProjection } from './handlers/event-type-activity.js';
 import { subjectActivityProjection } from './handlers/subject-activity.js';
 import { createProjectionRegistry, type ProjectionRegistry } from './projection-registry.js';
 
 /**
- * Build the immutable production registry containing exactly the three real read-model projections.
+ * Build the immutable production registry containing exactly the four real read-model projections.
  *
  * A fresh, independently-frozen registry each call — the caller (the worker composition root) builds
  * it once at startup. Duplicate-name protection and deterministic ordering are owned by
@@ -34,6 +35,7 @@ import { createProjectionRegistry, type ProjectionRegistry } from './projection-
  */
 export function createProductionProjectionRegistry(): ProjectionRegistry {
   return createProjectionRegistry([
+    correlationTimelineProjection,
     eventTypeActivityProjection,
     dailyEventAcceptanceProjection,
     subjectActivityProjection,

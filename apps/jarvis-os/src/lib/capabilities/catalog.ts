@@ -59,6 +59,15 @@ export const CAPABILITY_IDS = [
   'evaluation.run',
   'worker.local-inference',
   'operator.authentication',
+  'intelligence.proactive',
+  'intelligence.correlation',
+  'memory.governed',
+  'context.semantic-cache',
+  'simulation.digital-twin',
+  'recovery.certified-fallback',
+  'evaluation.continuous',
+  'release.certification',
+  'interface.voice',
 ] as const;
 
 export type CapabilityId = (typeof CAPABILITY_IDS)[number];
@@ -127,26 +136,26 @@ export const CAPABILITY_SNAPSHOT: readonly Capability[] = Object.freeze([
   {
     id: 'approval.queue.read',
     label: 'Approval queue — read',
-    lifecycle: 'NOT_CONNECTED',
-    note: 'Durable queue merged (QFJ-P08). Jarvis OS has no control-plane API yet.',
+    lifecycle: 'AVAILABLE',
+    note: 'Versioned read surface and signed Core observation adapter are implemented. Runtime reachability is resolved from live evidence.',
   },
   {
     id: 'approval.submit',
     label: 'Approval submission to Core',
-    lifecycle: 'NOT_CONNECTED',
-    note: 'Adapter merged (QFJ-P08). No live Core transport exists.',
+    lifecycle: 'AVAILABLE',
+    note: 'Versioned operator-command submission is implemented. QuickFurno Core validates authority and may refuse; runtime reachability is resolved separately.',
   },
   {
     id: 'conversation.control.read',
     label: 'Conversation control — read',
-    lifecycle: 'NOT_CONNECTED',
-    note: 'Durable control state merged. Not wired to this surface.',
+    lifecycle: 'AVAILABLE',
+    note: 'Governed conversation-control state is exposed through the signed Core observation boundary. Runtime reachability is resolved separately.',
   },
   {
     id: 'conversation.control.write',
     label: 'Human takeover / pause',
-    lifecycle: 'DISABLED',
-    note: 'Deliberately off in Jarvis OS. No control action reaches a backend.',
+    lifecycle: 'AVAILABLE',
+    note: 'Takeover, pause and resume submit versioned requests to QuickFurno Core. Jarvis OS never authorizes the state change itself.',
   },
   {
     id: 'execution.intent.validate',
@@ -169,8 +178,8 @@ export const CAPABILITY_SNAPSHOT: readonly Capability[] = Object.freeze([
   {
     id: 'core.sync',
     label: 'QuickFurno Core sync',
-    lifecycle: 'NOT_CONNECTED',
-    note: 'Core remains authoritative. No live Jarvis↔Core protocol has been adopted.',
+    lifecycle: 'AVAILABLE',
+    note: 'Signed read-only observation and signed operator-command boundaries are implemented. Core remains authoritative; runtime reachability is resolved from evidence.',
   },
   {
     id: 'model.gateway',
@@ -181,8 +190,8 @@ export const CAPABILITY_SNAPSHOT: readonly Capability[] = Object.freeze([
   {
     id: 'knowledge.rag',
     label: 'Governed knowledge / RAG',
-    lifecycle: 'DISABLED',
-    note: 'Provisioning contracts merged; retrieval is off and provisions nothing.',
+    lifecycle: 'SHADOW',
+    note: 'One governed RAG path with isolated Riya, Anisha and Aarohi scopes is implemented and tested. Runtime observation decides whether retrieval is active.',
   },
   {
     id: 'evaluation.run',
@@ -201,6 +210,60 @@ export const CAPABILITY_SNAPSHOT: readonly Capability[] = Object.freeze([
     label: 'Local inference worker',
     lifecycle: 'PLANNED',
     note: 'Local/GPU node topology is a future slice. No discovery runs.',
+  },
+  {
+    id: 'intelligence.proactive',
+    label: 'Proactive operating intelligence',
+    lifecycle: 'AVAILABLE',
+    note: 'Read-only Now Brief, anomaly assessment, operator reasoning and runtime-capability truth are implemented. They authorize and execute nothing.',
+  },
+  {
+    id: 'intelligence.correlation',
+    label: 'End-to-end correlation timeline',
+    lifecycle: 'NOT_CONNECTED',
+    note: 'The correlation projection and privacy-bounded read model are implemented. The migration must be applied and observed before live trace coverage is claimed.',
+  },
+  {
+    id: 'memory.governed',
+    label: 'Governed long-term memory',
+    lifecycle: 'DISABLED',
+    note: 'Durable memory runtime and PostgreSQL store are implemented. Durable writes remain disabled until owner, retention and erasure policy references are approved.',
+  },
+  {
+    id: 'context.semantic-cache',
+    label: 'Semantic cache and context compression',
+    lifecycle: 'DISABLED',
+    note: 'Public-knowledge-only semantic cache and bounded context compression primitives are implemented. No serving-path cache store is activated.',
+  },
+  {
+    id: 'simulation.digital-twin',
+    label: 'Digital-twin simulation',
+    lifecycle: 'AVAILABLE',
+    note: 'Zero-effect scenario replay and baseline/candidate comparison are implemented for offline change rehearsal. Simulations cannot call providers, mutate Core or send channels.',
+  },
+  {
+    id: 'recovery.certified-fallback',
+    label: 'Certified provider recovery',
+    lifecycle: 'DISABLED',
+    note: 'Certified fallback planning is implemented, but fallback remains policy-disabled until exact ACTIVE evidence exists for both primary and fallback releases.',
+  },
+  {
+    id: 'evaluation.continuous',
+    label: 'Continuous production evaluation',
+    lifecycle: 'SHADOW',
+    note: 'Continuous-evaluation posture and regression gating are implemented as evidence only. Production sampling/labels must be connected before it can become operational.',
+  },
+  {
+    id: 'release.certification',
+    label: 'Release assurance and certification',
+    lifecycle: 'AVAILABLE',
+    note: 'Release-assurance observations, build/test evidence and rollout separation are implemented. Passing evidence never activates production by itself.',
+  },
+  {
+    id: 'interface.voice',
+    label: 'Always-connected voice interface',
+    lifecycle: 'PLANNED',
+    note: 'Voice is intentionally deferred until proactive intelligence and the read-only operator reasoning contract are stable. It will reuse the same authority boundaries.',
   },
 ]);
 

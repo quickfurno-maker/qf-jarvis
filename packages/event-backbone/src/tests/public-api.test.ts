@@ -285,6 +285,7 @@ describe('the Stage 3.4.5B real handlers, production registry, and worker CLI ar
     // read-only inspection CLI here rather than to the root, so the 39-symbol barrel is untouched.
     expect(Object.keys(exports).sort()).toEqual([
       '.',
+      './internal/correlation-read',
       './internal/event-write',
       './internal/projection-inspection-cli',
       './internal/projection-worker-cli',
@@ -356,6 +357,7 @@ describe('no package export subpath can reach the migration runner', () => {
     // deep import; the next assertion forbids exactly that.
     expect(Object.keys(exports).sort()).toStrictEqual([
       '.',
+      './internal/correlation-read',
       './internal/event-write',
       './internal/projection-inspection-cli',
       './internal/projection-worker-cli',

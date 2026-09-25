@@ -128,14 +128,10 @@ export function createWorkerObservationReadSource(filePath: string): ReadSourceD
                 id: 'embedding-requests',
                 label: 'Embedding requests',
                 value: String(observation.embeddingUsage.requests),
-                caption: 'Aggregate embedding requests issued by this production worker.',
-              },
-              {
-                id: 'embedding-characters',
-                label: 'Embedding characters',
-                value: String(observation.embeddingUsage.characters),
                 caption:
-                  'Aggregate query characters submitted for embeddings; no query text retained.',
+                  'Aggregate embedding requests; ' +
+                  String(observation.embeddingUsage.characters) +
+                  ' query characters were submitted in total, with no query text retained.',
               },
             ]
           : [];

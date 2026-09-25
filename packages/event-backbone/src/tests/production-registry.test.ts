@@ -9,6 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { correlationTimelineProjection } from '../projections/handlers/correlation-timeline.js';
 import { dailyEventAcceptanceProjection } from '../projections/handlers/daily-event-acceptance.js';
 import { eventTypeActivityProjection } from '../projections/handlers/event-type-activity.js';
 import { subjectActivityProjection } from '../projections/handlers/subject-activity.js';
@@ -18,16 +19,17 @@ import {
   ProjectionRegistryError,
 } from '../projections/projection-registry.js';
 
-describe('production registry — exactly the three real definitions', () => {
-  it('contains exactly three projections', () => {
+describe('production registry — exactly the four real definitions', () => {
+  it('contains exactly four projections', () => {
     const registry = createProductionProjectionRegistry();
-    expect(registry.size).toBe(3);
-    expect(registry.list()).toHaveLength(3);
+    expect(registry.size).toBe(4);
+    expect(registry.list()).toHaveLength(4);
   });
 
-  it('enumerates them in deterministic name order (daily-event-acceptance, event-type-activity, subject-activity)', () => {
+  it('enumerates them in deterministic name order', () => {
     const registry = createProductionProjectionRegistry();
     expect(registry.list().map((d) => d.name)).toEqual([
+      'correlation-timeline',
       'daily-event-acceptance',
       'event-type-activity',
       'subject-activity',
@@ -37,6 +39,7 @@ describe('production registry — exactly the three real definitions', () => {
   it('registers the exact names and versions', () => {
     const registry = createProductionProjectionRegistry();
     expect(registry.list().map((d) => [d.name, d.version])).toEqual([
+      ['correlation-timeline', 1],
       ['daily-event-acceptance', 1],
       ['event-type-activity', 1],
       ['subject-activity', 1],
@@ -47,15 +50,19 @@ describe('production registry — exactly the three real definitions', () => {
     // createProjectionRegistry defensively copies + re-freezes each definition, so the stored object
     // is a fresh frozen copy; the apply handler is carried through by reference.
     const registry = createProductionProjectionRegistry();
+    const correlation = registry.get('correlation-timeline');
     const eventType = registry.get('event-type-activity');
     const daily = registry.get('daily-event-acceptance');
     const subject = registry.get('subject-activity');
+    expect(correlation?.apply).toBe(correlationTimelineProjection.apply);
+    expect(correlation?.version).toBe(correlationTimelineProjection.version);
     expect(eventType?.apply).toBe(eventTypeActivityProjection.apply);
     expect(eventType?.version).toBe(eventTypeActivityProjection.version);
     expect(daily?.apply).toBe(dailyEventAcceptanceProjection.apply);
     expect(daily?.version).toBe(dailyEventAcceptanceProjection.version);
     expect(subject?.apply).toBe(subjectActivityProjection.apply);
     expect(subject?.version).toBe(subjectActivityProjection.version);
+    expect(registry.has('correlation-timeline')).toBe(true);
     expect(registry.has('event-type-activity')).toBe(true);
     expect(registry.has('daily-event-acceptance')).toBe(true);
     expect(registry.has('subject-activity')).toBe(true);

@@ -234,6 +234,7 @@ describe('D4 — the reader is not part of any public surface', () => {
     // it has a consumer; D4 deliberately does not, because there is nothing to consume it yet.
     expect(Object.keys(manifest.exports).sort()).toStrictEqual([
       '.',
+      './internal/correlation-read',
       './internal/event-write',
       './internal/projection-inspection-cli',
       './internal/projection-worker-cli',

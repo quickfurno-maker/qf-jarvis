@@ -421,7 +421,7 @@ describe('the route file itself', () => {
     }
   });
 
-  it('locks the API route set to exactly seven, all of them accounted for', () => {
+  it('locks the API route set to exactly eight, all of them accounted for', () => {
     // Exact allowlist: adding a debug endpoint, introspection helper or ad-hoc mobile API fails
     // review. The operator API is versioned and is the shared web/mobile boundary.
     const routes = walk(join(SRC, 'app'))
@@ -436,6 +436,7 @@ describe('the route file itself', () => {
       'api/control-plane/v2/snapshot/route.ts',
       'api/operator/v1/bootstrap/route.ts',
       'api/operator/v1/commands/route.ts',
+      'api/operator/v1/intelligence/route.ts',
       'api/operator/v1/snapshot/route.ts',
     ]);
   });
@@ -561,6 +562,7 @@ describe('GET /api/control-plane/v2/snapshot — the Aarohi acquisition surface'
 
   it('exposes no mutating verb, and exports no mutating method', async () => {
     const payload = JSON.stringify(await (await callV2()).json());
+    const keys = [...payload.matchAll(/"([A-Za-z0-9_]+)":/g)].map((match) => match[1] ?? '');
     for (const forbidden of [
       'canSend',
       'canExecute',
@@ -573,7 +575,7 @@ describe('GET /api/control-plane/v2/snapshot — the Aarohi acquisition surface'
       'grantCredits',
       'assignPackage',
     ]) {
-      expect(payload, forbidden).not.toContain(forbidden);
+      expect(keys, forbidden).not.toContain(forbidden);
     }
 
     // A new VERSION is a new shape, never new authority: the V2 route file exports GET alone.

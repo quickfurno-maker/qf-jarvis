@@ -162,6 +162,7 @@ describe('migration 0006 applies with 0001–0005 unchanged', () => {
       '0012_riya_logical_turn_idempotency.sql',
       '0013_communication_state_projection.sql',
       '0014_conversation_prospect_party_type.sql',
+      '0015_correlation_timeline_projection.sql',
     ]);
     for (const row of rows) {
       const known = IMMUTABLE_CHECKSUMS[row.filename];

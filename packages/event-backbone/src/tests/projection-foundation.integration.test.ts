@@ -136,7 +136,7 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe('migrations apply in order, idempotently, with 0001–0007 unchanged', () => {
-  it('records exactly 0001..0014 in order with the immutable checksums intact', async () => {
+  it('records exactly 0001..0015 in order with the immutable checksums intact', async () => {
     const rows = await withClient(admin, async (client) => {
       const r = await client.query<{ version: number; filename: string; checksum: Buffer }>(
         `SELECT version, filename, checksum FROM qf_jarvis.schema_migration ORDER BY version ASC`,
@@ -159,11 +159,12 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
       '0012_riya_logical_turn_idempotency.sql',
       '0013_communication_state_projection.sql',
       '0014_conversation_prospect_party_type.sql',
+      '0015_correlation_timeline_projection.sql',
     ]);
     // RWC-P8 (ADR-0104) added 0012; QFJ-P09 D5 (ADR-0142) added 0013; the JF-4B/C/D owner correction
     // (ADR-0150 §34) adds 0014, the party CHECK widened to hold PROSPECT. One authorized addition each.
     expect(rows.map((row) => row.version)).toStrictEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
     ]);
     for (const row of rows) {
       const hex = row.checksum.toString('hex');
@@ -173,7 +174,7 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
     }
   });
 
-  it('re-migrating is idempotent — still exactly fourteen applied migrations', async () => {
+  it('re-migrating is idempotent — still exactly fifteen applied migrations', async () => {
     await runMigrations(admin, defaultMigrationsDirectory());
     const count = await withClient(admin, async (client) => {
       const r = await client.query<{ n: string }>(
@@ -181,9 +182,10 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
       );
       return Number.parseInt(r.rows[0]?.n ?? '0', 10);
     });
-    // Each slice added exactly one: 0012 (RWC-P8, ADR-0104), 0013 (QFJ-P09 D5, ADR-0142) and 0014
-    // (JF-4B/C/D owner correction, ADR-0150 §34). Repository and LOCAL/CI only.
-    expect(count).toBe(14);
+    // Each slice added exactly one: 0012 (RWC-P8, ADR-0104), 0013 (QFJ-P09 D5, ADR-0142),
+    // 0014 (JF-4B/C/D owner correction, ADR-0150 §34) and 0015 (ADR-0167 correlation timeline).
+    // Repository and LOCAL/CI only.
+    expect(count).toBe(15);
   });
 
   it('records the EXACT reviewed 0004 and 0005 checksums in the migration history', async () => {
@@ -708,9 +710,10 @@ describe('privileges — projection role least privilege; ingestion role and PUB
     // the projection role so the subject-activity handler can resolve it. It is NOT personal data.
     expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'subject_type', 'SELECT')).toBe(true);
     expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'subject_id', 'SELECT')).toBe(true);
-    // The payload and the correlation identifier remain ungranted.
+    // Payload remains ungranted. ADR-0167 grants only the canonical correlation UUID so the
+    // dedicated correlation-timeline reducer can resolve lineage without widening ProjectionEvent.
     expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'payload', 'SELECT')).toBe(false);
-    expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'correlation_id', 'SELECT')).toBe(false);
+    expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'correlation_id', 'SELECT')).toBe(true);
     // and it can never mutate the immutable log
     expect(await tablePrivilege(PROJECTION_ROLE, 'event', 'UPDATE')).toBe(false);
     expect(await tablePrivilege(PROJECTION_ROLE, 'event', 'DELETE')).toBe(false);

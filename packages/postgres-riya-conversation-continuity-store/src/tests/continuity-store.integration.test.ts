@@ -935,11 +935,12 @@ describe('(25,26) migration governance', () => {
       '0012_riya_logical_turn_idempotency.sql',
       '0013_communication_state_projection.sql',
       '0014_conversation_prospect_party_type.sql',
+      '0015_correlation_timeline_projection.sql',
     ]);
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(files.some((n) => n.startsWith('0015'))).toBe(false);
+    expect(files.some((n) => n.startsWith('0016'))).toBe(false);
   });
 
   it('(26) migrations 0001-0010 are byte-identical to the pre-RWC-P2B baseline', () => {

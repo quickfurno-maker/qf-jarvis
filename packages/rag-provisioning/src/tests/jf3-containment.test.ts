@@ -164,15 +164,15 @@ describe('JF-3 containment', () => {
     expect(production).toContain('verifyServingProvider');
   });
 
-  it('(JF3-58) adds no migration: 0001-0014 stand and there is no 0015', () => {
+  it('(JF3-58) adds no migration: 0001-0014 stand and there is no 0016', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(14);
+    expect(sql).toHaveLength(15);
     expect(sql[0]).toBe('0001_event_log.sql');
     expect(sql[12]).toBe('0013_communication_state_projection.sql');
-    expect(sql.some((n) => n.startsWith('0015'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0016'))).toBe(false);
     // And this package still owns no schema of its own, in any form.
     for (const file of productionFiles()) {
       expect(readFileSync(file, 'utf8')).not.toMatch(/CREATE\s+(TABLE|INDEX|SCHEMA)/i);

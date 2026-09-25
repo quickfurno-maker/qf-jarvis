@@ -457,6 +457,7 @@ describe('(10) no application consumes the web channel', () => {
       'api/control-plane/v2/snapshot/route.ts',
       'api/operator/v1/bootstrap/route.ts',
       'api/operator/v1/commands/route.ts',
+      'api/operator/v1/intelligence/route.ts',
       'api/operator/v1/snapshot/route.ts',
     ]);
   });
@@ -501,6 +502,8 @@ describe('(12, 13) the repository invariants this slice must not move', () => {
         '4f533fb60ea96bedd11bf2f5b3177376517c07633d3b7e71e0341b43c1a72919',
       '0014_conversation_prospect_party_type.sql':
         '572ba13764cffed600d8580e00b781502ddc85c19126e3621d0a8127e5dc536e',
+      '0015_correlation_timeline_projection.sql':
+        '31517791c0e8f382f6dff1d0d25f01d8244cc0fabb06c27694246cd1905ba952',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -516,7 +519,7 @@ describe('(12, 13) the repository invariants this slice must not move', () => {
       ).toBe(hash);
     }
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition.
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 14)).toBe(false);
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 15)).toBe(false);
   });
 
   it('no memory, transcript or session store was introduced', () => {

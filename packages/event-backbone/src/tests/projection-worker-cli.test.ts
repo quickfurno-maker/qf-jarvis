@@ -153,6 +153,7 @@ describe('worker CLI — valid startup and clean stop', () => {
 
     expect(captured?.pool).toBe(FAKE_POOL);
     expect(captured?.registry.list().map((d) => d.name)).toEqual([
+      'correlation-timeline',
       'daily-event-acceptance',
       'event-type-activity',
       'subject-activity',
