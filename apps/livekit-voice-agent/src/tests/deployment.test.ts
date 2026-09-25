@@ -28,6 +28,9 @@ describe('LiveKit voice production deployment containment', () => {
   });
 
   it('runs privately with no ingress, host port, privilege or writable root filesystem', () => {
+    expect(dockerfile).toContain('groupadd --gid 10004 jarvisvoice');
+    expect(dockerfile).toContain('useradd --uid 10004 --gid 10004');
+    expect(dockerfile).not.toContain('groupadd --gid 10004 voice');
     expect(compose).toContain("traefik.enable: 'false'");
     expect(compose).toContain('read_only: true');
     expect(compose).toContain('no-new-privileges:true');

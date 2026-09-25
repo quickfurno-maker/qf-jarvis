@@ -22,8 +22,10 @@ RUN pnpm --filter @qf-jarvis/operator-api-contract build \
 FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production \
     QFJ_LIVEKIT_VOICE_AGENT_CONFIG_FILE=/run/secrets/qf-jarvis-livekit-voice-agent.json
-RUN groupadd --gid 10004 voice \
- && useradd --uid 10004 --gid 10004 --no-create-home --shell /usr/sbin/nologin voice \
+# Debian already reserves the conventional "voice" group, so use a service-specific
+# principal while keeping the fixed numeric identity used by the secret mount and Compose policy.
+RUN groupadd --gid 10004 jarvisvoice \
+ && useradd --uid 10004 --gid 10004 --no-create-home --shell /usr/sbin/nologin jarvisvoice \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
            /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /root/.npm /tmp/*
 WORKDIR /app
