@@ -222,7 +222,9 @@ export function mapSnapshotToReadModel(snapshot: ControlPlaneSnapshotV2): Contro
     id: dimension.id,
     label: dimension.label,
     state: dimension.state,
-    caseCount: 0,
+    // The wire contract currently carries release/evaluation state but no case-count field.
+    // Unknown is null, never a confident zero.
+    caseCount: null,
     detail: dimension.detail,
   }));
   const ownership = section(sections.coreSync, (row) => ({

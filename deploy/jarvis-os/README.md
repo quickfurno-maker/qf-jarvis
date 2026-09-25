@@ -150,8 +150,19 @@ ssh qf-staging "$RELEASE/activate.sh ingress $SHA"
 ssh qf-staging "$RELEASE/activate.sh hsts $SHA"
 
 # 8. Final gate, again EXTERNAL. Fails closed on missing HSTS, wrong max-age, or a duplicate CSP.
+#    On success only, the verified wrapper SSHes to the immutable release package on qf-staging.
+#    The host-side publisher re-verifies the exact SHA/container/HSTS/mount and atomically publishes
+#    a bounded release-assurance receipt for Jarvis OS. Override the SSH alias only when required:
+#      QFJ_JOS_SSH_TARGET=<alias> ./deploy/jarvis-os/external-smoke.sh final ...
 ./deploy/jarvis-os/external-smoke.sh final jarvis.quickfurno.in "$SHA"
 ```
+
+The final assurance receipt lives at
+`/srv/qf-jarvis/state/release-assurance/current.json`. It is non-secret, root-writable,
+group-readable by the Jarvis OS runtime identity, and mounted into the container read-only as a
+directory so atomic replacement is visible without a restart. The dashboard accepts it only when
+its embedded 40-character Git SHA exactly matches `QFJ_JOS_RELEASE_SHA` for the running image.
+An old receipt therefore degrades the Evaluations section instead of certifying a new release.
 
 ### Two packages, one SHA
 

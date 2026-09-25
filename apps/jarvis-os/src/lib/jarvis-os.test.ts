@@ -52,6 +52,7 @@ const SCANNERS: readonly string[] = Object.freeze([
   'src/server/auth/auth-http.test.ts',
   'src/server/auth/proxy-csp.test.ts',
   'src/server/control-plane/sources/quickfurno-operator-source.test.ts',
+  'src/server/control-plane/sources/release-assurance-source.test.ts',
 ]);
 
 function walk(dir: string): string[] {
@@ -514,6 +515,8 @@ describe('live operator capability remains contained behind reviewed seams', () 
         'src/server/auth/config/loader.ts',
         'src/server/control-plane/sources/worker-observation-source.ts',
         'src/server/control-plane/sources/worker-observation-source.test.ts',
+        'src/server/control-plane/sources/release-assurance-source.ts',
+        'src/server/control-plane/sources/release-assurance-source.test.ts',
         'src/server/control-plane/sources/quickfurno-operator-source.test.ts',
       ]);
       if (!fsAllowed.has(label)) {
@@ -561,6 +564,7 @@ describe('live operator capability remains contained behind reviewed seams', () 
       '@qf-jarvis/operator-client-core',
       '@qf-jarvis/quickfurno-operator-command-contract',
       '@qf-jarvis/quickfurno-operator-observation-contract',
+      '@qf-jarvis/release-assurance-observation-contract',
       '@qf-jarvis/worker-observation-contract',
     ]);
     for (const file of sourceFiles()) {

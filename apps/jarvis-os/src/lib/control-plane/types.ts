@@ -279,7 +279,11 @@ export interface EvaluationDimension {
   readonly id: string;
   readonly label: string;
   readonly state: HealthState;
-  readonly caseCount: number;
+  /**
+   * Null means the connected evidence source did not make a numeric case-count claim.
+   * Never render an unknown count as zero.
+   */
+  readonly caseCount: number | null;
   readonly detail: string;
 }
 

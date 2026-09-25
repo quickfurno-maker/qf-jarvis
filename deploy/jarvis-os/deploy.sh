@@ -24,6 +24,7 @@ SECRET="/srv/qf-jarvis/secrets/jarvis-os-auth.json"
 CORE_READ_SECRET="/srv/qf-jarvis/secrets/jarvis-os-core-read.json"
 CORE_COMMAND_SECRET="/srv/qf-jarvis/secrets/jarvis-os-core-command.json"
 OBSERVABILITY="/srv/qf-jarvis/state/observability"
+RELEASE_ASSURANCE="/srv/qf-jarvis/state/release-assurance"
 BASE="$HERE/compose.production.yml"
 
 # ---------------------------------------------------------------------------------------------
@@ -107,6 +108,25 @@ if [[ "$OBS_GROUP" != "10002" ]]; then
   exit 1
 fi
 
+# Release assurance is non-secret, but it is still a governed host->container observation boundary.
+# Refuse symlinks, create the real directory if absent, and keep only root writable. Jarvis OS reads
+# it through a read-only bind as uid/gid 10001.
+if [[ -L "$RELEASE_ASSURANCE" ]]; then
+  echo "FATAL: $RELEASE_ASSURANCE must not be a symlink." >&2
+  exit 1
+fi
+install -d -o 0 -g 10001 -m 0750 "$RELEASE_ASSURANCE"
+[[ -d "$RELEASE_ASSURANCE" && ! -L "$RELEASE_ASSURANCE" ]] || {
+  echo "FATAL: $RELEASE_ASSURANCE must be a real directory." >&2
+  exit 1
+}
+ASSURANCE_OWNER="$(stat -c '%u:%g' "$RELEASE_ASSURANCE")"
+ASSURANCE_MODE="$(stat -c '%a' "$RELEASE_ASSURANCE")"
+if [[ "$ASSURANCE_OWNER" != "0:10001" || "$ASSURANCE_MODE" != "750" ]]; then
+  echo "FATAL: $RELEASE_ASSURANCE is $ASSURANCE_OWNER mode $ASSURANCE_MODE; expected 0:10001 mode 750." >&2
+  exit 1
+fi
+
 # ---------------------------------------------------------------------------------------------
 # 3. Build from a clean checkout of that exact commit
 # ---------------------------------------------------------------------------------------------
@@ -179,6 +199,12 @@ prove "observation mount source" "$OBSERVABILITY" \
   "$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/observability"}}{{.Source}}{{end}}{{end}}')"
 prove "observation mounted read-only" "true" \
   "$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/observability"}}{{not .RW}}{{end}}{{end}}')"
+prove "release assurance mount source" "$RELEASE_ASSURANCE" \
+  "$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/release-assurance"}}{{.Source}}{{end}}{{end}}')"
+prove "release assurance mounted read-only" "true" \
+  "$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/release-assurance"}}{{not .RW}}{{end}}{{end}}')"
+prove "release SHA environment" "$SHA" \
+  "$(docker inspect qf-jarvis-os --format '{{range .Config.Env}}{{println .}}{{end}}' | awk -F= '$1=="QFJ_JOS_RELEASE_SHA"{print $2}')"
 CONTAINER_GROUPS="$(docker exec qf-jarvis-os id -G)"
 if [[ " $CONTAINER_GROUPS " == *" 10002 "* ]]; then OBS_GROUP_VISIBLE=true; else OBS_GROUP_VISIBLE=false; fi
 prove "observation supplementary group" "true" "$OBS_GROUP_VISIBLE"
@@ -219,7 +245,9 @@ It is running and reachable by nobody: no published port, no Traefik router.
 Next, in order -- all from this same verified release directory:
   1. Confirm DNS:            dig +short A jarvis.quickfurno.in
   2. Activate ingress:       ${HERE}/activate.sh ingress ${SHA}
-  3. Verify TLS externally:  ${HERE}/smoke.sh pre-hsts jarvis.quickfurno.in
+  3. Verify TLS externally (operator machine):
+       ./deploy/jarvis-os/external-smoke.sh pre-hsts jarvis.quickfurno.in ${SHA}
   4. Activate HSTS:          ${HERE}/activate.sh hsts ${SHA}
-  5. Final verification:     ${HERE}/smoke.sh final jarvis.quickfurno.in
+  5. Final verification + assurance publication (operator machine):
+       ./deploy/jarvis-os/external-smoke.sh final jarvis.quickfurno.in ${SHA}
 EOF

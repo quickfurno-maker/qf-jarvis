@@ -109,6 +109,24 @@ describe('the adopted registry', () => {
     expect(adopted[0]?.id).toBe('quickfurno-whatsapp-worker-observation');
   });
 
+  it('adopts release assurance only when both the receipt path and exact release SHA exist', () => {
+    expect(
+      createAdoptedReadSources(undefined, undefined, resolve('release-assurance.json')),
+    ).toHaveLength(0);
+    expect(createAdoptedReadSources(undefined, undefined, undefined, 'a'.repeat(40))).toHaveLength(
+      0,
+    );
+
+    const adopted = createAdoptedReadSources(
+      undefined,
+      undefined,
+      resolve('release-assurance.json'),
+      'a'.repeat(40),
+    );
+    expect(adopted).toHaveLength(1);
+    expect(adopted[0]?.id).toBe('jarvis-os-release-assurance');
+  });
+
   it('leaves the default snapshot exactly as the repository baseline', () => {
     const snapshot = buildControlPlaneSnapshot({ generatedAt: GENERATED });
     expect(snapshot.source.kind).toBe('REPOSITORY_BASELINE');
