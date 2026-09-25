@@ -14,7 +14,7 @@
     "clean": "node scripts/clean.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "eslint . --max-warnings=0",
+    "lint": "node scripts/lint.mjs",
     "typecheck": "tsc --build tsconfig.json --pretty && pnpm --recursive --if-present run typecheck:tests",
     "test": "pnpm run test:unit && pnpm run test:integration",
     "test:unit": "vitest run --passWithNoTests",
