@@ -117,6 +117,15 @@ describe('the production image', () => {
     }
   });
 
+  it('keeps the release-assurance publisher executable in Git', () => {
+    const indexed = execFileSync(
+      'git',
+      ['ls-files', '-s', '--', 'deploy/jarvis-os/publish-assurance.sh'],
+      { cwd: REPO_ROOT, encoding: 'utf8' },
+    ).trim();
+    expect(indexed).toMatch(/^100755\s/u);
+  });
+
   it('strips the build toolchain from the runtime image', () => {
     // Every CRITICAL and HIGH finding in the pre-correction scan was in this toolchain, and none
     // were in the application's traced node_modules. Beyond the CVE count, `npm`/`npx` inside a
