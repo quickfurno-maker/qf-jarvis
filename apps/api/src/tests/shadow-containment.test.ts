@@ -336,6 +336,10 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/quickfurno-whatsapp/production-seal-binding.ts',
     'src/quickfurno-whatsapp/production-worker-config.ts',
     'src/quickfurno-whatsapp/production-worker.ts',
+    // ADR-0170: bounded single-owner scheduling may name the WhatsApp turn types but gains no
+    // send authority, tool surface, database handle or webhook capability.
+    'src/quickfurno-whatsapp/parallel-turn-scheduler.ts',
+    'src/tests/quickfurno-whatsapp-parallel-turn-scheduler.test.ts',
     'src/tests/quickfurno-whatsapp-authority-state-port.test.ts',
     'src/tests/quickfurno-whatsapp-production-observation.test.ts',
     'src/tests/quickfurno-whatsapp-deployment-containment.test.ts',

@@ -54,6 +54,18 @@
       }
     }
   },
+  "concurrency": {
+    "globalMaxConcurrentTurns": 60,
+    "maxConcurrentByAgent": {
+      "RIYA": 20,
+      "ANISHA": 20,
+      "AAROHI": 20
+    },
+    "modelGateway": {
+      "maxConcurrent": 20,
+      "maxQueue": 40
+    }
+  },
   "spoolDirectory": "/var/lib/qfj-turns",
   "killSwitchFile": "/var/run/qfj-control/DISABLE_MODEL",
   "operationalSnapshotFile": "/var/run/qfj-observability/whatsapp-worker.json",

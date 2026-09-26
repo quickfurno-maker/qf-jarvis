@@ -11,7 +11,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    stop_grace_period: 30s
+    stop_grace_period: 120s
     user: '10003:10002'
     environment:
       NODE_ENV: production
@@ -49,11 +49,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.00'
-          memory: 1024m
-          pids: 256
+          cpus: '1.50'
+          memory: 2048m
+          pids: 512
         reservations:
-          memory: 256m
+          memory: 512m
     logging:
       driver: json-file
       options:

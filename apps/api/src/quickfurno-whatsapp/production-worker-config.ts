@@ -72,6 +72,43 @@ const databaseSchema = z
   })
   .strict();
 
+const concurrencySchema = z
+  .object({
+    globalMaxConcurrentTurns: z.number().int().min(1).max(60),
+    maxConcurrentByAgent: z
+      .object({
+        RIYA: z.number().int().min(1).max(20),
+        ANISHA: z.number().int().min(1).max(20),
+        AAROHI: z.number().int().min(1).max(20),
+      })
+      .strict(),
+    modelGateway: z
+      .object({
+        maxConcurrent: z.number().int().min(1).max(60),
+        maxQueue: z.number().int().min(0).max(120),
+      })
+      .strict(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const laneCapacity =
+      value.maxConcurrentByAgent.RIYA +
+      value.maxConcurrentByAgent.ANISHA +
+      value.maxConcurrentByAgent.AAROHI;
+    if (value.globalMaxConcurrentTurns > laneCapacity) {
+      ctx.addIssue({ code: 'custom', message: 'global concurrency exceeds agent-lane capacity' });
+    }
+    if (
+      value.modelGateway.maxConcurrent + value.modelGateway.maxQueue <
+      value.globalMaxConcurrentTurns
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'model gateway cannot absorb admitted chat capacity',
+      });
+    }
+  });
+
 const knowledgeSchema = z.union([
   z.object({ mode: z.literal('DISABLED') }).strict(),
   z
@@ -110,6 +147,7 @@ const schema = z
       })
       .strict(),
     knowledge: knowledgeSchema,
+    concurrency: concurrencySchema,
     spoolDirectory: absolutePath,
     killSwitchFile: absolutePath,
     operationalSnapshotFile: absolutePath,
@@ -165,6 +203,11 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
         }>;
         agents: Readonly<Record<'RIYA' | 'ANISHA' | 'AAROHI', AgentHybridKnowledgeSearchPolicy>>;
       }>;
+  readonly concurrency: Readonly<{
+    globalMaxConcurrentTurns: number;
+    maxConcurrentByAgent: Readonly<Record<'RIYA' | 'ANISHA' | 'AAROHI', number>>;
+    modelGateway: Readonly<{ maxConcurrent: number; maxQueue: number }>;
+  }>;
   readonly spoolDirectory: string;
   readonly killSwitchFile: string;
   readonly operationalSnapshotFile: string;
@@ -288,6 +331,11 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
       timeoutMs: input.quickfurno.timeoutMs,
     }),
     knowledge,
+    concurrency: Object.freeze({
+      globalMaxConcurrentTurns: input.concurrency.globalMaxConcurrentTurns,
+      maxConcurrentByAgent: Object.freeze({ ...input.concurrency.maxConcurrentByAgent }),
+      modelGateway: Object.freeze({ ...input.concurrency.modelGateway }),
+    }),
     spoolDirectory: input.spoolDirectory,
     killSwitchFile: input.killSwitchFile,
     operationalSnapshotFile: input.operationalSnapshotFile,

@@ -22,7 +22,7 @@ async function main(): Promise<void> {
     worker = await createQuickFurnoWhatsAppProductionWorker(config);
 
     process.stdout.write(
-      `qfj-whatsapp-worker READY revision=${worker.revision} providerMode=${worker.providerMode} approvals=${String(worker.verifiedApprovalCount)}\n`,
+      `qfj-whatsapp-worker READY revision=${worker.revision} providerMode=${worker.providerMode} approvals=${String(worker.verifiedApprovalCount)} maxConcurrentTurns=${String(worker.maxConcurrentTurns)} riya=${String(worker.maxConcurrentByAgent.RIYA)} anisha=${String(worker.maxConcurrentByAgent.ANISHA)} aarohi=${String(worker.maxConcurrentByAgent.AAROHI)}\n`,
     );
 
     const controller = new AbortController();

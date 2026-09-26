@@ -12,6 +12,17 @@ authorization before any Meta/provider send.
 The worker has no public HTTP port and no Traefik router. Production WhatsApp Riya is stateless
 inside Jarvis; the worker does not compose the separate Riya continuity or logical-turn stores.
 
+## Parallel chat capacity
+
+The reviewed single-owner worker admits up to **60 simultaneous chat turns**: 20 Riya, 20 Anisha
+and 20 Aarohi. Agent lanes are round-robin and a conversation may have only one in-flight turn.
+Provider concurrency is deliberately separate: the example config allows 20 simultaneous model
+calls plus 40 bounded waiters, so provider limits can be tuned without changing chat isolation.
+
+Do not activate the 60-turn envelope until the production provider project has enough verified
+RPM/TPM capacity. A provider rate-limit failure remains fail-closed; this worker does not create an
+unbounded retry loop.
+
 ## Durable queue
 
 Both containers mount the same host directory:

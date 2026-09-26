@@ -131,6 +131,43 @@ describe('durable WhatsApp turn spool', () => {
     expect(await spool.recoverStale(60_000, Date.parse('2026-09-18T12:00:00.000Z'))).toBe(1);
     expect((await spool.claimNext())?.inboundMessageId).toBe(turn().inboundMessageId);
   });
+
+  it('selectively claims an agent lane while excluding an active conversation', async () => {
+    const root = await spoolRoot();
+    const spool = await createFileDurableTurnSpool(root);
+    const activeConversation = '22222222-2222-4222-8222-222222222222';
+    const otherConversation = '55555555-5555-4555-8555-555555555555';
+    await spool.accept(turn(), '2026-09-18T12:00:01.000Z');
+    await spool.accept(
+      turn({
+        requestId: '66666666-6666-4666-8666-666666666666',
+        conversationId: otherConversation,
+        inboundMessageId: '77777777-7777-4777-8777-777777777777',
+        assignedActor: 'ANISHA',
+        subjectType: 'vendor',
+      }),
+      '2026-09-18T12:00:02.000Z',
+    );
+    await spool.accept(
+      turn({
+        requestId: '88888888-8888-4888-8888-888888888888',
+        conversationId: '99999999-9999-4999-8999-999999999999',
+        inboundMessageId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        assignedActor: 'RIYA',
+      }),
+      '2026-09-18T12:00:03.000Z',
+    );
+
+    const claimed = await spool.claimNext({
+      allowedActors: ['RIYA'],
+      excludedConversationIds: [activeConversation],
+    });
+    expect(claimed?.assignedActor).toBe('RIYA');
+    expect(claimed?.conversationId).toBe('99999999-9999-4999-8999-999999999999');
+
+    const anisha = await spool.claimNext({ allowedActors: ['ANISHA'] });
+    expect(anisha?.conversationId).toBe(otherConversation);
+  });
 });
 
 it('reports only aggregate spool counts and oldest pending age', async () => {

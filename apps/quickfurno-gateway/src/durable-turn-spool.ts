@@ -28,9 +28,14 @@ export interface DurableTurnSpoolStats {
   readonly oldestPendingAgeMs: number | null;
 }
 
+export interface DurableTurnClaimSelection {
+  readonly allowedActors?: readonly DurableTurnRecordV1['assignedActor'][];
+  readonly excludedConversationIds?: readonly string[];
+}
+
 export interface DurableTurnSpool {
   accept(turn: WhatsAppTurnV1, acceptedAt: string): Promise<TurnAcceptResult>;
-  claimNext(): Promise<DurableTurnRecordV1 | null>;
+  claimNext(selection?: DurableTurnClaimSelection): Promise<DurableTurnRecordV1 | null>;
   complete(inboundMessageId: string): Promise<void>;
   fail(inboundMessageId: string): Promise<void>;
   release(inboundMessageId: string): Promise<void>;
@@ -186,14 +191,46 @@ export async function createFileDurableTurnSpool(root: string): Promise<DurableT
       }
     },
 
-    async claimNext(): Promise<DurableTurnRecordV1 | null> {
-      const files = (await readdir(pending)).filter((name) => name.endsWith('.json')).sort();
+    async claimNext(
+      selection: DurableTurnClaimSelection = {},
+    ): Promise<DurableTurnRecordV1 | null> {
+      const allowedActors =
+        selection.allowedActors === undefined ? undefined : new Set(selection.allowedActors);
+      const excludedConversations = new Set(selection.excludedConversationIds ?? []);
+      const files = (await readdir(pending)).filter((name) => name.endsWith('.json'));
+      const candidates: {
+        readonly name: string;
+        readonly record: DurableTurnRecordV1 | null;
+      }[] = [];
       for (const name of files) {
-        const from = join(pending, name);
-        const to = join(processing, name);
+        const record = await readRecord(join(pending, name));
+        // A malformed record stays claimable so corruption cannot be hidden forever by an actor filter.
+        if (
+          record !== null &&
+          ((allowedActors !== undefined && !allowedActors.has(record.assignedActor)) ||
+            excludedConversations.has(record.conversationId))
+        ) {
+          continue;
+        }
+        candidates.push({ name, record });
+      }
+      candidates.sort((a, b) => {
+        if (a.record === null && b.record === null) return a.name.localeCompare(b.name);
+        if (a.record === null) return -1;
+        if (b.record === null) return 1;
+        const accepted = Date.parse(a.record.acceptedAt) - Date.parse(b.record.acceptedAt);
+        if (accepted !== 0) return accepted;
+        const received = Date.parse(a.record.receivedAt) - Date.parse(b.record.receivedAt);
+        if (received !== 0) return received;
+        const revision = a.record.conversationRevision - b.record.conversationRevision;
+        return revision !== 0 ? revision : a.name.localeCompare(b.name);
+      });
+      for (const candidate of candidates) {
+        const from = join(pending, candidate.name);
+        const to = join(processing, candidate.name);
         try {
           await rename(from, to);
-          const record = await readRecord(to);
+          const record = candidate.record ?? (await readRecord(to));
           if (!record) throw new Error('turn_spool_corrupt');
           return record;
         } catch (error: unknown) {
