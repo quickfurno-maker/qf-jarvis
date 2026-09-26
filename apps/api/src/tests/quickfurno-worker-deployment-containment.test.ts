@@ -77,6 +77,18 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(example).toContain('"groqCredentialFile": "/run/secrets/groq-production.key"');
   });
 
+  it('declares the certified 20+20+20 chat envelope separately from provider concurrency', () => {
+    expect(example).toContain('"globalMaxConcurrentTurns": 60');
+    expect(example).toContain('"RIYA": 20');
+    expect(example).toContain('"ANISHA": 20');
+    expect(example).toContain('"AAROHI": 20');
+    expect(example).toContain('"maxConcurrent": 20');
+    expect(example).toContain('"maxQueue": 40');
+    expect(compose).toContain('stop_grace_period: 120s');
+    expect(compose).toContain("cpus: '1.50'");
+    expect(compose).toContain('memory: 2048m');
+  });
+
   it('contains no committed credential or private-key material', () => {
     const all = [compose, dockerfile, deploy, activate, disable, example].join('\n');
     expect(all).not.toMatch(/gsk_[A-Za-z0-9]{8,}/);

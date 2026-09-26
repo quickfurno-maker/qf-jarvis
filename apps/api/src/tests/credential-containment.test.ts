@@ -575,7 +575,9 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       // Signed media content reads use the same one-shot abort deadline. The reader receives
       // bounded QuickFurno-owned bytes only; it has no retry loop, provider credential or URL.
       'src/quickfurno-whatsapp/media-content-http.ts': 1,
-      [JF7_WORKER]: 1,
+      // ADR-0170: the parallel scheduler owns one abortable idle-poll delay. It does not repeat via
+      // setInterval or self-reschedule; every arm is cleared on abort before the promise resolves.
+      'src/quickfurno-whatsapp/parallel-turn-scheduler.ts': 1,
     });
     const timerFiles = productionFiles().filter((file) =>
       codeOnly(readFileSync(file, 'utf8')).includes('setTimeout'),

@@ -94,6 +94,11 @@ function validConfig(root: string) {
         AAROHI: { topicFilters: [], candidatePool: 64, maxResults: 8, maxContentChars: 4096 },
       },
     },
+    concurrency: {
+      globalMaxConcurrentTurns: 60,
+      maxConcurrentByAgent: { RIYA: 20, ANISHA: 20, AAROHI: 20 },
+      modelGateway: { maxConcurrent: 20, maxQueue: 40 },
+    },
     spoolDirectory: spool,
     killSwitchFile: kill,
     operationalSnapshotFile,
@@ -119,6 +124,11 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
       'synthetic-embedding-token-not-used-by-loader-test',
     );
     expect(config.database?.applicationName).toBe('qf-jarvis-whatsapp-worker');
+    expect(config.concurrency).toEqual({
+      globalMaxConcurrentTurns: 60,
+      maxConcurrentByAgent: { RIYA: 20, ANISHA: 20, AAROHI: 20 },
+      modelGateway: { maxConcurrent: 20, maxQueue: 40 },
+    });
     expect(config.seal).toEqual({});
   });
 
@@ -233,6 +243,39 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     );
   });
 
+  it('refuses concurrency that exceeds a 20-turn agent lane or cannot absorb all admitted turns', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const config = validConfig(root);
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...config,
+        concurrency: {
+          ...config.concurrency,
+          maxConcurrentByAgent: { RIYA: 21, ANISHA: 20, AAROHI: 20 },
+        },
+      }),
+    );
+    expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+      'production-worker-config-invalid',
+    );
+
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...config,
+        concurrency: {
+          ...config.concurrency,
+          modelGateway: { maxConcurrent: 10, maxQueue: 10 },
+        },
+      }),
+    );
+    expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+      'production-worker-config-invalid',
+    );
+  });
+
   it('refuses relative config paths', () => {
     expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig('worker.json')).toThrow(
       'production-worker-config-invalid',
@@ -313,8 +356,18 @@ describe('QuickFurno WhatsApp production worker containment', () => {
   it('checks a fail-closed filesystem kill switch before claiming and at gateway invocation', () => {
     expect(killSwitch).toContain('statSync(path)');
     expect(killSwitch).toContain("code !== 'ENOENT'");
-    expect(worker).toContain('if (killSwitch.active())');
+    expect(worker).toContain('canClaim: () => !killSwitch.active()');
     expect(worker).toContain('killSwitch,');
+  });
+
+  it('routes production turns through the bounded parallel scheduler and configurable model gate', () => {
+    expect(worker).toContain('createQuickFurnoWhatsAppParallelScheduler');
+    expect(worker).toContain(
+      'globalMaxConcurrentTurns: config.concurrency.globalMaxConcurrentTurns',
+    );
+    expect(worker).toContain('maxConcurrentByAgent: config.concurrency.maxConcurrentByAgent');
+    expect(worker).toContain('concurrency: config.concurrency.modelGateway');
+    expect(worker).not.toContain('concurrency: { maxConcurrent: 1, maxQueue: 1 }');
   });
 
   it('confines direct QuickFurno HTTP to one no-retry network adapter', () => {

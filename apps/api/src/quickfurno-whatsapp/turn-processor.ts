@@ -13,8 +13,15 @@ export interface QuickFurnoWhatsAppTurnReference {
   readonly subjectType: 'unknown' | 'prospect' | 'client' | 'vendor';
 }
 
+export interface QuickFurnoWhatsAppTurnClaimSelection {
+  readonly allowedActors?: readonly QuickFurnoWhatsAppTurnReference['assignedActor'][];
+  readonly excludedConversationIds?: readonly string[];
+}
+
 export interface QuickFurnoWhatsAppTurnQueue {
-  claimNext(): Promise<QuickFurnoWhatsAppTurnReference | null>;
+  claimNext(
+    selection?: QuickFurnoWhatsAppTurnClaimSelection,
+  ): Promise<QuickFurnoWhatsAppTurnReference | null>;
   complete(inboundMessageId: string): Promise<void>;
   fail(inboundMessageId: string): Promise<void>;
   release(inboundMessageId: string): Promise<void>;
@@ -29,7 +36,10 @@ export type QuickFurnoWhatsAppProcessorOutcome =
   | 'failed-indeterminate';
 
 export interface QuickFurnoWhatsAppTurnProcessor {
-  processOne(): Promise<QuickFurnoWhatsAppProcessorOutcome>;
+  processClaimed(ref: QuickFurnoWhatsAppTurnReference): Promise<QuickFurnoWhatsAppProcessorOutcome>;
+  processOne(
+    selection?: QuickFurnoWhatsAppTurnClaimSelection,
+  ): Promise<QuickFurnoWhatsAppProcessorOutcome>;
 }
 
 export interface QuickFurnoWhatsAppTurnProcessorConfig {
@@ -60,60 +70,65 @@ function materialMatches(
 export function createQuickFurnoWhatsAppTurnProcessor(
   config: QuickFurnoWhatsAppTurnProcessorConfig,
 ): QuickFurnoWhatsAppTurnProcessor {
+  const processClaimed = async (
+    ref: QuickFurnoWhatsAppTurnReference,
+  ): Promise<QuickFurnoWhatsAppProcessorOutcome> => {
+    let material;
+    try {
+      material = await config.materialReader.read({
+        conversationId: ref.conversationId,
+        inboundMessageId: ref.inboundMessageId,
+        expectedRevision: ref.conversationRevision,
+      });
+    } catch (error) {
+      if (error instanceof QuickFurnoWhatsAppHttpError && error.code === 'request-failed') {
+        await config.queue.release(ref.inboundMessageId);
+        return 'released-pre-agent';
+      }
+      if (error instanceof QuickFurnoWhatsAppHttpError && error.code === 'stale-revision') {
+        await config.queue.complete(ref.inboundMessageId);
+        return 'completed-stale';
+      }
+      await config.queue.fail(ref.inboundMessageId);
+      return 'failed-indeterminate';
+    }
+
+    if (!materialMatches(ref, material)) {
+      await config.queue.fail(ref.inboundMessageId);
+      return 'failed-indeterminate';
+    }
+    let proposal;
+    try {
+      proposal = await config.specialistRuntime.process(material);
+    } catch {
+      await config.queue.fail(ref.inboundMessageId);
+      return 'failed-indeterminate';
+    }
+    if (proposal === null) {
+      await config.queue.complete(ref.inboundMessageId);
+      return 'completed-no-reply';
+    }
+
+    try {
+      const outcome = await config.replyWriter.write({
+        conversationId: ref.conversationId,
+        expectedRevision: ref.conversationRevision,
+        proposal,
+      });
+      await config.queue.complete(ref.inboundMessageId);
+      return outcome === 'stale' ? 'completed-stale' : 'completed-queued';
+    } catch {
+      // An agent/Core run has already occurred. Do not auto-rerun it after callback uncertainty.
+      await config.queue.fail(ref.inboundMessageId);
+      return 'failed-indeterminate';
+    }
+  };
+
   return Object.freeze({
-    async processOne() {
-      const ref = await config.queue.claimNext();
-      if (ref === null) return 'idle';
-
-      let material;
-      try {
-        material = await config.materialReader.read({
-          conversationId: ref.conversationId,
-          inboundMessageId: ref.inboundMessageId,
-          expectedRevision: ref.conversationRevision,
-        });
-      } catch (error) {
-        if (error instanceof QuickFurnoWhatsAppHttpError && error.code === 'request-failed') {
-          await config.queue.release(ref.inboundMessageId);
-          return 'released-pre-agent';
-        }
-        if (error instanceof QuickFurnoWhatsAppHttpError && error.code === 'stale-revision') {
-          await config.queue.complete(ref.inboundMessageId);
-          return 'completed-stale';
-        }
-        await config.queue.fail(ref.inboundMessageId);
-        return 'failed-indeterminate';
-      }
-
-      if (!materialMatches(ref, material)) {
-        await config.queue.fail(ref.inboundMessageId);
-        return 'failed-indeterminate';
-      }
-      let proposal;
-      try {
-        proposal = await config.specialistRuntime.process(material);
-      } catch {
-        await config.queue.fail(ref.inboundMessageId);
-        return 'failed-indeterminate';
-      }
-      if (proposal === null) {
-        await config.queue.complete(ref.inboundMessageId);
-        return 'completed-no-reply';
-      }
-
-      try {
-        const outcome = await config.replyWriter.write({
-          conversationId: ref.conversationId,
-          expectedRevision: ref.conversationRevision,
-          proposal,
-        });
-        await config.queue.complete(ref.inboundMessageId);
-        return outcome === 'stale' ? 'completed-stale' : 'completed-queued';
-      } catch {
-        // An agent/Core run has already occurred. Do not auto-rerun it after callback uncertainty.
-        await config.queue.fail(ref.inboundMessageId);
-        return 'failed-indeterminate';
-      }
+    processClaimed,
+    async processOne(selection: QuickFurnoWhatsAppTurnClaimSelection = {}) {
+      const ref = await config.queue.claimNext(selection);
+      return ref === null ? 'idle' : processClaimed(ref);
     },
   });
 }

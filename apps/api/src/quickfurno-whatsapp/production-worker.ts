@@ -44,6 +44,7 @@ import {
 import { createQuickFurnoWorkerKillSwitch } from './production-kill-switch.js';
 import { quickFurnoWorkerHttpPost } from './production-network.js';
 import { createQuickFurnoWhatsAppAuthorityStatePort } from './authority-state-port.js';
+import { createQuickFurnoWhatsAppParallelScheduler } from './parallel-turn-scheduler.js';
 import { createQuickFurnoWhatsAppSpecialistRuntime } from './specialist-runtime.js';
 import {
   createQuickFurnoWhatsAppTurnProcessor,
@@ -57,6 +58,8 @@ export interface QuickFurnoWhatsAppProductionWorker {
   readonly revision: string;
   readonly providerMode: 'GROQ_ONLY';
   readonly verifiedApprovalCount: 3;
+  readonly maxConcurrentTurns: number;
+  readonly maxConcurrentByAgent: Readonly<Record<'RIYA' | 'ANISHA' | 'AAROHI', number>>;
   run(signal: AbortSignal): Promise<void>;
   processOne(): Promise<QuickFurnoWhatsAppProcessorOutcome>;
   close(): Promise<void>;
@@ -64,18 +67,6 @@ export interface QuickFurnoWhatsAppProductionWorker {
 
 function systemInstant(): string {
   return new Date().toISOString();
-}
-
-function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.resolve();
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    const stop = (): void => {
-      clearTimeout(timer);
-      resolve();
-    };
-    signal.addEventListener('abort', stop, { once: true });
-  });
 }
 
 export async function createQuickFurnoWhatsAppProductionWorker(
@@ -136,7 +127,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
     budgetPolicy: createEstimatedBudgetPolicy({}),
     killSwitch,
     clock: gatewayClock,
-    concurrency: { maxConcurrent: 1, maxQueue: 1 },
+    concurrency: config.concurrency.modelGateway,
     circuit: { failureThreshold: 3, cooldownMs: 30_000 },
     defaultRetryBudget: 0,
     allowFallback: false,
@@ -310,15 +301,20 @@ export async function createQuickFurnoWhatsAppProductionWorker(
     });
 
     let lastObservationMs = 0;
-    const writeObservation = async (
+    let observationTail: Promise<void> = Promise.resolve();
+    const writeObservation = (
       state: 'HEALTHY' | 'DEGRADED' | 'DISABLED',
       force: boolean,
     ): Promise<void> => {
-      const nowMs = Date.now();
-      if (!force && nowMs - lastObservationMs < 10_000) return;
-      const spoolState = await spool.snapshot(nowMs);
-      await observation.write(state, spoolState, new Date(nowMs).toISOString());
-      lastObservationMs = nowMs;
+      const operation = observationTail.then(async () => {
+        const nowMs = Date.now();
+        if (!force && nowMs - lastObservationMs < 10_000) return;
+        const spoolState = await spool.snapshot(nowMs);
+        await observation.write(state, spoolState, new Date(nowMs).toISOString());
+        lastObservationMs = nowMs;
+      });
+      observationTail = operation.catch(() => undefined);
+      return operation;
     };
     const writeObservationBestEffort = async (
       state: 'HEALTHY' | 'DEGRADED' | 'DISABLED',
@@ -331,8 +327,9 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         // Jarvis OS will reject the stale/missing file and mark only its owned sections unavailable.
       }
     };
-    const processObservedOne = async (): Promise<QuickFurnoWhatsAppProcessorOutcome> => {
-      const outcome = await processor.processOne();
+    const recordObservedOutcome = async (
+      outcome: QuickFurnoWhatsAppProcessorOutcome,
+    ): Promise<void> => {
       observation.recordOutcome(outcome);
       const state = killSwitch.active()
         ? 'DISABLED'
@@ -340,8 +337,28 @@ export async function createQuickFurnoWhatsAppProductionWorker(
           ? 'DEGRADED'
           : 'HEALTHY';
       await writeObservationBestEffort(state, outcome !== 'idle');
+    };
+    const processObservedOne = async (): Promise<QuickFurnoWhatsAppProcessorOutcome> => {
+      const outcome = await processor.processOne();
+      await recordObservedOutcome(outcome);
       return outcome;
     };
+    const scheduler = createQuickFurnoWhatsAppParallelScheduler({
+      queue: spool,
+      processor,
+      parallelism: {
+        globalMaxConcurrentTurns: config.concurrency.globalMaxConcurrentTurns,
+        maxConcurrentByAgent: config.concurrency.maxConcurrentByAgent,
+      },
+      idlePollMs: config.idlePollMs,
+      canClaim: () => !killSwitch.active(),
+      async onOutcome(outcome: QuickFurnoWhatsAppProcessorOutcome) {
+        await recordObservedOutcome(outcome);
+      },
+      async onIdle() {
+        await writeObservationBestEffort(killSwitch.active() ? 'DISABLED' : 'HEALTHY', false);
+      },
+    });
 
     // Required once: a bad path/permission is a deployment defect and refuses startup before claims.
     await writeObservation(killSwitch.active() ? 'DISABLED' : 'HEALTHY', true);
@@ -350,21 +367,13 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       revision: config.revision,
       providerMode: 'GROQ_ONLY' as const,
       verifiedApprovalCount: 3 as const,
+      maxConcurrentTurns: config.concurrency.globalMaxConcurrentTurns,
+      maxConcurrentByAgent: config.concurrency.maxConcurrentByAgent,
       processOne: processObservedOne,
       async run(signal: AbortSignal): Promise<void> {
-        while (!signal.aborted) {
-          // Do not claim a new turn while disabled. The gateway repeats this check at invocation time,
-          // so a switch created after claim but before model execution still blocks the call.
-          if (killSwitch.active()) {
-            await writeObservationBestEffort('DISABLED', false);
-            await abortableDelay(config.idlePollMs, signal);
-            continue;
-          }
-          const outcome = await processObservedOne();
-          if (outcome === 'idle' || outcome === 'released-pre-agent') {
-            await abortableDelay(config.idlePollMs, signal);
-          }
-        }
+        // One SINGLE_OWNER worker may execute many conversations concurrently, but the scheduler
+        // admits at most one turn per conversation and round-robins the three bounded agent lanes.
+        await scheduler.run(signal);
       },
       async close(): Promise<void> {
         if (closed) return;
