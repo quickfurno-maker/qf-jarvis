@@ -1339,21 +1339,20 @@ describe('(35) Phase-2 qualification interpretation', () => {
   it('returns only the requested user-stated qualification field on V2', async () => {
     const policy = scriptedPolicy();
     const service = scriptedService({
-      mutate: (result) =>
-        ({
-          ...result,
-          continuity: {
-            ...result.continuity,
-            discovery: {
-              ...result.continuity.discovery,
-              budgetNote: '₹3–7 lakh',
-            },
-            fieldProvenance: {
-              ...result.continuity.fieldProvenance,
-              budget: 'user_stated',
-            },
+      mutate: (result) => ({
+        ...result,
+        continuity: {
+          ...result.continuity,
+          discovery: {
+            ...result.continuity.discovery,
+            budgetNote: '₹3–7 lakh',
           },
-        }) as RiyaWebConversationResultV2,
+          fieldProvenance: {
+            ...result.continuity.fieldProvenance,
+            budget: 'user_stated',
+          },
+        },
+      }),
     });
     const body = requestBody({
       version: 2,
@@ -1379,21 +1378,20 @@ describe('(35) Phase-2 qualification interpretation', () => {
 
   it('withholds a qualification proposal unless provenance is explicitly user_stated', async () => {
     const service = scriptedService({
-      mutate: (result) =>
-        ({
-          ...result,
-          continuity: {
-            ...result.continuity,
-            discovery: {
-              ...result.continuity.discovery,
-              timelineNote: 'Within 1 month',
-            },
-            fieldProvenance: {
-              ...result.continuity.fieldProvenance,
-              timeline: 'model_inferred',
-            },
+      mutate: (result) => ({
+        ...result,
+        continuity: {
+          ...result.continuity,
+          discovery: {
+            ...result.continuity.discovery,
+            timelineNote: 'Within 1 month',
           },
-        }) as RiyaWebConversationResultV2,
+          fieldProvenance: {
+            ...result.continuity.fieldProvenance,
+            timeline: 'model_inferred',
+          },
+        },
+      }),
     });
     const body = requestBody({
       version: 2,

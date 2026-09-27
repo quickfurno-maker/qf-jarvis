@@ -27,9 +27,14 @@ const servers: ReturnType<typeof createServer>[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    servers
-      .splice(0)
-      .map((server) => new Promise<void>((resolve) => server.close(() => resolve()))),
+    servers.splice(0).map(
+      (server) =>
+        new Promise<void>((resolve) => {
+          server.close(() => {
+            resolve();
+          });
+        }),
+    ),
   );
 });
 
@@ -78,8 +83,8 @@ function service(
   provenance: 'user_stated' | 'inferred',
 ): RiyaWebConversationService {
   return {
-    async handleTurn(turn: RiyaWebConversationTurnV1): Promise<RiyaWebConversationResultV2> {
-      return {
+    handleTurn(turn: RiyaWebConversationTurnV1): Promise<RiyaWebConversationResultV2> {
+      return Promise.resolve({
         version: 2,
         tenantId: turn.tenantId,
         conversationId: turn.conversationId,
@@ -101,7 +106,7 @@ function service(
             budget: provenance,
           },
         },
-      } as unknown as RiyaWebConversationResultV2;
+      } as unknown as RiyaWebConversationResultV2);
     },
   };
 }
@@ -131,7 +136,7 @@ async function send(
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as { port: number };
   const raw = JSON.stringify(body(over));
-  const response = await fetch(`http://127.0.0.1:${port}${PRIVATE_RIYA_WEB_INGRESS_PATH}`, {
+  const response = await fetch(`http://127.0.0.1:${String(port)}${PRIVATE_RIYA_WEB_INGRESS_PATH}`, {
     method: 'POST',
     headers: headers(raw),
     body: raw,
