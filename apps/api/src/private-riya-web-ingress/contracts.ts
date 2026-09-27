@@ -65,6 +65,14 @@ export const CANONICAL_INSTANT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?
 
 const CANONICAL_INSTANT = z.string().regex(CANONICAL_INSTANT_PATTERN);
 
+export const PRIVATE_RIYA_QUALIFICATION_TARGETS = [
+  'budget',
+  'timeline',
+  'propertyType',
+] as const;
+export type PrivateRiyaQualificationTarget =
+  (typeof PRIVATE_RIYA_QUALIFICATION_TARGETS)[number];
+
 /** One inbound WEB turn as a trusted QuickFurno server sends it. */
 export interface PrivateRiyaWebIngressRequestV1 {
   readonly protocol: typeof PRIVATE_RIYA_WEB_INGRESS_PROTOCOL;
@@ -90,31 +98,67 @@ export interface PrivateRiyaWebIngressRequestV1 {
   readonly normalizedText?: string;
 }
 
-/**
- * The strict request schema.
- *
- * `.strict()` is load-bearing rather than tidy: it is what turns "the gateway forwarded the browser's
- * `dataClass`" from a silently dropped field into a refusal somebody can see.
- */
-export const privateRiyaWebIngressRequestSchema = z
+export interface PrivateRiyaQualificationIngressRequestV2 {
+  readonly protocol: typeof PRIVATE_RIYA_WEB_INGRESS_PROTOCOL;
+  readonly version: 2;
+  readonly caller: typeof PRIVATE_RIYA_WEB_INGRESS_CALLER;
+  readonly audience: typeof PRIVATE_RIYA_WEB_INGRESS_AUDIENCE;
+  readonly requestId: string;
+  readonly issuedAt: string;
+  readonly tenantId: string;
+  readonly conversationId: string;
+  readonly messageId: string;
+  readonly receivedAt: string;
+  readonly webTurnRef: string;
+  readonly qualificationTarget: PrivateRiyaQualificationTarget;
+  /** Core-authored context, never treated as user evidence. */
+  readonly questionText: string;
+  readonly allowedOptions: readonly string[];
+  /** The exact bounded client answer that Riya may interpret. */
+  readonly answerText: string;
+}
+
+const commonRequestShape = {
+  protocol: z.literal(PRIVATE_RIYA_WEB_INGRESS_PROTOCOL),
+  caller: z.literal(PRIVATE_RIYA_WEB_INGRESS_CALLER),
+  audience: z.literal(PRIVATE_RIYA_WEB_INGRESS_AUDIENCE),
+  requestId: IDENTIFIER,
+  issuedAt: CANONICAL_INSTANT,
+  tenantId: IDENTIFIER,
+  conversationId: IDENTIFIER,
+  messageId: IDENTIFIER,
+  receivedAt: CANONICAL_INSTANT,
+  webTurnRef: z.string().min(1).max(256),
+} as const;
+
+const privateRiyaWebIngressRequestV1Schema = z
   .object({
-    protocol: z.literal(PRIVATE_RIYA_WEB_INGRESS_PROTOCOL),
+    ...commonRequestShape,
     version: z.literal(1),
-    caller: z.literal(PRIVATE_RIYA_WEB_INGRESS_CALLER),
-    audience: z.literal(PRIVATE_RIYA_WEB_INGRESS_AUDIENCE),
-    requestId: IDENTIFIER,
-    issuedAt: CANONICAL_INSTANT,
-    tenantId: IDENTIFIER,
-    conversationId: IDENTIFIER,
-    messageId: IDENTIFIER,
-    receivedAt: CANONICAL_INSTANT,
-    webTurnRef: z.string().min(1).max(256),
     subjectRef: IDENTIFIER.optional(),
-    // The same 4096 bound the runtime envelope and the P2C turn already enforce, restated so an
-    // oversized message is refused at the outermost boundary rather than deep inside a service.
     normalizedText: z.string().max(4096).optional(),
   })
   .strict();
+
+const privateRiyaQualificationIngressRequestV2Schema = z
+  .object({
+    ...commonRequestShape,
+    version: z.literal(2),
+    qualificationTarget: z.enum(PRIVATE_RIYA_QUALIFICATION_TARGETS),
+    questionText: z.string().min(1).max(512),
+    allowedOptions: z.array(z.string().min(1).max(128)).min(2).max(12),
+    answerText: z.string().min(1).max(512),
+  })
+  .strict();
+
+/**
+ * The strict signed request schema. V2 is additive and narrowly scoped to one
+ * Phase-2 qualification interpretation; V1 remains byte-for-semantic compatible.
+ */
+export const privateRiyaWebIngressRequestSchema = z.discriminatedUnion('version', [
+  privateRiyaWebIngressRequestV1Schema,
+  privateRiyaQualificationIngressRequestV2Schema,
+]);
 
 /**
  * The Core-authorized reply, as it appears on the wire.
@@ -155,6 +199,27 @@ export interface PrivateRiyaWebIngressResponseV1 {
   /** The service's own closed reason token, or `null`. Never a message, model output or exception. */
   readonly reason: string | null;
   readonly authorizedReply: PrivateRiyaWebIngressAuthorizedReplyV1 | null;
+}
+
+export interface PrivateRiyaQualificationProposalV2 {
+  readonly field: PrivateRiyaQualificationTarget;
+  readonly operation: 'SET';
+  readonly value: string;
+  /** Only explicit user-stated observations may cross this auto-apply seam. */
+  readonly provenance: 'user_stated';
+}
+
+export interface PrivateRiyaQualificationIngressResponseV2 {
+  readonly protocol: typeof PRIVATE_RIYA_WEB_INGRESS_PROTOCOL;
+  readonly version: 2;
+  readonly requestId: string;
+  readonly tenantId: string;
+  readonly conversationId: string;
+  readonly messageId: string;
+  readonly disposition: 'PROCESSED' | 'REFUSED' | 'NOT_READY';
+  readonly reason: string | null;
+  readonly authorizedReply: PrivateRiyaWebIngressAuthorizedReplyV1 | null;
+  readonly qualificationProposal: PrivateRiyaQualificationProposalV2 | null;
 }
 
 /** The private failure response. A code, and nothing that could carry content. */
