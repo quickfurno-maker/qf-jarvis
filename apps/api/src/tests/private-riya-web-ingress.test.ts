@@ -1334,3 +1334,77 @@ describe('the contract itself', () => {
     expect(input.endsWith('\n')).toBe(false);
   });
 });
+
+describe('(35) Phase-2 qualification interpretation', () => {
+  it('returns only the requested user-stated qualification field on V2', async () => {
+    const policy = scriptedPolicy();
+    const service = scriptedService({
+      mutate: (result) => ({
+        ...result,
+        continuity: {
+          ...result.continuity,
+          discovery: {
+            ...result.continuity.discovery,
+            budgetNote: '₹3–7 lakh',
+          },
+          fieldProvenance: {
+            ...result.continuity.fieldProvenance,
+            budget: 'user_stated',
+          },
+        },
+      }),
+    });
+    const body = requestBody({
+      version: 2,
+      qualificationTarget: 'budget',
+      questionText: 'Budget range?',
+      allowedOptions: ['₹3–7 lakh', 'Not decided'],
+      answerText: 'around 5 lakh',
+    });
+
+    const answer = await happy({ service, dataClassPolicy: policy }, body);
+
+    expect(answer.status).toBe(200);
+    expect(answer.json['version']).toBe(2);
+    expect(answer.json['qualificationProposal']).toEqual({
+      field: 'budget',
+      operation: 'SET',
+      value: '₹3–7 lakh',
+      provenance: 'user_stated',
+    });
+    expect(policy.seen()?.normalizedText).toBe('around 5 lakh');
+    expect(service.calls()).toBe(1);
+  });
+
+  it('withholds a qualification proposal unless provenance is explicitly user_stated', async () => {
+    const service = scriptedService({
+      mutate: (result) => ({
+        ...result,
+        continuity: {
+          ...result.continuity,
+          discovery: {
+            ...result.continuity.discovery,
+            timelineNote: 'Within 1 month',
+          },
+          fieldProvenance: {
+            ...result.continuity.fieldProvenance,
+            timeline: 'model_inferred',
+          },
+        },
+      }),
+    });
+    const body = requestBody({
+      version: 2,
+      qualificationTarget: 'timeline',
+      questionText: 'Timeline?',
+      allowedOptions: ['Within 1 month', '1–2 months'],
+      answerText: 'after the festival',
+    });
+
+    const answer = await happy({ service }, body);
+
+    expect(answer.status).toBe(200);
+    expect(answer.json['version']).toBe(2);
+    expect(answer.json['qualificationProposal']).toBeNull();
+  });
+});

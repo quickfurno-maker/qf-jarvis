@@ -49,6 +49,9 @@ import {
   privateRiyaWebIngressRequestSchema,
 } from './contracts.js';
 import type {
+  PrivateRiyaQualificationIngressRequestV2,
+  PrivateRiyaQualificationIngressResponseV2,
+  PrivateRiyaQualificationProposalV2,
   PrivateRiyaWebIngressRequestV1,
   PrivateRiyaWebIngressResponseV1,
 } from './contracts.js';
@@ -175,8 +178,13 @@ function assertAcceptableMedia(req: IncomingMessage): void {
   }
 }
 
+type PrivateRiyaIngressRequest =
+  PrivateRiyaWebIngressRequestV1 | PrivateRiyaQualificationIngressRequestV2;
+type PrivateRiyaIngressResponse =
+  PrivateRiyaWebIngressResponseV1 | PrivateRiyaQualificationIngressResponseV2;
+
 /** Fatal UTF-8 decode, then JSON, then the strict schema. Never quotes what it rejected. */
-function parseRequest(rawBody: Buffer): PrivateRiyaWebIngressRequestV1 {
+function parseRequest(rawBody: Buffer): PrivateRiyaIngressRequest {
   let text: string;
   try {
     // `fatal` matters: the default decoder silently replaces invalid sequences, which would mean the
@@ -200,7 +208,7 @@ function parseRequest(rawBody: Buffer): PrivateRiyaWebIngressRequestV1 {
     // value -- and the value here is a person's own words about their home.
     throw new PrivateRiyaWebIngressError('invalid-request');
   }
-  return result.data as PrivateRiyaWebIngressRequestV1;
+  return result.data as PrivateRiyaIngressRequest;
 }
 
 /**
@@ -238,21 +246,64 @@ export function createPrivateRiyaWebIngressHandler(
     (supplied['replay'] as ReplayGuardConfig | undefined) ?? {},
   );
 
+  function qualificationProposal(
+    request: PrivateRiyaQualificationIngressRequestV2,
+    result: RiyaWebConversationResultV2,
+  ): PrivateRiyaQualificationProposalV2 | null {
+    if (result.disposition !== 'PROCESSED') return null;
+
+    const source =
+      request.qualificationTarget === 'budget'
+        ? {
+            value: result.continuity.discovery.budgetNote,
+            provenance: result.continuity.fieldProvenance.budget,
+          }
+        : request.qualificationTarget === 'timeline'
+          ? {
+              value: result.continuity.discovery.timelineNote,
+              provenance: result.continuity.fieldProvenance.timeline,
+            }
+          : {
+              value: result.continuity.discovery.propertyTypeRef,
+              provenance: result.continuity.fieldProvenance.propertyType,
+            };
+
+    if (
+      source.provenance !== 'user_stated' ||
+      typeof source.value !== 'string' ||
+      source.value.trim().length < 1 ||
+      source.value.length > 512
+    ) {
+      return null;
+    }
+
+    const normalizedValue = source.value.trim();
+    const exactOption = request.allowedOptions.find((option) => option === normalizedValue);
+    if (!exactOption) return null;
+
+    return Object.freeze({
+      field: request.qualificationTarget,
+      operation: 'SET' as const,
+      value: exactOption,
+      provenance: 'user_stated' as const,
+    });
+  }
+
   /** One authenticated turn, from validated request to minimal response. */
-  const serve = async (
-    request: PrivateRiyaWebIngressRequestV1,
-  ): Promise<PrivateRiyaWebIngressResponseV1> => {
-    // 7. Classification. The FIRST thing to see the person's words, and only now that the request is
-    //    authenticated. A policy that threw, or answered outside the closed vocabulary, is a
-    //    deployment defect and must not become a guessed class.
+  const serve = async (request: PrivateRiyaIngressRequest): Promise<PrivateRiyaIngressResponse> => {
+    // 7. Classification sees only the PERSON'S words. The Core-authored question
+    // context is signed but never treated as user evidence by the data-class policy.
+    const userText = request.version === 1 ? request.normalizedText : request.answerText;
     let dataClass: unknown;
     try {
       dataClass = policy.classify({
         tenantId: request.tenantId,
         conversationId: request.conversationId,
         messageId: request.messageId,
-        ...(request.subjectRef === undefined ? {} : { subjectRef: request.subjectRef }),
-        ...(request.normalizedText === undefined ? {} : { normalizedText: request.normalizedText }),
+        ...(request.version === 1 && request.subjectRef !== undefined
+          ? { subjectRef: request.subjectRef }
+          : {}),
+        ...(userText === undefined ? {} : { normalizedText: userText }),
       });
     } catch {
       throw new PrivateRiyaWebIngressError('policy-refused');
@@ -261,8 +312,22 @@ export function createPrivateRiyaWebIngressHandler(
       throw new PrivateRiyaWebIngressError('policy-refused');
     }
 
-    // 8. EXACTLY ONE delegation. The turn is assembled from SIGNED fields plus the SERVER-DERIVED
-    //    class -- never from anything a browser could have chosen.
+    const normalizedText =
+      request.version === 1
+        ? request.normalizedText
+        : [
+            'QuickFurno qualification context:',
+            request.questionText,
+            'Client answer:',
+            request.answerText,
+            `Interpret only the requested ${request.qualificationTarget} field from the client answer.`,
+            `If the client explicitly states a usable answer, normalize it to EXACTLY one of: ${request.allowedOptions.join(' | ')}.`,
+            'If none is explicitly supported, do not invent or infer a value.',
+          ].join('\n');
+
+    // 8. EXACTLY ONE delegation. V2 uses a caller-generated single-turn conversation
+    // namespace, so its continuity is interpretation evidence only and can never become
+    // a client profile or a lead identity.
     const turn: RiyaWebConversationTurnV1 = {
       version: 1,
       tenantId: request.tenantId,
@@ -271,22 +336,19 @@ export function createPrivateRiyaWebIngressHandler(
       receivedAt: request.receivedAt,
       webTurnRef: request.webTurnRef,
       dataClass,
-      ...(request.subjectRef === undefined ? {} : { subjectRef: request.subjectRef }),
-      ...(request.normalizedText === undefined ? {} : { normalizedText: request.normalizedText }),
+      ...(request.version === 1 && request.subjectRef !== undefined
+        ? { subjectRef: request.subjectRef }
+        : {}),
+      ...(normalizedText === undefined ? {} : { normalizedText }),
     };
 
     let result: RiyaWebConversationResultV2;
     try {
-      // No retry and no fallback path. A retry inside a boundary that has already reached a model is
-      // how one thing a person said becomes two proposals.
       result = await service.handleTurn(turn);
     } catch {
-      // The service's own bounded error is not surfaced: it is a different vocabulary, and wrapping
-      // it would make this wire surface open-ended.
       throw new PrivateRiyaWebIngressError('service-unavailable');
     }
 
-    // 9. The response. Defensive, because this is the last point at which text can be withheld.
     if (
       result.tenantId !== request.tenantId ||
       result.conversationId !== request.conversationId ||
@@ -296,10 +358,34 @@ export function createPrivateRiyaWebIngressHandler(
     }
     const authorized = result.authorizedReply;
     if (authorized !== undefined && result.disposition !== 'PROCESSED') {
-      // A materialization attached to a non-served disposition is self-contradicting evidence.
-      // Fail closed rather than choose which half to believe.
       throw new PrivateRiyaWebIngressError('internal-invariant');
     }
+    const authorizedReply =
+      authorized === undefined
+        ? null
+        : {
+            version: 1 as const,
+            proposalId: authorized.proposalId,
+            boundRevision: authorized.boundRevision,
+            proposalKind: authorized.proposalKind,
+            replyBody: authorized.replyBody,
+          };
+
+    if (request.version === 2) {
+      return {
+        protocol: PRIVATE_RIYA_WEB_INGRESS_PROTOCOL,
+        version: 2,
+        requestId: request.requestId,
+        tenantId: result.tenantId,
+        conversationId: result.conversationId,
+        messageId: result.messageId,
+        disposition: result.disposition,
+        reason: result.reason ?? null,
+        authorizedReply,
+        qualificationProposal: qualificationProposal(request, result),
+      };
+    }
+
     return {
       protocol: PRIVATE_RIYA_WEB_INGRESS_PROTOCOL,
       version: 1,
@@ -309,19 +395,7 @@ export function createPrivateRiyaWebIngressHandler(
       messageId: result.messageId,
       disposition: result.disposition,
       reason: result.reason ?? null,
-      // The ONLY gate on client-facing text. `disposition === 'PROCESSED'` is deliberately NOT it:
-      // a turn is processed whether or not Core authorized anything to say.
-      authorizedReply:
-        authorized === undefined
-          ? null
-          : {
-              version: 1,
-              proposalId: authorized.proposalId,
-              boundRevision: authorized.boundRevision,
-              proposalKind: authorized.proposalKind,
-              // Byte for byte. No trim, rewrite, template, markdown or citation insertion.
-              replyBody: authorized.replyBody,
-            },
+      authorizedReply,
     };
   };
 
