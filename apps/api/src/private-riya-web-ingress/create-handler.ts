@@ -179,11 +179,9 @@ function assertAcceptableMedia(req: IncomingMessage): void {
 }
 
 type PrivateRiyaIngressRequest =
-  | PrivateRiyaWebIngressRequestV1
-  | PrivateRiyaQualificationIngressRequestV2;
+  PrivateRiyaWebIngressRequestV1 | PrivateRiyaQualificationIngressRequestV2;
 type PrivateRiyaIngressResponse =
-  | PrivateRiyaWebIngressResponseV1
-  | PrivateRiyaQualificationIngressResponseV2;
+  PrivateRiyaWebIngressResponseV1 | PrivateRiyaQualificationIngressResponseV2;
 
 /** Fatal UTF-8 decode, then JSON, then the strict schema. Never quotes what it rejected. */
 function parseRequest(rawBody: Buffer): PrivateRiyaIngressRequest {
@@ -280,9 +278,7 @@ export function createPrivateRiyaWebIngressHandler(
     }
 
     const normalizedValue = source.value.trim();
-    const exactOption = request.allowedOptions.find(
-      (option) => option === normalizedValue,
-    );
+    const exactOption = request.allowedOptions.find((option) => option === normalizedValue);
     if (!exactOption) return null;
 
     return Object.freeze({
@@ -294,13 +290,10 @@ export function createPrivateRiyaWebIngressHandler(
   }
 
   /** One authenticated turn, from validated request to minimal response. */
-  const serve = async (
-    request: PrivateRiyaIngressRequest,
-  ): Promise<PrivateRiyaIngressResponse> => {
+  const serve = async (request: PrivateRiyaIngressRequest): Promise<PrivateRiyaIngressResponse> => {
     // 7. Classification sees only the PERSON'S words. The Core-authored question
     // context is signed but never treated as user evidence by the data-class policy.
-    const userText =
-      request.version === 1 ? request.normalizedText : request.answerText;
+    const userText = request.version === 1 ? request.normalizedText : request.answerText;
     let dataClass: unknown;
     try {
       dataClass = policy.classify({

@@ -1335,7 +1335,6 @@ describe('the contract itself', () => {
   });
 });
 
-
 describe('(35) Phase-2 qualification interpretation', () => {
   it('returns only the requested user-stated qualification field on V2', async () => {
     const policy = scriptedPolicy();

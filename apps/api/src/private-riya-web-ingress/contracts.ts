@@ -65,13 +65,8 @@ export const CANONICAL_INSTANT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?
 
 const CANONICAL_INSTANT = z.string().regex(CANONICAL_INSTANT_PATTERN);
 
-export const PRIVATE_RIYA_QUALIFICATION_TARGETS = [
-  'budget',
-  'timeline',
-  'propertyType',
-] as const;
-export type PrivateRiyaQualificationTarget =
-  (typeof PRIVATE_RIYA_QUALIFICATION_TARGETS)[number];
+export const PRIVATE_RIYA_QUALIFICATION_TARGETS = ['budget', 'timeline', 'propertyType'] as const;
+export type PrivateRiyaQualificationTarget = (typeof PRIVATE_RIYA_QUALIFICATION_TARGETS)[number];
 
 /** One inbound WEB turn as a trusted QuickFurno server sends it. */
 export interface PrivateRiyaWebIngressRequestV1 {

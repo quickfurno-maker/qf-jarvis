@@ -26,7 +26,11 @@ const PUBLIC_PEM = publicKey.export({ type: 'spki', format: 'pem' }).toString();
 const servers: ReturnType<typeof createServer>[] = [];
 
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
+  await Promise.all(
+    servers
+      .splice(0)
+      .map((server) => new Promise<void>((resolve) => server.close(() => resolve()))),
+  );
 });
 
 function body(over: Record<string, unknown> = {}) {
@@ -69,7 +73,10 @@ function headers(raw: string): Record<string, string> {
   };
 }
 
-function service(value: string, provenance: 'user_stated' | 'inferred'): RiyaWebConversationService {
+function service(
+  value: string,
+  provenance: 'user_stated' | 'inferred',
+): RiyaWebConversationService {
   return {
     async handleTurn(turn: RiyaWebConversationTurnV1): Promise<RiyaWebConversationResultV2> {
       return {
@@ -124,11 +131,12 @@ async function send(
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as { port: number };
   const raw = JSON.stringify(body(over));
-  const response = await fetch(
-    `http://127.0.0.1:${port}${PRIVATE_RIYA_WEB_INGRESS_PATH}`,
-    { method: 'POST', headers: headers(raw), body: raw },
-  );
-  return { status: response.status, json: await response.json() as Record<string, unknown> };
+  const response = await fetch(`http://127.0.0.1:${port}${PRIVATE_RIYA_WEB_INGRESS_PATH}`, {
+    method: 'POST',
+    headers: headers(raw),
+    body: raw,
+  });
+  return { status: response.status, json: (await response.json()) as Record<string, unknown> };
 }
 
 describe('Phase-2 private Riya qualification ingress', () => {
