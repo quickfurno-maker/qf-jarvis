@@ -235,7 +235,9 @@ describe('the wire surface omits continuity and holds no signing material', () =
   it('the response contract names no continuity or internal operational field', () => {
     const contracts = codeOnly(readFileSync(join(INGRESS_DIR, 'contracts.ts'), 'utf8'));
     // The response INTERFACE is what a QuickFurno server parses. None of these may appear in it.
-    const responseBlock = contracts.slice(contracts.indexOf('PrivateRiyaWebIngressResponseV1'));
+    const responseStart = contracts.indexOf('PrivateRiyaWebIngressResponseV1');
+    const responseEnd = contracts.indexOf('PrivateRiyaQualificationProposalV2');
+    const responseBlock = contracts.slice(responseStart, responseEnd);
     for (const forbidden of [
       'continuity',
       'discovery',
@@ -250,6 +252,30 @@ describe('the wire surface omits continuity and holds no signing material', () =
       'idempotencyKey',
     ]) {
       expect({ forbidden, present: responseBlock.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+
+    // V2 may expose one provenance token, but only inside the bounded qualification
+    // proposal that Core requested and revalidates against its signed option set.
+    const proposalStart = contracts.indexOf('PrivateRiyaQualificationProposalV2');
+    const proposalEnd = contracts.indexOf('PrivateRiyaQualificationIngressResponseV2');
+    const proposalBlock = contracts.slice(proposalStart, proposalEnd);
+    expect(proposalBlock).toContain("provenance: 'user_stated'");
+    for (const forbidden of [
+      'continuity',
+      'discovery',
+      'fieldProvenance',
+      'summaryConfirmed',
+      'completionEvidenceRef',
+      'runId',
+      'modelDrafted',
+      'coreConsulted',
+      'proposalDigest',
+      'idempotencyKey',
+    ]) {
+      expect({ forbidden, present: proposalBlock.includes(forbidden) }).toEqual({
         forbidden,
         present: false,
       });

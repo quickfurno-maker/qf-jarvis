@@ -1073,6 +1073,7 @@ describe('(78, 79, 80, 81) repository invariants', () => {
      */
     const LOOPBACK_HTTP_CAPABLE: ReadonlySet<string> = new Set([
       'private-riya-web-ingress.test.ts',
+      'private-riya-qualification-ingress.test.ts',
       'jf6-private-process.test.ts',
       'jf6-core-decision-boundary.test.ts',
     ]);
