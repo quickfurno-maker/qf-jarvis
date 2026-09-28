@@ -255,7 +255,7 @@ export type RiyaStructuredOutput = z.infer<typeof riyaStructuredOutputSchema>;
  * object, injects protocol version 1, and re-proves it through `riyaStructuredOutputSchema` before
  * any observation or question-plan claim can survive.
  */
-export const RIYA_PROVIDER_PROJECT_DETAILS = ['KEEP', 'SKIP'] as const;
+export const RIYA_PROVIDER_SKIP_PROJECT_DETAILS = ['KEEP', 'SKIP'] as const;
 
 const providerQuestionPhaseSchema = z.enum(
   RIYA_CONVERSATION_PHASES.filter(
@@ -267,8 +267,8 @@ export const riyaProviderWireSchema = z
   .object({
     reply: riyaReplySchema,
     observations: observationsSchema,
-    projectDetails: z
-      .enum(RIYA_PROVIDER_PROJECT_DETAILS)
+    skipProjectDetails: z
+      .enum(RIYA_PROVIDER_SKIP_PROJECT_DETAILS)
       .describe('KEEP unless the client explicitly declined project-detail questions; otherwise SKIP.'),
     questionPhase: providerQuestionPhaseSchema.describe(
       'Proposed next conversation phase. The runtime independently recomputes and verifies it.',
