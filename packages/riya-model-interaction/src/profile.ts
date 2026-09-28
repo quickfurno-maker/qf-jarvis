@@ -37,7 +37,6 @@ import type { RiyaGroundedKnowledgeContextV1 } from './internal/grounded-context
 import { buildRiyaUserContent } from './internal/input-projection.js';
 import {
   isModelProducibleObservation,
-  riyaFlatProviderWireSchema,
   riyaGroundedReplyOutputSchema,
   riyaProviderWireSchema,
   riyaStructuredOutputSchema,
@@ -192,21 +191,12 @@ export function createRiyaConversationModelProfile(args: {
    * user bytes — P7 does not duplicate P4B, it extends the same one call.
    */
   readonly groundedKnowledgeSource?: RiyaGroundedKnowledgeSource;
-  /**
-   * Provider-only wire representation.
-   *
-   * LEGACY_NESTED is the frozen default for historical diagnostic/evidence tooling. Production Jarvis
-   * explicitly opts into R30_SIMPLIFIED, which keeps the evolution envelope but replaces the two
-   * Groq-unstable shapes with closed/simple fields. Both project into the same canonical semantics.
-   */
-  readonly providerWireMode?: 'LEGACY_NESTED' | 'R30_SIMPLIFIED';
 }): ModelReplyStructuredOutputProfile {
   const { current, availabilitySnapshot } = args;
   const readGrounded = args.groundedKnowledgeSource;
-  const r30Wire = args.providerWireMode === 'R30_SIMPLIFIED';
 
   return Object.freeze({
-    structuredSchema: r30Wire ? riyaFlatProviderWireSchema : riyaProviderWireSchema,
+    structuredSchema: riyaProviderWireSchema,
 
     buildUserContent(plan: RiyaModelPlanView): string {
       const grounded = readGrounded?.();
@@ -220,31 +210,24 @@ export function createRiyaConversationModelProfile(args: {
     },
 
     projectStructuredResult(value: unknown): ModelReplyStructuredProjection | undefined {
-      const r30 = r30Wire ? riyaFlatProviderWireSchema.safeParse(value) : undefined;
-      const legacy = r30Wire ? undefined : riyaProviderWireSchema.safeParse(value);
-      // JF-5B-R30: production uses a simplified provider encoding, while historical diagnostics keep
-      // the frozen legacy wire. BOTH are reconstructed into the same canonical nested value and
-      // re-proved before any model claim survives.
-      const parsed =
-        r30?.success === true
-          ? riyaStructuredOutputSchema.safeParse({
-              reply: r30.data.reply,
-              evolution: {
-                version: 1,
-                observations: r30.data.evolution.observations,
-                skipProjectDetails: r30.data.evolution.skipProjectDetails === 'SKIP',
-                questionPlan: {
-                  phase: r30.data.evolution.questionPhase,
-                  questionFields: r30.data.evolution.questionFields,
-                },
+      const wire = riyaProviderWireSchema.safeParse(value);
+      // JF-5B-R30: the live provider wire keeps the evolution envelope but simplifies its unstable
+      // scalar/plan encoding. Jarvis injects version 1, maps KEEP/SKIP back to the boolean, rebuilds
+      // questionPlan, and re-proves the whole value through the unchanged canonical schema.
+      const parsed = wire.success
+        ? riyaStructuredOutputSchema.safeParse({
+            reply: wire.data.reply,
+            evolution: {
+              version: 1,
+              observations: wire.data.evolution.observations,
+              skipProjectDetails: wire.data.evolution.skipProjectDetails === 'SKIP',
+              questionPlan: {
+                phase: wire.data.evolution.questionPhase,
+                questionFields: wire.data.evolution.questionFields,
               },
-            })
-          : legacy?.success === true
-            ? riyaStructuredOutputSchema.safeParse({
-                ...legacy.data,
-                evolution: { version: 1, ...legacy.data.evolution },
-              })
-            : riyaStructuredOutputSchema.safeParse(value);
+            },
+          })
+        : riyaStructuredOutputSchema.safeParse(value);
       if (!parsed.success) {
         return undefined;
       }
