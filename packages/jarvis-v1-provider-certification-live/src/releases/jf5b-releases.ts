@@ -39,7 +39,7 @@ import type { EvaluationBinding, ProviderReleaseRef } from '@qf-jarvis/model-eva
  * would be a fabricated identity. What is true and checkable is the date on which this lane observed
  * the provider's catalogue, and that is what the label says.
  */
-export const JF5B_CATALOGUE_SNAPSHOT = 'certification-snapshot-2026-09-11';
+export const JF5B_CATALOGUE_SNAPSHOT = 'certification-snapshot-2026-09-28';
 
 /** The capability profile the three agents' structured turns run under. */
 export const JF5B_CAPABILITY_PROFILE_REF = JARVIS_V1_PRODUCTION_CAPABILITY_PROFILE_REF;
