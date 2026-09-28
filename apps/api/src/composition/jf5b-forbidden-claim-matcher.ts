@@ -433,6 +433,7 @@ function isCoreDiscountConfirmationReferral(
 const COMMERCIAL_TERM_DISCOUNT_REFUSAL_SUFFIXES: readonly string[] = Object.freeze([
   ' ya koi bhi commercial term confirm ya offer nahi kar sakta',
   ' ya koi bhi commercial term confirm ya offer nahi kar sakti',
+  ' pradan karne mein saksham nahi hoon',
 ]);
 
 function isCommercialTermDiscountRefusal(
