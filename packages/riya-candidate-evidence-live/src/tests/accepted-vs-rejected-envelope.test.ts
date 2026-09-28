@@ -81,7 +81,7 @@ describe('HELD CONSTANT — the accepted control and the rejected path agree her
     }
     expect(digest(JSON.stringify(reprojected.schema))).toBe(digest(projectedSchemaJson));
     // JF-5B-R14 intentionally removed provider-generated evolution.version; pin the new exact wire.
-    expect(utf8Bytes(projectedSchemaJson)).toBe(1902);
+    expect(utf8Bytes(projectedSchemaJson)).toBe(1835);
   });
 
   it('the model, output budget and capability ceiling did not move', () => {

@@ -306,20 +306,18 @@ beforeAll(async () => {
   }) as {
     readonly reply: unknown;
     readonly evolution: {
-      readonly questionPlan: { readonly phase: string; readonly questionFields: readonly string[] };
+      readonly questionPhase: string;
+      readonly questionFields: readonly string[];
     };
   };
   // The replacement phase is COMPUTED, so it can never accidentally be the decided one. Both values
   // are members of the model-facing phase enum, so the document stays wire-valid either way.
-  const decidedPhase = valid.evolution.questionPlan.phase;
+  const decidedPhase = valid.evolution.questionPhase;
   const disagreeing = {
     ...valid,
     evolution: {
       ...valid.evolution,
-      questionPlan: {
-        ...valid.evolution.questionPlan,
-        phase: decidedPhase === 'SUMMARY' ? 'NEED' : 'SUMMARY',
-      },
+      questionPhase: decidedPhase === 'SUMMARY' ? 'NEED' : 'SUMMARY',
     },
   };
 

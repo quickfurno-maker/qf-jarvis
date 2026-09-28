@@ -124,12 +124,13 @@ export function evolutionPayload(args: {
       reasonCode: null,
       citations: args.citations.map((one) => ({ ...one })),
     },
-    // JF-5B-R30: provider-only flat encoding. The Riya profile reconstructs the unchanged canonical
-    // nested evolution object and re-proves it before any claim crosses the model boundary.
-    observations: { sets: [], clears: [] },
-    skipProjectDetails: 'KEEP',
-    questionPhase: decided.questionPlan.phase,
-    questionFields: [...decided.questionPlan.questionFields],
+    // JF-5B-R30: keep evolution as the provider group; simplify only its unstable members.
+    evolution: {
+      observations: { sets: [], clears: [] },
+      skipProjectDetails: 'KEEP',
+      questionPhase: decided.questionPlan.phase,
+      questionFields: [...decided.questionPlan.questionFields],
+    },
   };
 }
 

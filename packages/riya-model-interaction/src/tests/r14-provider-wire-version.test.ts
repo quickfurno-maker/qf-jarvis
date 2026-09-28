@@ -1,4 +1,4 @@
-/** JF-5B-R30: flat provider wire; canonical semantics remain nested and versioned. */
+/** JF-5B-R30: simplified provider evolution wire; canonical semantics remain nested and versioned. */
 import { syntheticAvailabilitySnapshot } from '@qf-jarvis/core-service-availability-read/testing';
 import { createRiyaConversationContinuityState } from '@qf-jarvis/riya-conversation-continuity';
 import { evolveRiyaConversation } from '@qf-jarvis/riya-conversation-evolution';
@@ -33,28 +33,28 @@ const decided = evolveRiyaConversation({
 
 const wire = {
   reply: { kind: 'REPLY', replyBody: 'How can I help?', reasonCode: null, citations: [] },
-  observations: { sets: [], clears: [] },
-  skipProjectDetails: 'KEEP',
-  questionPhase: decided.questionPlan.phase,
-  questionFields: [...decided.questionPlan.questionFields],
+  evolution: {
+    observations: { sets: [], clears: [] },
+    skipProjectDetails: 'KEEP',
+    questionPhase: decided.questionPlan.phase,
+    questionFields: [...decided.questionPlan.questionFields],
+  },
 } as const;
 
-describe('JF-5B-R30 Riya flat provider wire', () => {
-  it('accepts the flat provider representation', () => {
+describe('JF-5B-R30 Riya simplified provider evolution wire', () => {
+  it('accepts the simplified provider representation', () => {
     expect(riyaProviderWireSchema.safeParse(wire).success).toBe(true);
   });
 
-  it('refuses the old nested evolution object on the provider wire', () => {
+  it('refuses canonical-only provider fields', () => {
     expect(
       riyaProviderWireSchema.safeParse({
         ...wire,
         evolution: {
-          observations: wire.observations,
+          ...wire.evolution,
+          version: 1,
           skipProjectDetails: false,
-          questionPlan: {
-            phase: wire.questionPhase,
-            questionFields: wire.questionFields,
-          },
+          questionPlan: { phase: wire.evolution.questionPhase, questionFields: [] },
         },
       }).success,
     ).toBe(false);
@@ -67,11 +67,11 @@ describe('JF-5B-R30 Riya flat provider wire', () => {
         reply: wire.reply,
         evolution: {
           version: 1,
-          observations: wire.observations,
+          observations: wire.evolution.observations,
           skipProjectDetails: false,
           questionPlan: {
-            phase: wire.questionPhase,
-            questionFields: wire.questionFields,
+            phase: wire.evolution.questionPhase,
+            questionFields: wire.evolution.questionFields,
           },
         },
       }).success,
@@ -101,9 +101,12 @@ describe('JF-5B-R30 Riya flat provider wire', () => {
       availabilitySnapshot: snapshot,
     }).projectStructuredResult({
       ...wire,
-      skipProjectDetails: 'SKIP',
-      questionPhase: skippedDecision.questionPlan.phase,
-      questionFields: [...skippedDecision.questionPlan.questionFields],
+      evolution: {
+        ...wire.evolution,
+        skipProjectDetails: 'SKIP',
+        questionPhase: skippedDecision.questionPlan.phase,
+        questionFields: [...skippedDecision.questionPlan.questionFields],
+      },
     });
     expect(projected?.detail).toMatchObject({
       observationBatch: { skipProjectDetails: true },

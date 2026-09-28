@@ -55,7 +55,8 @@ interface RiyaDocument {
     readonly version: number;
     readonly observations: unknown;
     readonly skipProjectDetails: boolean;
-    readonly questionPlan: { readonly phase: string; readonly questionFields: readonly string[] };
+    readonly questionPhase: string;
+    readonly questionFields: readonly string[];
   };
 }
 
@@ -77,15 +78,12 @@ beforeAll(async () => {
   // single-call design. The replacement phase is computed rather than hard-coded, so it can never
   // accidentally BE the decided phase: both values are members of the model-facing phase enum, so the
   // document stays wire-valid either way.
-  const decidedPhase = productionValid.evolution.questionPlan.phase;
+  const decidedPhase = productionValid.evolution.questionPhase;
   wireValidProductionInvalid = {
     ...productionValid,
     evolution: {
       ...productionValid.evolution,
-      questionPlan: {
-        ...productionValid.evolution.questionPlan,
-        phase: decidedPhase === 'SUMMARY' ? 'NEED' : 'SUMMARY',
-      },
+      questionPhase: decidedPhase === 'SUMMARY' ? 'NEED' : 'SUMMARY',
     },
   };
 });
@@ -130,11 +128,11 @@ describe('REQUIRED NEGATIVE — wire valid, production INVALID', () => {
     expect(wireValidProductionInvalid.evolution.observations).toStrictEqual(
       productionValid.evolution.observations,
     );
-    expect(wireValidProductionInvalid.evolution.questionPlan.questionFields).toStrictEqual(
-      productionValid.evolution.questionPlan.questionFields,
+    expect(wireValidProductionInvalid.evolution.questionFields).toStrictEqual(
+      productionValid.evolution.questionFields,
     );
-    expect(wireValidProductionInvalid.evolution.questionPlan.phase).not.toBe(
-      productionValid.evolution.questionPlan.phase,
+    expect(wireValidProductionInvalid.evolution.questionPhase).not.toBe(
+      productionValid.evolution.questionPhase,
     );
   });
 });

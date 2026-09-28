@@ -97,19 +97,20 @@ function answerFor(body: string, replyBody: string, citeGrounded = true): string
     return [];
   })();
   const wantsEvolution =
-    Object.prototype.hasOwnProperty.call(properties, 'observations') ||
-    Object.prototype.hasOwnProperty.call(properties, 'skipProjectDetails') ||
+    Object.prototype.hasOwnProperty.call(properties, 'evolution') ||
     system.startsWith('You are Riya,');
   if (wantsEvolution) {
     return JSON.stringify({
       reply: { kind: 'REPLY', replyBody, reasonCode: null, citations },
-      observations: { sets: [], clears: [] },
-      // JF-5B-R30 provider wire: closed string encoding; projection reconstructs the canonical boolean.
-      skipProjectDetails: 'KEEP',
-      // One of the six phases RWC-P4A lets a model name. CONTACT, CONSENT and COMPLETE are
-      // RWC-P6's, and the schema does not offer them.
-      questionPhase: 'NEED',
-      questionFields: [],
+      evolution: {
+        observations: { sets: [], clears: [] },
+        // JF-5B-R30: closed string encoding; projection reconstructs the canonical boolean.
+        skipProjectDetails: 'KEEP',
+        // One of the six phases RWC-P4A lets a model name. CONTACT, CONSENT and COMPLETE are
+        // RWC-P6's, and the schema does not offer them.
+        questionPhase: 'NEED',
+        questionFields: [],
+      },
     });
   }
   // The GENERIC wire shape: every property present, the semantically-optional one explicitly null.

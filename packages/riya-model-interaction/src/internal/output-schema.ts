@@ -244,16 +244,12 @@ export type RiyaStructuredOutput = z.infer<typeof riyaStructuredOutputSchema>;
 /**
  * The provider WIRE shape (JF-5B-R30).
  *
- * The canonical Riya object stays nested and boolean-rich because that is the correct local semantic
- * contract. Groq's strict generator has repeatedly produced complete JSON that fails specifically on
- * the nested `evolution.skipProjectDetails` boolean and nested `questionPlan` object, even when the
- * rest of the answer is sound. Those failures moved between ordinary Riya cases across live runs,
- * which makes them a provider-encoding instability rather than a business-rule failure.
+ * Keep the top-level evolution group because the governed diagnostic/certification plane isolates
+ * that subtree directly. Simplify only the two shapes Groq repeatedly failed to generate: encode the
+ * boolean as KEEP/SKIP and flatten questionPlan inside evolution into phase + fields.
  *
- * The provider wire is therefore deliberately flatter and uses a closed string disposition for the
- * one boolean. No authority is moved to the provider: projection reconstructs the canonical nested
- * object, injects protocol version 1, and re-proves it through `riyaStructuredOutputSchema` before
- * any observation or question-plan claim can survive.
+ * Projection reconstructs the unchanged canonical boolean + questionPlan object, injects version 1,
+ * and re-proves everything through riyaStructuredOutputSchema before any claim survives.
  */
 export const RIYA_PROVIDER_SKIP_PROJECT_DETAILS = ['KEEP', 'SKIP'] as const;
 
@@ -263,22 +259,19 @@ const providerQuestionPhaseSchema = z.enum(
   ) as unknown as [string, ...string[]],
 );
 
+const riyaProviderEvolutionSchema = z
+  .object({
+    observations: observationsSchema,
+    skipProjectDetails: z.enum(RIYA_PROVIDER_SKIP_PROJECT_DETAILS),
+    questionPhase: providerQuestionPhaseSchema,
+    questionFields: z.array(FIELD).max(2),
+  })
+  .strict();
+
 export const riyaProviderWireSchema = z
   .object({
     reply: riyaReplySchema,
-    observations: observationsSchema,
-    skipProjectDetails: z
-      .enum(RIYA_PROVIDER_SKIP_PROJECT_DETAILS)
-      .describe(
-        'KEEP unless the client explicitly declined project-detail questions; otherwise SKIP.',
-      ),
-    questionPhase: providerQuestionPhaseSchema.describe(
-      'Proposed next conversation phase. The runtime independently recomputes and verifies it.',
-    ),
-    questionFields: z
-      .array(FIELD)
-      .max(2)
-      .describe('Zero to two proposed next discovery fields, in the exact order to ask them.'),
+    evolution: riyaProviderEvolutionSchema,
   })
   .strict();
 
