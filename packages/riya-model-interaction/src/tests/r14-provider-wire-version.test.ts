@@ -34,7 +34,7 @@ const decided = evolveRiyaConversation({
 const wire = {
   reply: { kind: 'REPLY', replyBody: 'How can I help?', reasonCode: null, citations: [] },
   observations: { sets: [], clears: [] },
-  projectDetails: 'KEEP',
+  skipProjectDetails: 'KEEP',
   questionPhase: decided.questionPlan.phase,
   questionFields: [...decided.questionPlan.questionFields],
 } as const;
@@ -101,7 +101,7 @@ describe('JF-5B-R30 Riya flat provider wire', () => {
       availabilitySnapshot: snapshot,
     }).projectStructuredResult({
       ...wire,
-      projectDetails: 'SKIP',
+      skipProjectDetails: 'SKIP',
       questionPhase: skippedDecision.questionPlan.phase,
       questionFields: [...skippedDecision.questionPlan.questionFields],
     });
