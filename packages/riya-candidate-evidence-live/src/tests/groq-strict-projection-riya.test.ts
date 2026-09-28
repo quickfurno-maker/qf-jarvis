@@ -175,10 +175,15 @@ describe('R7-C12/C13 — both real schemas project into the documented subset', 
     }
     expect(document).not.toContain('"operation"');
     expect(document).not.toContain('"const"');
-    const properties = (result.schema['properties'] as Record<string, Record<string, unknown>>)[
-      'evolution'
-    ]?.['properties'] as Record<string, unknown>;
+    const rootProperties = result.schema['properties'] as Record<string, Record<string, unknown>>;
+    const evolution = rootProperties['evolution'];
+    expect(evolution).toBeDefined();
+    const properties = evolution?.['properties'] as Record<string, unknown>;
     expect(properties['version']).toBeUndefined();
+    expect(properties['observations']).toBeDefined();
+    expect(properties['skipProjectDetails']).toBeDefined();
+    expect(properties['questionPhase']).toBeDefined();
+    expect(properties['questionFields']).toBeDefined();
   });
 
   it('R7-C6 reasonCode stays a REQUIRED nullable union', () => {

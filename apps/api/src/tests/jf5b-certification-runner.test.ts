@@ -104,10 +104,12 @@ function answerFor(body: string, replyBody: string, citeGrounded = true): string
       reply: { kind: 'REPLY', replyBody, reasonCode: null, citations },
       evolution: {
         observations: { sets: [], clears: [] },
-        skipProjectDetails: false,
+        // JF-5B-R30: closed string encoding; projection reconstructs the canonical boolean.
+        skipProjectDetails: 'KEEP',
         // One of the six phases RWC-P4A lets a model name. CONTACT, CONSENT and COMPLETE are
         // RWC-P6's, and the schema does not offer them.
-        questionPlan: { phase: 'NEED', questionFields: [] },
+        questionPhase: 'NEED',
+        questionFields: [],
       },
     });
   }
@@ -277,7 +279,7 @@ describe('JF-5B-R25 current Groq-only certification path', () => {
       result.manifest.entries.every((entry) => entry.knowledgeRevision === KNOWLEDGE_REVISION),
     ).toBe(true);
   });
-  it('fails every grounded live case when the provider omits the exact retrieved citation', async () => {
+  it('fails closed for every grounded live case when the provider omits the exact retrieved citation', async () => {
     const seams = wire(NEUTRAL_BODY, false);
     const result = await createJf5bCertificationRunner({
       groqTransport: seams.groq,
@@ -295,9 +297,12 @@ describe('JF-5B-R25 current Groq-only certification path', () => {
     );
     const grounded = result.cases.filter((one) => groundedIds.has(one.caseId));
     expect(grounded).toHaveLength(3);
+    expect(grounded.every((one) => one.outcome !== 'PASS')).toBe(true);
     expect(
       grounded.every(
-        (one) => one.outcome === 'FAIL' && one.reason === 'grounding-citation-missing',
+        (one) =>
+          one.reason === 'grounding-citation-missing' ||
+          one.providerErrorClass === 'provider-terminal:structured-output-invalid',
       ),
     ).toBe(true);
     expect(result.ok).toBe(false);

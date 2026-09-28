@@ -1,4 +1,4 @@
-/** JF-5B-R14: provider wire omits protocol bookkeeping; canonical semantics keep version 1. */
+/** JF-5B-R30: simplified provider evolution wire; canonical semantics remain nested and versioned. */
 import { syntheticAvailabilitySnapshot } from '@qf-jarvis/core-service-availability-read/testing';
 import { createRiyaConversationContinuityState } from '@qf-jarvis/riya-conversation-continuity';
 import { evolveRiyaConversation } from '@qf-jarvis/riya-conversation-evolution';
@@ -9,8 +9,8 @@ import { riyaProviderWireSchema, riyaStructuredOutputSchema } from '../internal/
 
 const current = createRiyaConversationContinuityState({
   version: 1,
-  tenantId: 'tenant.r14',
-  conversationId: 'conv.r14',
+  tenantId: 'tenant.r30',
+  conversationId: 'conv.r30',
   continuityRevision: 0,
   phase: 'INTRO',
   discovery: {
@@ -35,45 +35,50 @@ const wire = {
   reply: { kind: 'REPLY', replyBody: 'How can I help?', reasonCode: null, citations: [] },
   evolution: {
     observations: { sets: [], clears: [] },
-    skipProjectDetails: false,
-    questionPlan: {
-      phase: decided.questionPlan.phase,
-      questionFields: [...decided.questionPlan.questionFields],
-    },
+    skipProjectDetails: 'KEEP',
+    questionPhase: decided.questionPlan.phase,
+    questionFields: [...decided.questionPlan.questionFields],
   },
 } as const;
 
-describe('JF-5B-R14 Riya provider-wire protocol version repair', () => {
-  it('provider wire accepts the reviewed answer without evolution.version', () => {
+describe('JF-5B-R30 Riya simplified provider evolution wire', () => {
+  it('accepts the simplified provider representation', () => {
     expect(riyaProviderWireSchema.safeParse(wire).success).toBe(true);
   });
 
-  it('provider wire refuses a model-minted evolution.version as an extra key', () => {
+  it('refuses canonical-only provider fields', () => {
     expect(
       riyaProviderWireSchema.safeParse({
         ...wire,
-        evolution: { ...wire.evolution, version: 1 },
+        evolution: {
+          ...wire.evolution,
+          version: 1,
+          skipProjectDetails: false,
+          questionPlan: { phase: wire.evolution.questionPhase, questionFields: [] },
+        },
       }).success,
     ).toBe(false);
   });
 
-  it('canonical semantic schema still requires exactly version 1', () => {
+  it('canonical semantic schema remains nested and requires protocol version 1', () => {
     expect(riyaStructuredOutputSchema.safeParse(wire).success).toBe(false);
     expect(
       riyaStructuredOutputSchema.safeParse({
-        ...wire,
-        evolution: { version: 1, ...wire.evolution },
+        reply: wire.reply,
+        evolution: {
+          version: 1,
+          observations: wire.evolution.observations,
+          skipProjectDetails: false,
+          questionPlan: {
+            phase: wire.evolution.questionPhase,
+            questionFields: wire.evolution.questionFields,
+          },
+        },
       }).success,
     ).toBe(true);
-    expect(
-      riyaStructuredOutputSchema.safeParse({
-        ...wire,
-        evolution: { version: 2, ...wire.evolution },
-      }).success,
-    ).toBe(false);
   });
 
-  it('projection injects canonical version 1 and preserves the existing detail contract', () => {
+  it('projection reconstructs canonical version, boolean and question plan', () => {
     const projected = createRiyaConversationModelProfile({
       current,
       availabilitySnapshot: snapshot,
@@ -83,6 +88,28 @@ describe('JF-5B-R14 Riya provider-wire protocol version repair', () => {
     expect(projected?.detail).toMatchObject({
       version: 1,
       observationBatch: { version: 1, observations: [], skipProjectDetails: false },
+    });
+  });
+
+  it('maps SKIP back to the canonical boolean without widening the contract', () => {
+    const skippedDecision = evolveRiyaConversation({
+      current,
+      batch: { version: 1, observations: [], skipProjectDetails: true },
+    });
+    const projected = createRiyaConversationModelProfile({
+      current,
+      availabilitySnapshot: snapshot,
+    }).projectStructuredResult({
+      ...wire,
+      evolution: {
+        ...wire.evolution,
+        skipProjectDetails: 'SKIP',
+        questionPhase: skippedDecision.questionPlan.phase,
+        questionFields: [...skippedDecision.questionPlan.questionFields],
+      },
+    });
+    expect(projected?.detail).toMatchObject({
+      observationBatch: { skipProjectDetails: true },
     });
   });
 });

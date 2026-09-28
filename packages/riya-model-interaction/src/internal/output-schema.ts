@@ -242,19 +242,39 @@ export const riyaStructuredOutputSchema = z
 export type RiyaStructuredOutput = z.infer<typeof riyaStructuredOutputSchema>;
 
 /**
- * The provider WIRE shape (JF-5B-R14). `evolution.version` is protocol bookkeeping, not a model
- * decision: the canonical observation constructor already pins version 1. Run-17 proved all six
- * Groq/Riya malformed generations independently failed that literal, so asking the model to mint it
- * adds a failure mode and no authority.
+ * The provider WIRE shape (JF-5B-R30).
  *
- * The wire therefore omits exactly that one field. Projection injects canonical `version: 1` and
- * re-proves the resulting value against `riyaStructuredOutputSchema`; every business-bearing field
- * and every existing semantic gate stays unchanged.
+ * Keep the top-level evolution group because the governed diagnostic/certification plane isolates
+ * that subtree directly. Simplify only the two shapes Groq repeatedly failed to generate: encode the
+ * boolean as KEEP/SKIP and flatten questionPlan inside evolution into phase + fields.
+ *
+ * Projection reconstructs the unchanged canonical boolean + questionPlan object, injects version 1,
+ * and re-proves everything through riyaStructuredOutputSchema before any claim survives.
  */
-const riyaProviderEvolutionSchema = evolutionSchema.omit({ version: true });
-export const riyaProviderWireSchema = riyaStructuredOutputSchema
-  .extend({ evolution: riyaProviderEvolutionSchema })
+export const RIYA_PROVIDER_SKIP_PROJECT_DETAILS = ['KEEP', 'SKIP'] as const;
+
+const providerQuestionPhaseSchema = z.enum(
+  RIYA_CONVERSATION_PHASES.filter(
+    (phase) => phase !== 'CONTACT' && phase !== 'CONSENT' && phase !== 'COMPLETE',
+  ) as unknown as [string, ...string[]],
+);
+
+const riyaProviderEvolutionSchema = z
+  .object({
+    observations: observationsSchema,
+    skipProjectDetails: z.enum(RIYA_PROVIDER_SKIP_PROJECT_DETAILS),
+    questionPhase: providerQuestionPhaseSchema,
+    questionFields: z.array(FIELD).max(2),
+  })
   .strict();
+
+export const riyaProviderWireSchema = z
+  .object({
+    reply: riyaReplySchema,
+    evolution: riyaProviderEvolutionSchema,
+  })
+  .strict();
+
 export type RiyaProviderWireOutput = z.infer<typeof riyaProviderWireSchema>;
 
 /**

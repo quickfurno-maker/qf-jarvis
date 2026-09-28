@@ -255,6 +255,25 @@ describe('hybrid grounding reaches the generic model request without leaking gov
       expect(modelRequests).toHaveLength(1);
       expect(hybrid.seen).toHaveLength(1);
 
+      const groundedSchema = modelRequests[0]?.structuredSchema;
+      expect(groundedSchema).toBeDefined();
+      expect(
+        groundedSchema?.safeParse({
+          kind: 'REPLY',
+          replyBody: 'Grounded answer.',
+          reasonCode: null,
+          citations: [],
+        }).success,
+      ).toBe(false);
+      expect(
+        groundedSchema?.safeParse({
+          kind: 'REPLY',
+          replyBody: 'Grounded answer.',
+          reasonCode: null,
+          citations: [{ knowledgeId: 'kb.hybrid', version: 1 }],
+        }).success,
+      ).toBe(true);
+
       const user = modelRequests[0]?.messages.find((message) => message.role === 'user')?.content;
       expect(user).toBeDefined();
       const payload = JSON.parse(user ?? '') as {

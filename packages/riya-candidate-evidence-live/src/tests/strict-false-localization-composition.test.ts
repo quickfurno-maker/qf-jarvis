@@ -295,7 +295,8 @@ interface RiyaDocument {
     readonly version: number;
     readonly observations: unknown;
     readonly skipProjectDetails: boolean;
-    readonly questionPlan: { readonly phase: string; readonly questionFields: readonly string[] };
+    readonly questionPhase: string;
+    readonly questionFields: readonly string[];
   };
 }
 
@@ -331,15 +332,12 @@ beforeAll(async () => {
   // design. The replacement phase is COMPUTED rather than hard-coded, so it can never accidentally
   // be the decided phase; both values are members of the model-facing enum, so the document stays
   // wire-valid either way.
-  const decidedPhase = valid.evolution.questionPlan.phase;
+  const decidedPhase = valid.evolution.questionPhase;
   const disagreeing = {
     ...valid,
     evolution: {
       ...valid.evolution,
-      questionPlan: {
-        ...valid.evolution.questionPlan,
-        phase: decidedPhase === 'SUMMARY' ? 'NEED' : 'SUMMARY',
-      },
+      questionPhase: decidedPhase === 'SUMMARY' ? 'NEED' : 'SUMMARY',
     },
   };
   if (!captured.structuredWireSchema.safeParse(disagreeing).success) {

@@ -333,8 +333,9 @@ function answerFor(body: string): string {
       reply: { kind: 'REPLY', replyBody: NEUTRAL_BODY, reasonCode: null, citations: [] },
       evolution: {
         observations: { sets: [], clears: [] },
-        skipProjectDetails: false,
-        questionPlan: { phase: 'NEED', questionFields: [] },
+        skipProjectDetails: 'KEEP',
+        questionPhase: 'NEED',
+        questionFields: [],
       },
     });
   }

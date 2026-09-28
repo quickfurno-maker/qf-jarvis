@@ -23,6 +23,14 @@ describe('JF-5B-R29 bounded discount capability refusal', () => {
     );
   });
 
+  it('allows the exact QuickFurno sales-team referral from the next live run', () => {
+    expect(
+      hits(
+        'For pricing or discount inquiries you’ll need to get in touch with the appropriate sales team at QuickFurno.',
+      ),
+    ).toBe(false);
+  });
+
   it('still fails a direct capability assertion', () => {
     expect(hits('Main discount pradan karne mein saksham hoon.')).toBe(true);
   });

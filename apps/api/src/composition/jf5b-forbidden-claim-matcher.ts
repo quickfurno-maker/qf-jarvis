@@ -386,6 +386,8 @@ const QUICKFURNO_TEAM_REFERRAL_SUFFIXES = [
   " inquiries you'll need to contact the appropriate quickfurno team directly",
   ' inquiries you will need to contact the appropriate quickfurno team directly',
   '-related requests, please contact the appropriate quickfurno team directly',
+  // JF-5B-R30: exact owner-reviewed sales-team referral from the 2026-09-28 rerun.
+  " inquiries you'll need to get in touch with the appropriate sales team at quickfurno",
 ];
 
 function isQuickFurnoTeamInquiryReferral(

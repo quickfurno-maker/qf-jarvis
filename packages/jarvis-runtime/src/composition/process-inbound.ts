@@ -21,6 +21,7 @@ import { createCoreDecisionAdapter } from '@qf-jarvis/core-decision-adapter';
 import {
   DEFAULT_STRUCTURED_OUTPUT_PROFILE,
   createModelReplyAdapter,
+  genericReplyWireSchema,
 } from '@qf-jarvis/model-reply-adapter';
 import { RIYA_COMPLETION_BUDGET_TOKENS } from '@qf-jarvis/riya-model-interaction';
 import type {
@@ -139,16 +140,35 @@ interface SharedGroundedKnowledge {
 }
 
 /**
+ * Grounded generic replies require at least one citation ON THE PROVIDER WIRE.
+ *
+ * The previous profile reused the ordinary schema and rejected an empty citation list only after the
+ * provider returned. That was fail-closed, but it asked Groq to generate a value the runtime was
+ * guaranteed to reject. Grounded turns already know that at least one governed record was retrieved,
+ * so the wire can express that invariant directly without changing the ordinary ungrounded schema.
+ */
+const GROUNDED_GENERIC_REPLY_WIRE_SCHEMA = genericReplyWireSchema
+  .extend({
+    citations: genericReplyWireSchema.shape.citations
+      .min(1)
+      .describe(
+        'At least one citation is required because governed reference knowledge was supplied.',
+      ),
+  })
+  .strict();
+
+/**
  * Generic reply profile for a shared grounded turn.
  *
- * It keeps the ordinary strict reply schema and projection byte-for-byte, changing only the user
- * content. The reader is lazy because M2 performs retrieval before M4 builds its request.
+ * It keeps the ordinary reply semantics, but the provider wire requires at least one citation and the
+ * projection re-checks that every citation names a record captured by this exact run. The reader is
+ * lazy because M2 performs retrieval before M4 builds its request.
  */
 function sharedGroundedReplyProfile(
   bridge: RiyaGroundedKnowledgeBridge,
 ): ModelReplyStructuredOutputProfile {
   return Object.freeze({
-    structuredSchema: DEFAULT_STRUCTURED_OUTPUT_PROFILE.structuredSchema,
+    structuredSchema: GROUNDED_GENERIC_REPLY_WIRE_SCHEMA,
     buildUserContent(plan: ReplyPlan) {
       const groundedKnowledge = bridge.readCaptured();
       if (groundedKnowledge === undefined || groundedKnowledge.records.length === 0) {
@@ -164,8 +184,29 @@ function sharedGroundedReplyProfile(
       return content;
     },
     projectStructuredResult(value: unknown) {
-      const projected = DEFAULT_STRUCTURED_OUTPUT_PROFILE.projectStructuredResult(value);
-      if (projected?.reply.kind === 'REPLY' && projected.reply.citations.length === 0) {
+      const wire = GROUNDED_GENERIC_REPLY_WIRE_SCHEMA.safeParse(value);
+      if (!wire.success) {
+        return undefined;
+      }
+      const projected = DEFAULT_STRUCTURED_OUTPUT_PROFILE.projectStructuredResult(wire.data);
+      if (projected === undefined) {
+        return undefined;
+      }
+      const groundedKnowledge = bridge.readCaptured();
+      if (groundedKnowledge === undefined || groundedKnowledge.records.length === 0) {
+        return undefined;
+      }
+      const authorized = groundedKnowledge.records;
+      if (
+        projected.reply.citations.length === 0 ||
+        projected.reply.citations.some(
+          (citation) =>
+            !authorized.some(
+              (record) =>
+                record.knowledgeId === citation.knowledgeId && record.version === citation.version,
+            ),
+        )
+      ) {
         return undefined;
       }
       return projected;
