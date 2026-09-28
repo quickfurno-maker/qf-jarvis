@@ -124,16 +124,12 @@ export function evolutionPayload(args: {
       reasonCode: null,
       citations: args.citations.map((one) => ({ ...one })),
     },
-    evolution: {
-      // JF-5B-R14: provider wire omits canonical protocol version; Jarvis injects version 1.
-      // POST-SDH4: the observation container, with both arrays required and empty.
-      observations: { sets: [], clears: [] },
-      skipProjectDetails: false,
-      questionPlan: {
-        phase: decided.questionPlan.phase,
-        questionFields: [...decided.questionPlan.questionFields],
-      },
-    },
+    // JF-5B-R30: provider-only flat encoding. The Riya profile reconstructs the unchanged canonical
+    // nested evolution object and re-proves it before any claim crosses the model boundary.
+    observations: { sets: [], clears: [] },
+    skipProjectDetails: 'KEEP',
+    questionPhase: decided.questionPlan.phase,
+    questionFields: [...decided.questionPlan.questionFields],
   };
 }
 
