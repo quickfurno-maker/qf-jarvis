@@ -15,7 +15,12 @@
  * proves this package names no Riya concept at all.
  */
 import { createPromptRegistry } from '@qf-jarvis/prompt-registry';
-import type { ModelRequest, ModelResponse } from '@qf-jarvis/model-gateway';
+import {
+  projectGroqStrictJsonSchema,
+  renderStructuredJsonSchema,
+  type ModelRequest,
+  type ModelResponse,
+} from '@qf-jarvis/model-gateway';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -191,6 +196,37 @@ describe('no profile: the path this package always had', () => {
     await adapterWith(invoker).draftReplyDetailed(replyPlan());
     expect(invoker.request()?.structuredSchema).toBe(genericReplyWireSchema);
     expect(invoker.request()?.structuredSchema).not.toBe(structuredReplySchema);
+  });
+
+  it('keeps the reasonCode machine-token format visible to strict providers without widening acceptance', () => {
+    const projected = projectGroqStrictJsonSchema(
+      renderStructuredJsonSchema(genericReplyWireSchema),
+    );
+    expect(projected.ok).toBe(true);
+    if (!projected.ok) return;
+
+    const properties = projected.schema['properties'] as Record<string, unknown>;
+    const reasonCode = properties['reasonCode'] as Record<string, unknown>;
+    expect(reasonCode['description']).toBe(
+      'Machine token only. When non-null, use ASCII letters, digits, dot, underscore, colon, or hyphen; no spaces or other punctuation.',
+    );
+
+    expect(
+      genericReplyWireSchema.safeParse({
+        kind: 'ESCALATE_TO_HUMAN',
+        replyBody: null,
+        reasonCode: 'needs human review',
+        citations: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      genericReplyWireSchema.safeParse({
+        kind: 'ESCALATE_TO_HUMAN',
+        replyBody: null,
+        reasonCode: 'needs-human-review',
+        citations: [],
+      }).success,
+    ).toBe(true);
   });
 
   it('returns exactly the semantic reply the base schema describes', async () => {

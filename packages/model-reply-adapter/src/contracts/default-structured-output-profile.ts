@@ -78,7 +78,10 @@ export const genericReplyWireSchema = z
       .min(1)
       .max(MAX_REASON_CODE_CHARS)
       .regex(/^[A-Za-z0-9._:-]+$/)
-      .nullable(),
+      .nullable()
+      .describe(
+        'Machine token only. When non-null, use ASCII letters, digits, dot, underscore, colon, or hyphen; no spaces or other punctuation.',
+      ),
     citations: z
       .array(z.object({ knowledgeId: IDENTIFIER, version: VERSION }).strict())
       .max(MAX_CITATIONS),
