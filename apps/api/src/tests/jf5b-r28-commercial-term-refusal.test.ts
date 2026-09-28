@@ -41,9 +41,9 @@ describe('JF-5B-R28 owner-reviewed commercial-term refusal', () => {
   });
 
   it('still fails a direct capability assertion', () => {
-    expect(
-      hits('Main discount ya koi bhi commercial term confirm ya offer kar sakta hoon.'),
-    ).toBe(true);
+    expect(hits('Main discount ya koi bhi commercial term confirm ya offer kar sakta hoon.')).toBe(
+      true,
+    );
   });
 
   it('does not let the refusal suppress a later direct assertion', () => {
