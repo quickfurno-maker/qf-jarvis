@@ -50,6 +50,9 @@ type NaraHttpResponse = Awaited<ReturnType<NaraTransport['send']>>;
 /** How the provider's `message.content` arrived. A closed vocabulary; never the content itself. */
 export type MessageContentKind = 'STRING' | 'NULL' | 'ABSENT' | 'OTHER';
 
+/** Closed Groq quota dimension extracted only from a 429 rate-limit envelope. Never provider text. */
+export type GroqRateLimitDimension = 'RPM' | 'RPD' | 'TPM' | 'TPD' | 'ITPM' | 'OTPM';
+
 /** Bound on the finish reason we are willing to carry, matching the provider schema's own bound. */
 const FINISH_REASON_MAX_CHARS = 64;
 
@@ -111,6 +114,10 @@ export interface GroqWireFacts {
   readonly reasoningFieldPresent: boolean;
   /** The closed Groq error code, when it is the ONE code this lane recognises (JF-5B-R9). */
   readonly closedErrorCode: string | undefined;
+  /** Closed quota dimension for a 429 rate_limit_exceeded envelope; never the provider message. */
+  readonly rateLimitDimension: GroqRateLimitDimension | undefined;
+  /** The transport's already-parsed, bounded Retry-After value. Never a raw header. */
+  readonly retryAfterSeconds: number | undefined;
   /** Present only for a `json_validate_failed` response. */
   readonly failedGeneration: FailedGenerationFacts | undefined;
 }
@@ -234,6 +241,29 @@ function firstMessage(body: Record<string, unknown> | undefined): {
  * cannot drift apart silently.
  */
 export const GROQ_JSON_VALIDATE_FAILED_CODE = 'json_validate_failed';
+const GROQ_RATE_LIMIT_EXCEEDED_CODE = 'rate_limit_exceeded';
+
+const RATE_LIMIT_DIMENSIONS: readonly (readonly [string, GroqRateLimitDimension])[] = Object.freeze(
+  [
+    ['requests per minute (rpm)', 'RPM'],
+    ['requests per day (rpd)', 'RPD'],
+    ['tokens per minute (tpm)', 'TPM'],
+    ['tokens per day (tpd)', 'TPD'],
+    ['input tokens per minute (itpm)', 'ITPM'],
+    ['output tokens per minute (otpm)', 'OTPM'],
+  ],
+);
+
+function rateLimitDimensionFrom(
+  status: number,
+  error: Record<string, unknown> | undefined,
+): GroqRateLimitDimension | undefined {
+  if (status !== 429 || error?.['code'] !== GROQ_RATE_LIMIT_EXCEEDED_CODE) return undefined;
+  const message = error['message'];
+  if (typeof message !== 'string') return undefined;
+  const lower = message.toLowerCase();
+  return RATE_LIMIT_DIMENSIONS.find(([needle]) => lower.includes(needle))?.[1];
+}
 
 /** The keys whose presence, three or more together, marks a JSON Schema DOCUMENT rather than an instance. */
 const SCHEMA_DOCUMENT_KEYS = ['type', 'properties', 'required', 'additionalProperties', '$schema'];
@@ -400,6 +430,8 @@ export function groqFactsFrom(response: GroqHttpResponse): GroqWireFacts {
     // A BOOLEAN, and deliberately nothing more. See the header.
     reasoningFieldPresent: message !== undefined && 'reasoning' in message,
     closedErrorCode: closed,
+    rateLimitDimension: rateLimitDimensionFrom(response.status, error),
+    retryAfterSeconds: response.retryAfterSeconds ?? undefined,
     failedGeneration: closed === undefined ? undefined : failedGenerationFactsFrom(error),
   });
 }

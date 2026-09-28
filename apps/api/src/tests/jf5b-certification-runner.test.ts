@@ -521,6 +521,44 @@ describe('JF-5B (3) the bundles keep content out of the receipt', () => {
   });
 });
 
+describe('JF-5B-R31 Groq capacity interruption', () => {
+  it('stops the certification on the first 429 instead of burning later cases', async () => {
+    let calls = 0;
+    const groq: GroqTransport = {
+      send(): Promise<{ status: number; retryAfterSeconds: number | null; bodyText: string }> {
+        calls += 1;
+        return Promise.resolve({
+          status: 429,
+          retryAfterSeconds: 37,
+          bodyText: JSON.stringify({
+            error: {
+              message: 'Rate limit reached on tokens per day (TPD).',
+              type: 'tokens',
+              code: 'rate_limit_exceeded',
+            },
+          }),
+        });
+      },
+    };
+    const result = await createJf5bCertificationRunner({ groqTransport: groq }).certifyGroqOnly({
+      groqApiKey: GROQ_KEY,
+      runId: RUN_ID,
+      headSha: HEAD,
+      ledger: budget(),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('provider-capacity-limited');
+    expect(calls).toBe(1);
+    expect(result.manifest).toBeUndefined();
+    expect(result.cases.filter((one) => one.networkCalls > 0)).toHaveLength(1);
+    expect(result.cases.at(-1)?.providerErrorClass).toBe('provider-transient:rate-limited');
+    expect(result.diagnostics.at(-1)?.wireDiagnostic).toContain('httpStatus=429');
+    expect(result.diagnostics.at(-1)?.wireDiagnostic).toContain('rateLimitDimension=TPD');
+    expect(result.diagnostics.at(-1)?.wireDiagnostic).toContain('retryAfterSeconds=37');
+  });
+});
+
 describe('JF-5B (4) AUTO routing is measured, not asserted', () => {
   async function route() {
     const seams = wire();

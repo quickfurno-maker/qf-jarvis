@@ -1095,9 +1095,20 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
       if (provider === 'groq') {
         const facts = groqWire.observer.facts();
         if (facts === undefined) return undefined;
-        return rich
-          ? renderWireDiagnostic(groqMalformedStage(facts), facts)
-          : `diagnostic=PROVIDER_HTTP_FAILURE httpStatus=${String(facts.httpStatus)}`;
+        if (rich) {
+          return renderWireDiagnostic(groqMalformedStage(facts), facts);
+        }
+        const capacity = [
+          facts.rateLimitDimension === undefined
+            ? undefined
+            : `rateLimitDimension=${facts.rateLimitDimension}`,
+          facts.retryAfterSeconds === undefined
+            ? undefined
+            : `retryAfterSeconds=${String(facts.retryAfterSeconds)}`,
+        ]
+          .filter((one): one is string => one !== undefined)
+          .join(' ');
+        return `diagnostic=PROVIDER_HTTP_FAILURE httpStatus=${String(facts.httpStatus)}${capacity.length === 0 ? '' : ` ${capacity}`}`;
       }
       const facts = naraWire.observer.facts();
       if (facts === undefined) return undefined;
@@ -1138,23 +1149,33 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
         const release = releaseFor(provider, JF5B_GROQ_MODEL_ID);
         for (const agent of CERTIFIED_AGENTS) {
           for (const governed of casesFor(agent)) {
-            executed.push(
-              await runOneCase({
-                governed,
-                provider,
-                posture,
-                gateway,
-                release,
-                runId: input.runId,
-                ledger: input.ledger,
-                clock,
-                ...(input.knowledgeRevision === undefined
-                  ? {}
-                  : { knowledgeRevision: input.knowledgeRevision }),
-                ...(groqPacer === undefined ? {} : { pacer: groqPacer }),
-                diagnostics: caseDiagnostics,
-              }),
-            );
+            const one = await runOneCase({
+              governed,
+              provider,
+              posture,
+              gateway,
+              release,
+              runId: input.runId,
+              ledger: input.ledger,
+              clock,
+              ...(input.knowledgeRevision === undefined
+                ? {}
+                : { knowledgeRevision: input.knowledgeRevision }),
+              ...(groqPacer === undefined ? {} : { pacer: groqPacer }),
+              diagnostics: caseDiagnostics,
+            });
+            executed.push(one);
+            if (one.record.providerErrorClass === 'provider-transient:rate-limited') {
+              return {
+                ok: false,
+                reason: 'provider-capacity-limited',
+                cases: executed.map((item) => item.record),
+                manifest: undefined,
+                rawBundle: '',
+                reviewBundle: '',
+                diagnostics: diagnosticsOf(executed),
+              };
+            }
           }
         }
       } catch (error: unknown) {
