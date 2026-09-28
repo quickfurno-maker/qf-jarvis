@@ -199,7 +199,9 @@ describe('no profile: the path this package always had', () => {
   });
 
   it('keeps the reasonCode machine-token format visible to strict providers without widening acceptance', () => {
-    const projected = projectGroqStrictJsonSchema(renderStructuredJsonSchema(genericReplyWireSchema));
+    const projected = projectGroqStrictJsonSchema(
+      renderStructuredJsonSchema(genericReplyWireSchema),
+    );
     expect(projected.ok).toBe(true);
     if (!projected.ok) return;
 
