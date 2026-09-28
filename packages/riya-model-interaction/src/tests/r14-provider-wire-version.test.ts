@@ -5,7 +5,11 @@ import { evolveRiyaConversation } from '@qf-jarvis/riya-conversation-evolution';
 import { describe, expect, it } from 'vitest';
 
 import { createRiyaConversationModelProfile } from '../profile.js';
-import { riyaProviderWireSchema, riyaStructuredOutputSchema } from '../internal/output-schema.js';
+import {
+  riyaFlatProviderWireSchema,
+  riyaProviderWireSchema,
+  riyaStructuredOutputSchema,
+} from '../internal/output-schema.js';
 
 const current = createRiyaConversationContinuityState({
   version: 1,
@@ -43,12 +47,12 @@ const wire = {
 
 describe('JF-5B-R30 Riya simplified provider evolution wire', () => {
   it('accepts the simplified provider representation', () => {
-    expect(riyaProviderWireSchema.safeParse(wire).success).toBe(true);
+    expect(riyaFlatProviderWireSchema.safeParse(wire).success).toBe(true);
   });
 
   it('refuses canonical-only provider fields', () => {
     expect(
-      riyaProviderWireSchema.safeParse({
+      riyaFlatProviderWireSchema.safeParse({
         ...wire,
         evolution: {
           ...wire.evolution,
@@ -61,6 +65,7 @@ describe('JF-5B-R30 Riya simplified provider evolution wire', () => {
   });
 
   it('canonical semantic schema remains nested and requires protocol version 1', () => {
+    expect(riyaProviderWireSchema.safeParse(wire).success).toBe(false);
     expect(riyaStructuredOutputSchema.safeParse(wire).success).toBe(false);
     expect(
       riyaStructuredOutputSchema.safeParse({
@@ -82,6 +87,7 @@ describe('JF-5B-R30 Riya simplified provider evolution wire', () => {
     const projected = createRiyaConversationModelProfile({
       current,
       availabilitySnapshot: snapshot,
+      providerWireMode: 'R30_SIMPLIFIED',
     }).projectStructuredResult(wire);
     expect(projected).toBeDefined();
     expect(projected?.reply.replyBody).toBe('How can I help?');
@@ -99,6 +105,7 @@ describe('JF-5B-R30 Riya simplified provider evolution wire', () => {
     const projected = createRiyaConversationModelProfile({
       current,
       availabilitySnapshot: snapshot,
+      providerWireMode: 'R30_SIMPLIFIED',
     }).projectStructuredResult({
       ...wire,
       evolution: {
