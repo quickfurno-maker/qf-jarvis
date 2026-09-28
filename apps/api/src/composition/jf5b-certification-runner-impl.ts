@@ -74,6 +74,7 @@ import {
   CERTIFIED_AGENTS,
   CERTIFIED_PROVIDERS,
   GROQ_DATA_CONTROLS_REF,
+  JF5B_CATALOGUE_SNAPSHOT,
   JF5B_EVALUATION_SUITE_ID,
   JF5B_EVALUATION_SUITE_VERSION,
   JF5B_FIXTURE_MANIFEST_ID,
@@ -182,40 +183,37 @@ const MAX_COMPLETION_TOKENS = JF5B_MAX_COMPLETION_TOKENS;
  * constrained generation simply does not hold Riya's production-shaped schema reliably in this lane --
  * while the SAME provider, model and strict mode pass every Anisha and Aarohi row.
  *
- * `openai/gpt-oss-120b` is already permitted on the owner's project, carries the SAME free-plan limits
- * (30 RPM, 1,000 RPD, 8,000 TPM, 200,000 TPD), and is documented as supporting `strict: true` structured
- * outputs. So the correction is a CANDIDATE SUBSTITUTION and nothing else: one provider, one model, the
- * same strict mode, the same token bounds, the same pacing, the same retry budget of zero, and no
- * agent-specific routing anywhere. Provider selection remains the Model Gateway's alone.
+ * Repeated exact-head runs then reproduced the same `json_validate_failed` class on 120B, on different
+ * Riya cases, while the failure moved between cases. The repository's bounded 20B diagnostics had
+ * already exhausted Responses strict, lower reasoning, a larger output budget and best-effort schema
+ * experiments without producing production-acceptable evidence.
  *
- * 20B is NOT retained as a fallback. A hidden second model would mean a certification that could not say
- * which model earned it.
+ * `qwen/qwen3.8-27b` is the next exact Groq-hosted candidate: Groq documents strict JSON-schema
+ * support for it, its context/output ceilings exceed this lane's existing caps, and its default
+ * non-reasoning mode avoids changing the request contract. This remains a CANDIDATE SUBSTITUTION only:
+ * same provider, same strict mode, same token bounds, same retry budget of zero, no fallback and no
+ * agent-specific routing. Neither GPT-OSS model is retained as a hidden fallback.
  */
-export const JF5B_GROQ_MODEL_ID = 'openai/gpt-oss-120b';
+export const JF5B_GROQ_MODEL_ID = 'qwen/qwen3.8-27b';
 
 /**
- * The catalogue snapshot label, UNCHANGED (JF-5B-R10).
+ * The exact Groq catalogue observation bound to this candidate.
  *
- * It names the DATE the reviewed release set was snapshotted, not the model inside it, and the label is
- * paired with `modelId` everywhere it is recorded -- so a receipt already says which model served. No
- * invariant ties the label to a model, and inventing a new snapshot identity for a candidate swap would
- * claim a review that did not happen.
+ * Qwen 3.8 27B was re-verified on 2026-09-28 as a Groq-hosted model with strict JSON-schema support.
+ * The label is imported from the certification release package so the provider instance, config digest
+ * and sealed release cannot drift onto different catalogue dates.
  */
-export const JF5B_CATALOGUE_LABEL = 'certification-snapshot-2026-09-11';
+export const JF5B_CATALOGUE_LABEL = JF5B_CATALOGUE_SNAPSHOT;
 
 /**
  * The per-call spend charged to the ledger BEFORE the call is made.
  *
- * An estimate, deliberately pessimistic for a hosted GPT-OSS-class model at these token bounds. It is a
- * ceiling mechanism, not an invoice: charging before the call is what makes the ceiling binding, and
- * charging high is what keeps a surprise on the provider's side from becoming a surprise on the
- * owner's. At 0.01 USD, the whole run cannot pass the 10 USD ceiling before the call counters do.
- *
- * Re-audited for the 120B candidate (JF-5B-R10) and left unchanged. At the pinned ceilings -- 16,384
- * input and 4,096 completion tokens -- a single call at 120B published list pricing remains well under a
- * cent, so one cent per call is still the conservative direction. The 10 USD ceiling is not loosened.
+ * Qwen 3.8 27B is currently published at USD 0.80/M input tokens and USD 4.00/M output tokens. At
+ * JF-5B's pinned 16,384 input + 4,096 completion ceilings, the theoretical maximum is under USD 0.03
+ * per call. Reserving USD 0.04 before every call therefore remains deliberately conservative while
+ * keeping the existing USD 10 run ceiling binding.
  */
-const PER_CALL_SPEND_USD = 0.01;
+const PER_CALL_SPEND_USD = 0.04;
 
 /**
  * The fixed Nara selection probe set (JF-5B-R17).
