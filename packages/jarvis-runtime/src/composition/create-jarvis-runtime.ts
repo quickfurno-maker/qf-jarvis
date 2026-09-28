@@ -336,10 +336,6 @@ export function createJarvisRuntime(
         profile: createRiyaConversationModelProfile({
           current,
           availabilitySnapshot,
-          // Production-serving Riya uses the R30 provider encoding. Historical candidate-evidence
-          // diagnostics intentionally keep the legacy default so their frozen schema probes retain
-          // their original meaning.
-          providerWireMode: 'R30_SIMPLIFIED',
           // A READER, not a value. M2 calls the knowledge port before M4 builds the request, so the
           // capture does not exist yet at this line -- and passing a snapshot of `undefined` would
           // silently produce an ungrounded turn on a grounded deployment.
