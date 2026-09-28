@@ -37,6 +37,7 @@ import type { RiyaGroundedKnowledgeContextV1 } from './internal/grounded-context
 import { buildRiyaUserContent } from './internal/input-projection.js';
 import {
   isModelProducibleObservation,
+  riyaGroundedProviderWireSchema,
   riyaGroundedReplyOutputSchema,
   riyaProviderWireSchema,
   riyaStructuredOutputSchema,
@@ -194,9 +195,11 @@ export function createRiyaConversationModelProfile(args: {
 }): ModelReplyStructuredOutputProfile {
   const { current, availabilitySnapshot } = args;
   const readGrounded = args.groundedKnowledgeSource;
+  const providerWireSchema =
+    readGrounded === undefined ? riyaProviderWireSchema : riyaGroundedProviderWireSchema;
 
   return Object.freeze({
-    structuredSchema: riyaProviderWireSchema,
+    structuredSchema: providerWireSchema,
 
     buildUserContent(plan: RiyaModelPlanView): string {
       const grounded = readGrounded?.();
@@ -210,7 +213,7 @@ export function createRiyaConversationModelProfile(args: {
     },
 
     projectStructuredResult(value: unknown): ModelReplyStructuredProjection | undefined {
-      const wire = riyaProviderWireSchema.safeParse(value);
+      const wire = providerWireSchema.safeParse(value);
       // JF-5B-R14: the live provider wire omits protocol bookkeeping and Jarvis injects version 1.
       // A canonical semantic value carrying version 1 is still accepted at this internal projection
       // seam for backwards-compatible replay/tests; it can never arrive from a live provider because
