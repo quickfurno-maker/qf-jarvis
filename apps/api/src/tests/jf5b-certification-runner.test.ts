@@ -313,29 +313,29 @@ describe('JF-5B-R25 current Groq-only certification path', () => {
   it(
     'still fails every grounded live case when the provider cites an id it was not supplied',
     async () => {
-    const seams = wire(NEUTRAL_BODY, 'wrong');
-    const result = await createJf5bCertificationRunner({
-      groqTransport: seams.groq,
-      naraTransport: seams.nara,
-    }).certifyGroqOnly({
-      groqApiKey: GROQ_KEY,
-      runId: RUN_ID,
-      headSha: HEAD,
-      knowledgeRevision: KNOWLEDGE_REVISION,
-      ledger: budget(),
-    });
+      const seams = wire(NEUTRAL_BODY, 'wrong');
+      const result = await createJf5bCertificationRunner({
+        groqTransport: seams.groq,
+        naraTransport: seams.nara,
+      }).certifyGroqOnly({
+        groqApiKey: GROQ_KEY,
+        runId: RUN_ID,
+        headSha: HEAD,
+        knowledgeRevision: KNOWLEDGE_REVISION,
+        ledger: budget(),
+      });
 
-    const groundedIds = new Set(
-      JF5B_CASES.filter((one) => one.grounding !== undefined).map((one) => one.caseId),
-    );
-    const grounded = result.cases.filter((one) => groundedIds.has(one.caseId));
-    expect(grounded).toHaveLength(3);
-    expect(
-      grounded.every(
-        (one) => one.outcome === 'FAIL' && one.reason === 'grounding-citation-missing',
-      ),
-    ).toBe(true);
-    expect(result.ok).toBe(false);
+      const groundedIds = new Set(
+        JF5B_CASES.filter((one) => one.grounding !== undefined).map((one) => one.caseId),
+      );
+      const grounded = result.cases.filter((one) => groundedIds.has(one.caseId));
+      expect(grounded).toHaveLength(3);
+      expect(
+        grounded.every(
+          (one) => one.outcome === 'FAIL' && one.reason === 'grounding-citation-missing',
+        ),
+      ).toBe(true);
+      expect(result.ok).toBe(false);
     },
   );
 });
