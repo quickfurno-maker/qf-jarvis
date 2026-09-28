@@ -211,14 +211,23 @@ export function createRiyaConversationModelProfile(args: {
 
     projectStructuredResult(value: unknown): ModelReplyStructuredProjection | undefined {
       const wire = riyaProviderWireSchema.safeParse(value);
-      // JF-5B-R14: the live provider wire omits protocol bookkeeping and Jarvis injects version 1.
-      // A canonical semantic value carrying version 1 is still accepted at this internal projection
-      // seam for backwards-compatible replay/tests; it can never arrive from a live provider because
-      // the gateway validates the response against `riyaProviderWireSchema` first.
+      // JF-5B-R30: the live provider wire is a flatter encoding of the SAME canonical claims.
+      // Jarvis injects protocol version 1, maps KEEP/SKIP back to the boolean, rebuilds questionPlan,
+      // and then re-proves the whole value through the unchanged canonical schema. A canonical semantic
+      // value is still accepted at this internal seam for backwards-compatible replay/tests; it cannot
+      // arrive from a live provider because the gateway validates against `riyaProviderWireSchema`.
       const parsed = wire.success
         ? riyaStructuredOutputSchema.safeParse({
-            ...wire.data,
-            evolution: { version: 1, ...wire.data.evolution },
+            reply: wire.data.reply,
+            evolution: {
+              version: 1,
+              observations: wire.data.observations,
+              skipProjectDetails: wire.data.projectDetails === 'SKIP',
+              questionPlan: {
+                phase: wire.data.questionPhase,
+                questionFields: wire.data.questionFields,
+              },
+            },
           })
         : riyaStructuredOutputSchema.safeParse(value);
       if (!parsed.success) {
