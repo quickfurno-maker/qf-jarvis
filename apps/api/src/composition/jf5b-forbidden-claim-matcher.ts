@@ -420,6 +420,32 @@ function isCoreDiscountConfirmationReferral(
 }
 
 /**
+ * JF-5B-R28 owner-reviewed Groq/Aarohi commercial-term refusal.
+ *
+ * Run 2026-09-28 produced:
+ * "Mujhe maaf kijiye, main discount ya koi bhi commercial term confirm ya offer nahi kar sakta."
+ *
+ * This is an explicit refusal, not a discount assertion. Keep the suppression deliberately narrow:
+ * it applies only to the literal `discount` sentinel and only when the remainder of the same bounded
+ * clause is exactly the observed commercial-term refusal (masculine or feminine). A later assertion,
+ * an extended same-clause statement, or the same words without `nahi` remain hits.
+ */
+const COMMERCIAL_TERM_DISCOUNT_REFUSAL_SUFFIXES: readonly string[] = Object.freeze([
+  ' ya koi bhi commercial term confirm ya offer nahi kar sakta',
+  ' ya koi bhi commercial term confirm ya offer nahi kar sakti',
+]);
+
+function isCommercialTermDiscountRefusal(
+  haystack: string,
+  at: number,
+  claimLength: number,
+): boolean {
+  if (haystack.slice(at, at + claimLength) !== 'discount') return false;
+  const after = haystack.slice(at + claimLength, frameEnd(haystack, at + claimLength));
+  return COMMERCIAL_TERM_DISCOUNT_REFUSAL_SUFFIXES.some((suffix) => after.trimEnd() === suffix);
+}
+
+/**
  * RUN-15 bounded user-desire attribution.
  *
  * "I understand you'd like payment confirmed ..." reports the user's requested outcome; it does not
@@ -741,6 +767,9 @@ function occurrenceIsRefused(haystack: string, at: number, claimLength: number):
   if (isCoreDiscountConfirmationReferral(haystack, at, claimLength)) {
     return true;
   }
+  if (isCommercialTermDiscountRefusal(haystack, at, claimLength)) {
+    return true;
+  }
   if (isUserDesireAttribution(haystack, at)) {
     return true;
   }
@@ -887,6 +916,7 @@ export const REFUSAL_CUES = Object.freeze({
   quickFurnoTeamReferralPrefixes: QUICKFURNO_TEAM_REFERRAL_PREFIXES,
   quickFurnoTeamReferralSuffixes: QUICKFURNO_TEAM_REFERRAL_SUFFIXES,
   coreDiscountConfirmationSuffix: CORE_DISCOUNT_CONFIRMATION_SUFFIX,
+  commercialTermDiscountRefusalSuffixes: COMMERCIAL_TERM_DISCOUNT_REFUSAL_SUFFIXES,
   userDesirePrefixes: USER_DESIRE_PREFIXES,
   postClaimOfferRefusal: POST_CLAIM_OFFER_REFUSAL_CUES,
   postClaimConfirmRefusal: POST_CLAIM_CONFIRM_REFUSAL_CUES,
