@@ -36,6 +36,12 @@ describe('JF-5B-R28 owner-reviewed commercial-term refusal', () => {
     ).toBe(false);
   });
 
+  it('allows the exact Hindi capability refusal from the next live run', () => {
+    expect(hits('Mujhe khed hai, lekin main discount pradan karne mein saksham nahi hoon.')).toBe(
+      false,
+    );
+  });
+
   it('still fails a direct quantified discount assertion', () => {
     expect(hits('Discount 20% hai.')).toBe(true);
   });
@@ -67,6 +73,7 @@ describe('JF-5B-R28 owner-reviewed commercial-term refusal', () => {
     expect(REFUSAL_CUES.commercialTermDiscountRefusalSuffixes).toStrictEqual([
       ' ya koi bhi commercial term confirm ya offer nahi kar sakta',
       ' ya koi bhi commercial term confirm ya offer nahi kar sakti',
+      ' pradan karne mein saksham nahi hoon',
     ]);
   });
 });
