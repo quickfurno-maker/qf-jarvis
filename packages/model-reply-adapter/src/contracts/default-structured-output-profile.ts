@@ -84,10 +84,7 @@ export const genericReplyWireSchema = z
       ),
     citations: z
       .array(z.object({ knowledgeId: IDENTIFIER, version: VERSION }).strict())
-      .max(MAX_CITATIONS)
-      .describe(
-        'Citations for governed groundedKnowledge only. If the user content contains groundedKnowledge.records and the reply uses or addresses that reference material, copy the exact knowledgeId and version from the supplied record; on a grounded reply include at least one exact supplied citation. Otherwise use an empty array. Never invent a citation.',
-      ),
+      .max(MAX_CITATIONS),
   })
   .strict();
 
