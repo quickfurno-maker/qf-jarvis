@@ -123,7 +123,7 @@ function riyaAnswer(
     // HF4: required-and-nullable reasonCode; null projects to absence.
     reply: { kind: 'REPLY', replyBody: 'Thanks — that helps.', reasonCode: null, citations: [] },
     evolution: {
-      // JF-5B-R14: provider wire omits protocol version; Jarvis injects canonical version 1.
+      // JF-5B-R30: provider wire keeps the evolution envelope and uses simplified members.
       observations: providerObservations(observations),
       skipProjectDetails: 'KEEP',
       questionPhase: decided.questionPlan.phase,

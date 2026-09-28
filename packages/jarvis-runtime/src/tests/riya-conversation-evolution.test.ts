@@ -168,7 +168,7 @@ function riyaAnswer(
       citations: [],
     },
     evolution: {
-      // JF-5B-R14: provider wire omits protocol version; Jarvis injects canonical version 1.
+      // JF-5B-R30: provider wire keeps the evolution envelope and uses simplified members.
       observations: providerObservations(observations),
       skipProjectDetails: 'KEEP',
       questionPhase: decided.questionPlan.phase,
@@ -585,13 +585,14 @@ describe('a batch exists only when the structured answer passed every M4 gate', 
   it('no batch when the claimed question plan disagrees with the reducer', async () => {
     const current = continuity();
     const answer = riyaAnswer(current, [SET('serviceInterest', 'modular-kitchen')]) as {
-      evolution: { questionPlan: { phase: string; questionFields: string[] } };
+      evolution: { questionPhase: string; questionFields: string[] };
     };
     const wrong = {
       ...answer,
       evolution: {
         ...answer.evolution,
-        questionPlan: { phase: 'SUMMARY', questionFields: [] },
+        questionPhase: 'SUMMARY',
+        questionFields: [],
       },
     };
     const result = await runtimeWith({
