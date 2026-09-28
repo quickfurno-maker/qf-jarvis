@@ -310,7 +310,9 @@ describe('JF-5B-R25 current Groq-only certification path', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('still fails every grounded live case when the provider cites an id it was not supplied', async () => {
+  it(
+    'still fails every grounded live case when the provider cites an id it was not supplied',
+    async () => {
     const seams = wire(NEUTRAL_BODY, 'wrong');
     const result = await createJf5bCertificationRunner({
       groqTransport: seams.groq,
@@ -334,7 +336,8 @@ describe('JF-5B-R25 current Groq-only certification path', () => {
       ),
     ).toBe(true);
     expect(result.ok).toBe(false);
-  });
+    },
+  );
 });
 
 describe('JF-5B (3) the engine executes every case, through the real composition', () => {
