@@ -39,7 +39,10 @@ import type { EvaluationBinding, ProviderReleaseRef } from '@qf-jarvis/model-eva
  * would be a fabricated identity. What is true and checkable is the date on which this lane observed
  * the provider's catalogue, and that is what the label says.
  */
-export const JF5B_CATALOGUE_SNAPSHOT = 'certification-snapshot-2026-09-28';
+export const JF5B_CATALOGUE_SNAPSHOT = 'certification-snapshot-2026-09-11';
+
+/** Current Groq-only candidate catalogue observation. Historical v1 builders keep the 2026-09-11 label. */
+export const JF5B_GROQ_CATALOGUE_SNAPSHOT = 'certification-snapshot-2026-09-28';
 
 /** The capability profile the three agents' structured turns run under. */
 export const JF5B_CAPABILITY_PROFILE_REF = JARVIS_V1_PRODUCTION_CAPABILITY_PROFILE_REF;
@@ -108,6 +111,8 @@ export interface Jf5bReleaseInput {
   readonly providerId: CertifiedProvider;
   /** The exact model id. For Nara this is the alias discovery selected; never a router alias. */
   readonly modelId: string;
+  /** Explicit catalogue observation for a new current candidate; absent preserves historical v1 identity. */
+  readonly modelVersion?: string;
   /** A digest over the exact execution identity and provider posture. Never a key, path or timestamp. */
   readonly configDigest: string;
 }
@@ -123,7 +128,7 @@ export function createJf5bRelease(input: Jf5bReleaseInput): ProviderReleaseRef {
     releaseId: `rel.jf5b.${input.providerId}.1`,
     providerId: input.providerId,
     modelId: input.modelId,
-    modelVersion: JF5B_CATALOGUE_SNAPSHOT,
+    modelVersion: input.modelVersion ?? JF5B_CATALOGUE_SNAPSHOT,
     configDigest: input.configDigest,
     executionClass: 'HOSTED' as const,
   });
