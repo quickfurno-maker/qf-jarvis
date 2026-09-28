@@ -74,7 +74,7 @@ import {
   CERTIFIED_AGENTS,
   CERTIFIED_PROVIDERS,
   GROQ_DATA_CONTROLS_REF,
-  JF5B_CATALOGUE_SNAPSHOT,
+  JF5B_GROQ_CATALOGUE_SNAPSHOT,
   JF5B_EVALUATION_SUITE_ID,
   JF5B_EVALUATION_SUITE_VERSION,
   JF5B_FIXTURE_MANIFEST_ID,
@@ -203,7 +203,7 @@ export const JF5B_GROQ_MODEL_ID = 'qwen/qwen3.8-27b';
  * The label is imported from the certification release package so the provider instance, config digest
  * and sealed release cannot drift onto different catalogue dates.
  */
-export const JF5B_CATALOGUE_LABEL = JF5B_CATALOGUE_SNAPSHOT;
+export const JF5B_CATALOGUE_LABEL = JF5B_GROQ_CATALOGUE_SNAPSHOT;
 
 /**
  * The per-call spend charged to the ledger BEFORE the call is made.
@@ -552,7 +552,12 @@ function releaseFor(provider: CertifiedProvider, modelId: string): ModelReleaseR
       String(MAX_COMPLETION_TOKENS),
     ].join('|'),
   ).slice(0, 32);
-  return createJf5bRelease({ providerId: provider, modelId, configDigest });
+  return createJf5bRelease({
+    providerId: provider,
+    modelId,
+    modelVersion: provider === 'groq' ? JF5B_CATALOGUE_LABEL : undefined,
+    configDigest,
+  });
 }
 
 /**
