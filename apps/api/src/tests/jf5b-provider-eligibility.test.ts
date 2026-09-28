@@ -56,6 +56,7 @@ import {
 import {
   createEvaluationGateway,
   createEvaluationInvoker,
+  JF5B_CATALOGUE_LABEL,
   JF5B_GROQ_MODEL_ID,
 } from '../composition/jf5b-certification-runner-impl.js';
 import { createRiyaCustomerRuntimeComposition } from '../riya-customer-orchestration/create-riya-customer-runtime.js';
@@ -246,7 +247,7 @@ describe('JF-5B-R2 (C) a structured reply requires structured output, not native
     createGroqProviderConfig({
       providerId: 'groq',
       modelId: JF5B_GROQ_MODEL_ID,
-      modelVersion: 'certification-snapshot-2026-09-11',
+      modelVersion: JF5B_CATALOGUE_LABEL,
       executionClass: 'HOSTED',
       maxInputTokens: 16_384,
       maxCompletionTokens: 4_096,
@@ -456,7 +457,8 @@ async function runOne(
       releaseId: `rel.jf5b.${provider}.1`,
       providerId: provider,
       modelId: provider === 'groq' ? JF5B_GROQ_MODEL_ID : NARA_MODEL,
-      modelVersion: 'certification-snapshot-2026-09-11',
+      modelVersion:
+        provider === 'groq' ? JF5B_CATALOGUE_LABEL : 'certification-snapshot-2026-09-11',
       configDigest: 'abcdef0123456789',
       executionClass: 'HOSTED',
     },
@@ -689,7 +691,7 @@ describe('JF-5B-R2 (E) all six provider x agent pairs are offline-eligible', () 
       createGroqProviderConfig({
         providerId: 'groq',
         modelId: JF5B_GROQ_MODEL_ID,
-        modelVersion: 'certification-snapshot-2026-09-11',
+        modelVersion: JF5B_CATALOGUE_LABEL,
         executionClass: 'HOSTED',
         maxInputTokens: 16_384,
         maxCompletionTokens: 4_096,
