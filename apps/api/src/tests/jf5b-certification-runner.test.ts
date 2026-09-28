@@ -286,29 +286,34 @@ describe('JF-5B-R25 current Groq-only certification path', () => {
       result.manifest.entries.every((entry) => entry.knowledgeRevision === KNOWLEDGE_REVISION),
     ).toBe(true);
   });
-  it('blocks every grounded live case at the provider schema when citations are empty', async () => {
-    const seams = wire(NEUTRAL_BODY, false);
-    const result = await createJf5bCertificationRunner({
-      groqTransport: seams.groq,
-      naraTransport: seams.nara,
-    }).certifyGroqOnly({
-      groqApiKey: GROQ_KEY,
-      runId: RUN_ID,
-      headSha: HEAD,
-      knowledgeRevision: KNOWLEDGE_REVISION,
-      ledger: budget(),
-    });
+  it(
+    'blocks every grounded live case at the provider schema when citations are empty',
+    async () => {
+      const seams = wire(NEUTRAL_BODY, false);
+      const result = await createJf5bCertificationRunner({
+        groqTransport: seams.groq,
+        naraTransport: seams.nara,
+      }).certifyGroqOnly({
+        groqApiKey: GROQ_KEY,
+        runId: RUN_ID,
+        headSha: HEAD,
+        knowledgeRevision: KNOWLEDGE_REVISION,
+        ledger: budget(),
+      });
 
-    const groundedIds = new Set(
-      JF5B_CASES.filter((one) => one.grounding !== undefined).map((one) => one.caseId),
-    );
-    const grounded = result.cases.filter((one) => groundedIds.has(one.caseId));
-    expect(grounded).toHaveLength(3);
-    expect(
-      grounded.every((one) => one.outcome === 'FAIL' || one.outcome === 'INCONCLUSIVE'),
-    ).toBe(true);
-    expect(result.ok).toBe(false);
-  });
+      const groundedIds = new Set(
+        JF5B_CASES.filter((one) => one.grounding !== undefined).map((one) => one.caseId),
+      );
+      const grounded = result.cases.filter((one) => groundedIds.has(one.caseId));
+      expect(grounded).toHaveLength(3);
+      expect(
+        grounded.every(
+          (one) => one.outcome === 'FAIL' || one.outcome === 'INCONCLUSIVE',
+        ),
+      ).toBe(true);
+      expect(result.ok).toBe(false);
+    },
+  );
 
   it(
     'still fails every grounded live case when the provider cites an id it was not supplied',
