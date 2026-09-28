@@ -258,6 +258,22 @@ export const riyaProviderWireSchema = riyaStructuredOutputSchema
 export type RiyaProviderWireOutput = z.infer<typeof riyaProviderWireSchema>;
 
 /**
+ * Grounded Riya turns have one additional provider-visible invariant: at least one governed citation
+ * must be present. Exact id/version authorization remains a later semantic gate; this schema only
+ * prevents an empty citation list from consuming a provider call and then being deterministically
+ * refused.
+ */
+const riyaGroundedReplySchema = riyaReplySchema
+  .extend({
+    citations: riyaReplySchema.shape.citations.min(1),
+  })
+  .strict();
+
+export const riyaGroundedProviderWireSchema = riyaProviderWireSchema
+  .extend({ reply: riyaGroundedReplySchema })
+  .strict();
+
+/**
  * The POST-SUMMARY grounded answer (RWC-P7, ADR-0103 §16).
  *
  * A reply, and structurally nothing else. `.strict()` with a single key, so this schema cannot
@@ -271,6 +287,6 @@ export type RiyaProviderWireOutput = z.infer<typeof riyaProviderWireSchema>;
  * confirming a summary or submitting an intake. The narrowest way to guarantee that is a schema with
  * nowhere to put it.
  */
-export const riyaGroundedReplyOutputSchema = z.object({ reply: riyaReplySchema }).strict();
+export const riyaGroundedReplyOutputSchema = z.object({ reply: riyaGroundedReplySchema }).strict();
 
 export type RiyaGroundedReplyOutput = z.infer<typeof riyaGroundedReplyOutputSchema>;
