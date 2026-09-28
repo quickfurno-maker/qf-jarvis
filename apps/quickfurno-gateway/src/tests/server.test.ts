@@ -1,4 +1,9 @@
 import { generateKeyPairSync, sign, verify } from 'node:crypto';
+import {
+  createServer as createHttpServer,
+  type RequestListener,
+  type Server as HttpServer,
+} from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -98,9 +103,10 @@ function memoryTurnSpool() {
 }
 
 const servers: ReturnType<typeof createGatewayServer>[] = [];
+const upstreamServers: HttpServer[] = [];
 afterEach(async () => {
   await Promise.all(
-    servers.splice(0).map(
+    [...servers.splice(0), ...upstreamServers.splice(0)].map(
       (server) =>
         new Promise<void>((resolve) => {
           server.close(() => {
@@ -111,9 +117,13 @@ afterEach(async () => {
   );
 });
 
-async function startServer(now: Date, turnSpool?: DurableTurnSpool): Promise<string> {
+async function startServer(
+  now: Date,
+  turnSpool?: DurableTurnSpool,
+  configOverride: GatewayConfig = config,
+): Promise<string> {
   const server = createGatewayServer({
-    config,
+    config: configOverride,
     now: () => now,
     ...(turnSpool ? { turnSpool } : {}),
   });
@@ -126,6 +136,17 @@ async function startServer(now: Date, turnSpool?: DurableTurnSpool): Promise<str
   });
   const address = server.address() as AddressInfo;
   return `http://127.0.0.1:${String(address.port)}`;
+}
+
+async function startPrivateRiyaUpstream(handler: RequestListener): Promise<string> {
+  const server = createHttpServer(handler);
+  upstreamServers.push(server);
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve());
+  });
+  const address = server.address() as AddressInfo;
+  return `http://127.0.0.1:${String(address.port)}/`;
 }
 
 function challenge(now: Date, requestId = '22222222-2222-4222-8222-222222222222') {
@@ -305,6 +326,76 @@ describe('QuickFurno gateway HTTP boundary', () => {
       body,
     });
     expect(response.status).toBe(401);
+  });
+
+  it('fails closed for private Riya when no internal runtime is configured', async () => {
+    const base = await startServer(new Date('2026-09-18T12:00:00.000Z'));
+    const response = await fetch(`${base}/internal/v1/riya/web-turn`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [KEY_ID_HEADER]: 'quickfurno-test',
+        [SIGNATURE_HEADER]: 'signature-placeholder',
+      },
+      body: JSON.stringify({ version: 2 }),
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: 'service_unavailable' });
+  });
+
+  it('proxies private Riya bytes and signature headers without interpreting them', async () => {
+    const observed: {
+      body: string | undefined;
+      keyId: string | undefined;
+      signature: string | undefined;
+      path: string | undefined;
+    } = { body: undefined, keyId: undefined, signature: undefined, path: undefined };
+    const upstreamUrl = await startPrivateRiyaUpstream((request, response) => {
+      void (async () => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        observed.body = Buffer.concat(chunks).toString('utf8');
+        observed.keyId = request.headers[KEY_ID_HEADER] as string | undefined;
+        observed.signature = request.headers[SIGNATURE_HEADER] as string | undefined;
+        observed.path = request.url ?? undefined;
+        const payload = JSON.stringify({
+          protocol: 'qfj.riya.web.ingress',
+          version: 2,
+          disposition: 'PROCESSED',
+          qualificationProposal: null,
+        });
+        response.writeHead(200, {
+          'content-type': 'application/json; charset=utf-8',
+          'content-length': Buffer.byteLength(payload),
+        });
+        response.end(payload);
+      })();
+    });
+    const proxyConfig: GatewayConfig = { ...config, privateRiyaUpstreamUrl: upstreamUrl };
+    const base = await startServer(new Date('2026-09-18T12:00:00.000Z'), undefined, proxyConfig);
+    const body = '{"version":2,"answerText":"around two months"}';
+    const response = await fetch(`${base}/internal/v1/riya/web-turn`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [KEY_ID_HEADER]: 'qf-core-key',
+        [SIGNATURE_HEADER]: 'exact-signature',
+      },
+      body,
+    });
+
+    expect(response.status).toBe(200);
+    expect(observed).toEqual({
+      body,
+      keyId: 'qf-core-key',
+      signature: 'exact-signature',
+      path: '/internal/v1/riya/web-turn',
+    });
+    expect(await response.json()).toMatchObject({
+      protocol: 'qfj.riya.web.ingress',
+      version: 2,
+      disposition: 'PROCESSED',
+    });
   });
 
   it('durably accepts a signed WhatsApp turn and stores no normalized text', async () => {
