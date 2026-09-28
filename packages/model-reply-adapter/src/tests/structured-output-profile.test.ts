@@ -210,7 +210,6 @@ describe('no profile: the path this package always had', () => {
     expect(reasonCode['description']).toBe(
       'Machine token only. When non-null, use ASCII letters, digits, dot, underscore, colon, or hyphen; no spaces or other punctuation.',
     );
-
     expect(
       genericReplyWireSchema.safeParse({
         kind: 'ESCALATE_TO_HUMAN',

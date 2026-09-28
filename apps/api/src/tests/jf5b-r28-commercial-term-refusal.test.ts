@@ -67,6 +67,7 @@ describe('JF-5B-R28 owner-reviewed commercial-term refusal', () => {
     expect(REFUSAL_CUES.commercialTermDiscountRefusalSuffixes).toStrictEqual([
       ' ya koi bhi commercial term confirm ya offer nahi kar sakta',
       ' ya koi bhi commercial term confirm ya offer nahi kar sakti',
+      ' pradan karne mein saksham nahi hoon',
     ]);
   });
 });
