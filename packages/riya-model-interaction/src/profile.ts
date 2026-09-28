@@ -222,7 +222,7 @@ export function createRiyaConversationModelProfile(args: {
             evolution: {
               version: 1,
               observations: wire.data.observations,
-              skipProjectDetails: wire.data.projectDetails === 'SKIP',
+              skipProjectDetails: wire.data.skipProjectDetails === 'SKIP',
               questionPlan: {
                 phase: wire.data.questionPhase,
                 questionFields: wire.data.questionFields,
