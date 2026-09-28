@@ -255,6 +255,27 @@ describe('hybrid grounding reaches the generic model request without leaking gov
       expect(modelRequests).toHaveLength(1);
       expect(hybrid.seen).toHaveLength(1);
 
+      // Grounded turns must make the citation requirement visible at the provider schema boundary,
+      // not merely reject an empty list after the provider has already spent a call producing it.
+      const structuredSchema = modelRequests[0]?.structuredSchema;
+      expect(structuredSchema).toBeDefined();
+      expect(
+        structuredSchema?.safeParse({
+          kind: 'REPLY',
+          replyBody: 'Synthetic grounded reply.',
+          reasonCode: null,
+          citations: [],
+        }).success,
+      ).toBe(false);
+      expect(
+        structuredSchema?.safeParse({
+          kind: 'REPLY',
+          replyBody: 'Synthetic grounded reply.',
+          reasonCode: null,
+          citations: [{ knowledgeId: 'kb.hybrid', version: 1 }],
+        }).success,
+      ).toBe(true);
+
       const user = modelRequests[0]?.messages.find((message) => message.role === 'user')?.content;
       expect(user).toBeDefined();
       const payload = JSON.parse(user ?? '') as {
