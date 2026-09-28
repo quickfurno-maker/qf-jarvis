@@ -25,6 +25,7 @@ import { z } from 'zod';
 
 import {
   riyaGroundedReplyOutputSchema,
+  riyaProviderWireSchema,
   riyaStructuredOutputSchema,
 } from '../internal/output-schema.js';
 
@@ -102,6 +103,25 @@ describe('the rendered Riya schemas satisfy the real Groq strict subset', () => 
     const rendered = render(schema);
     expect(Object.keys(rendered)).not.toContain('$defs');
     expect(JSON.stringify(rendered)).not.toContain('$ref');
+  });
+});
+
+describe('R29 provider guidance is visible without widening the Riya schema', () => {
+  const provider = (): Node => render(riyaProviderWireSchema);
+
+  it('pins the top-level reply/evolution shape in the provider schema', () => {
+    expect(provider()['description']).toContain('exactly two top-level keys: reply and evolution');
+  });
+
+  it('pins skipProjectDetails to a boolean and questionPlan to an object', () => {
+    const evolution = (provider()['properties'] as Node)['evolution'] as Node;
+    const properties = evolution['properties'] as Node;
+    expect((properties['skipProjectDetails'] as Node)['description']).toContain(
+      'Required boolean only',
+    );
+    expect((properties['questionPlan'] as Node)['description']).toContain(
+      'Required object with exactly phase and questionFields',
+    );
   });
 });
 

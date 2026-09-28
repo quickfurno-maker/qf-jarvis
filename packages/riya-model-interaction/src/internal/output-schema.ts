@@ -204,8 +204,14 @@ const evolutionSchema = z
     // The container, not an array. See the note above: the array-of-union this replaced is the exact
     // fragment SDH4's R4 probe proved Groq rejects.
     observations: observationsSchema,
-    skipProjectDetails: z.boolean(),
-    questionPlan: questionPlanSchema,
+    skipProjectDetails: z
+      .boolean()
+      .describe(
+        'Required boolean only: true or false. Never null, string, number, object, or array.',
+      ),
+    questionPlan: questionPlanSchema.describe(
+      'Required object with exactly phase and questionFields. Never null, string, number, or array.',
+    ),
   })
   .strict();
 
@@ -253,8 +259,15 @@ export type RiyaStructuredOutput = z.infer<typeof riyaStructuredOutputSchema>;
  */
 const riyaProviderEvolutionSchema = evolutionSchema.omit({ version: true });
 export const riyaProviderWireSchema = riyaStructuredOutputSchema
-  .extend({ evolution: riyaProviderEvolutionSchema })
-  .strict();
+  .extend({
+    evolution: riyaProviderEvolutionSchema.describe(
+      'Required evolution object. Supply observations, skipProjectDetails and questionPlan exactly as typed.',
+    ),
+  })
+  .strict()
+  .describe(
+    'Return exactly two top-level keys: reply and evolution. Do not add any other top-level key.',
+  );
 export type RiyaProviderWireOutput = z.infer<typeof riyaProviderWireSchema>;
 
 /**

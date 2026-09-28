@@ -210,6 +210,9 @@ describe('no profile: the path this package always had', () => {
     expect(reasonCode['description']).toBe(
       'Machine token only. When non-null, use ASCII letters, digits, dot, underscore, colon, or hyphen; no spaces or other punctuation.',
     );
+    const citations = properties['citations'] as Record<string, unknown>;
+    expect(citations['description']).toContain('copy the exact knowledgeId and version');
+    expect(citations['description']).toContain('Never invent a citation');
 
     expect(
       genericReplyWireSchema.safeParse({
