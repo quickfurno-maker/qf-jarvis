@@ -18,7 +18,7 @@ const summary = (naraCandidates: readonly string[] = []): string =>
     ciConclusion: 'success',
     outputDirectory: 'D:/jarvis-certification/JF-5B/run-r25',
     runId: 'run.jf5b.r25',
-    groqCertificationModelId: 'openai/gpt-oss-120b',
+    groqCertificationModelId: 'qwen/qwen3.8-27b',
     naraCandidates,
   }).join('\n');
 describe('JF-5B-R25 retired Nara CLI surface', () => {
