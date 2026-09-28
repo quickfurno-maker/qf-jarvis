@@ -242,19 +242,44 @@ export const riyaStructuredOutputSchema = z
 export type RiyaStructuredOutput = z.infer<typeof riyaStructuredOutputSchema>;
 
 /**
- * The provider WIRE shape (JF-5B-R14). `evolution.version` is protocol bookkeeping, not a model
- * decision: the canonical observation constructor already pins version 1. Run-17 proved all six
- * Groq/Riya malformed generations independently failed that literal, so asking the model to mint it
- * adds a failure mode and no authority.
+ * The provider WIRE shape (JF-5B-R30).
  *
- * The wire therefore omits exactly that one field. Projection injects canonical `version: 1` and
- * re-proves the resulting value against `riyaStructuredOutputSchema`; every business-bearing field
- * and every existing semantic gate stays unchanged.
+ * The canonical Riya object stays nested and boolean-rich because that is the correct local semantic
+ * contract. Groq's strict generator has repeatedly produced complete JSON that fails specifically on
+ * the nested `evolution.skipProjectDetails` boolean and nested `questionPlan` object, even when the
+ * rest of the answer is sound. Those failures moved between ordinary Riya cases across live runs,
+ * which makes them a provider-encoding instability rather than a business-rule failure.
+ *
+ * The provider wire is therefore deliberately flatter and uses a closed string disposition for the
+ * one boolean. No authority is moved to the provider: projection reconstructs the canonical nested
+ * object, injects protocol version 1, and re-proves it through `riyaStructuredOutputSchema` before
+ * any observation or question-plan claim can survive.
  */
-const riyaProviderEvolutionSchema = evolutionSchema.omit({ version: true });
-export const riyaProviderWireSchema = riyaStructuredOutputSchema
-  .extend({ evolution: riyaProviderEvolutionSchema })
+export const RIYA_PROVIDER_PROJECT_DETAILS = ['KEEP', 'SKIP'] as const;
+
+const providerQuestionPhaseSchema = z.enum(
+  RIYA_CONVERSATION_PHASES.filter(
+    (phase) => phase !== 'CONTACT' && phase !== 'CONSENT' && phase !== 'COMPLETE',
+  ) as unknown as [string, ...string[]],
+);
+
+export const riyaProviderWireSchema = z
+  .object({
+    reply: riyaReplySchema,
+    observations: observationsSchema,
+    projectDetails: z
+      .enum(RIYA_PROVIDER_PROJECT_DETAILS)
+      .describe('KEEP unless the client explicitly declined project-detail questions; otherwise SKIP.'),
+    questionPhase: providerQuestionPhaseSchema.describe(
+      'Proposed next conversation phase. The runtime independently recomputes and verifies it.',
+    ),
+    questionFields: z
+      .array(FIELD)
+      .max(2)
+      .describe('Zero to two proposed next discovery fields, in the exact order to ask them.'),
+  })
   .strict();
+
 export type RiyaProviderWireOutput = z.infer<typeof riyaProviderWireSchema>;
 
 /**
