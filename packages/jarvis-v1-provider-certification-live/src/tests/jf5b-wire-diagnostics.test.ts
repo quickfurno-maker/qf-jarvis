@@ -118,6 +118,36 @@ describe('JF-5B-R8 (1,2) the observer is invisible to the provider', () => {
   });
 });
 
+describe('JF-5B-R31 Groq rate-limit diagnostics stay closed and bounded', () => {
+  it('reduces a TPD 429 to a closed dimension plus bounded retry-after only', () => {
+    const bodyText = JSON.stringify({
+      error: {
+        message:
+          'Rate limit reached for model hidden in organization hidden on tokens per day (TPD): Limit hidden.',
+        type: 'tokens',
+        code: 'rate_limit_exceeded',
+      },
+    });
+    const facts = groqFactsFrom({ status: 429, retryAfterSeconds: 37, bodyText });
+    expect(facts.rateLimitDimension).toBe('TPD');
+    expect(facts.retryAfterSeconds).toBe(37);
+    expect(JSON.stringify(facts)).not.toContain('organization');
+    expect(JSON.stringify(facts)).not.toContain('model hidden');
+  });
+
+  it('does not guess a quota dimension from arbitrary provider prose', () => {
+    const facts = groqFactsFrom({
+      status: 429,
+      retryAfterSeconds: null,
+      bodyText: JSON.stringify({
+        error: { message: 'some other limit', code: 'rate_limit_exceeded' },
+      }),
+    });
+    expect(facts.rateLimitDimension).toBeUndefined();
+    expect(facts.retryAfterSeconds).toBeUndefined();
+  });
+});
+
 describe('JF-5B-R8 (3,4,5) the malformed stage, named', () => {
   it('(3) an unparseable HTTP body is HTTP_BODY_JSON_INVALID', () => {
     const facts = groqFactsFrom({ status: 200, retryAfterSeconds: null, bodyText: 'not json' });
@@ -252,6 +282,12 @@ describe('JF-5B-R8 (6,7) what is captured, and what is refused', () => {
       'length',
       'complete',
       'eos',
+      'RPM',
+      'RPD',
+      'TPM',
+      'TPD',
+      'ITPM',
+      'OTPM',
     ];
     const entries: readonly (readonly [string, unknown])[] = Object.entries(
       facts as unknown as Record<string, unknown>,
