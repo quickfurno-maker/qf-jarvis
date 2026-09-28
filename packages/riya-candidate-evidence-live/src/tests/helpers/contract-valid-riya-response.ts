@@ -124,12 +124,15 @@ export function evolutionPayload(args: {
       reasonCode: null,
       citations: args.citations.map((one) => ({ ...one })),
     },
-    // JF-5B-R30: keep evolution as the provider group; simplify only its unstable members.
     evolution: {
+      // JF-5B-R14: provider wire omits canonical protocol version; Jarvis injects version 1.
+      // POST-SDH4: the observation container, with both arrays required and empty.
       observations: { sets: [], clears: [] },
-      skipProjectDetails: 'KEEP',
-      questionPhase: decided.questionPlan.phase,
-      questionFields: [...decided.questionPlan.questionFields],
+      skipProjectDetails: false,
+      questionPlan: {
+        phase: decided.questionPlan.phase,
+        questionFields: [...decided.questionPlan.questionFields],
+      },
     },
   };
 }
