@@ -125,11 +125,9 @@ function riyaAnswer(
     evolution: {
       // JF-5B-R14: provider wire omits protocol version; Jarvis injects canonical version 1.
       observations: providerObservations(observations),
-      skipProjectDetails: false,
-      questionPlan: {
-        phase: decided.questionPlan.phase,
-        questionFields: [...decided.questionPlan.questionFields],
-      },
+      skipProjectDetails: 'KEEP',
+      questionPhase: decided.questionPlan.phase,
+      questionFields: [...decided.questionPlan.questionFields],
     },
   };
 }
