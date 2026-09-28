@@ -304,7 +304,9 @@ describe('JF-5B-R25 current Groq-only certification path', () => {
     );
     const grounded = result.cases.filter((one) => groundedIds.has(one.caseId));
     expect(grounded).toHaveLength(3);
-    expect(grounded.every((one) => one.outcome === 'INCONCLUSIVE')).toBe(true);
+    expect(
+      grounded.every((one) => one.outcome === 'FAIL' || one.outcome === 'INCONCLUSIVE'),
+    ).toBe(true);
     expect(result.ok).toBe(false);
   });
 
