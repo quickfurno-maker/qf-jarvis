@@ -21,6 +21,7 @@ import { createCoreDecisionAdapter } from '@qf-jarvis/core-decision-adapter';
 import {
   DEFAULT_STRUCTURED_OUTPUT_PROFILE,
   createModelReplyAdapter,
+  genericReplyWireSchema,
 } from '@qf-jarvis/model-reply-adapter';
 import { RIYA_COMPLETION_BUDGET_TOKENS } from '@qf-jarvis/riya-model-interaction';
 import type {
@@ -139,6 +140,19 @@ interface SharedGroundedKnowledge {
 }
 
 /**
+ * A grounded generic turn is structurally different from an ordinary generic turn in exactly one
+ * respect: the reply must cite at least one governed record the model was shown. The downstream M4
+ * citation gate still proves that every cited id/version was actually supplied; this provider-facing
+ * minimum merely prevents a strict-schema provider from returning an otherwise-valid empty citation
+ * array that production will deterministically refuse.
+ */
+const GROUNDED_REPLY_WIRE_SCHEMA = genericReplyWireSchema
+  .extend({
+    citations: genericReplyWireSchema.shape.citations.min(1),
+  })
+  .strict();
+
+/**
  * Generic reply profile for a shared grounded turn.
  *
  * It keeps the ordinary strict reply schema and projection byte-for-byte, changing only the user
@@ -148,7 +162,7 @@ function sharedGroundedReplyProfile(
   bridge: RiyaGroundedKnowledgeBridge,
 ): ModelReplyStructuredOutputProfile {
   return Object.freeze({
-    structuredSchema: DEFAULT_STRUCTURED_OUTPUT_PROFILE.structuredSchema,
+    structuredSchema: GROUNDED_REPLY_WIRE_SCHEMA,
     buildUserContent(plan: ReplyPlan) {
       const groundedKnowledge = bridge.readCaptured();
       if (groundedKnowledge === undefined || groundedKnowledge.records.length === 0) {
@@ -165,7 +179,7 @@ function sharedGroundedReplyProfile(
     },
     projectStructuredResult(value: unknown) {
       const projected = DEFAULT_STRUCTURED_OUTPUT_PROFILE.projectStructuredResult(value);
-      if (projected?.reply.kind === 'REPLY' && projected.reply.citations.length === 0) {
+      if (projected !== undefined && projected.reply.citations.length === 0) {
         return undefined;
       }
       return projected;
