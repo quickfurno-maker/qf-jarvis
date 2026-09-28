@@ -269,7 +269,9 @@ export const riyaProviderWireSchema = z
     observations: observationsSchema,
     skipProjectDetails: z
       .enum(RIYA_PROVIDER_SKIP_PROJECT_DETAILS)
-      .describe('KEEP unless the client explicitly declined project-detail questions; otherwise SKIP.'),
+      .describe(
+        'KEEP unless the client explicitly declined project-detail questions; otherwise SKIP.',
+      ),
     questionPhase: providerQuestionPhaseSchema.describe(
       'Proposed next conversation phase. The runtime independently recomputes and verifies it.',
     ),

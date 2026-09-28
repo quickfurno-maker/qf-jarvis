@@ -151,7 +151,9 @@ const GROUNDED_GENERIC_REPLY_WIRE_SCHEMA = genericReplyWireSchema
   .extend({
     citations: genericReplyWireSchema.shape.citations
       .min(1)
-      .describe('At least one citation is required because governed reference knowledge was supplied.'),
+      .describe(
+        'At least one citation is required because governed reference knowledge was supplied.',
+      ),
   })
   .strict();
 
