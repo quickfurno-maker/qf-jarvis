@@ -341,6 +341,20 @@ describe('a grounded answer must cite what it read', () => {
       groundedKnowledgeSource: () => GROUNDED,
     });
 
+  it('makes the grounded citation requirement visible in the provider wire schema', () => {
+    const empty = evolutionAnswer([]);
+    const exact = evolutionAnswer([{ knowledgeId: 'kb.faq.installation', version: 3 }]);
+    const { version: _emptyVersion, ...emptyEvolution } = empty.evolution;
+    const { version: _exactVersion, ...exactEvolution } = exact.evolution;
+
+    expect(
+      grounded().structuredSchema.safeParse({ ...empty, evolution: emptyEvolution }).success,
+    ).toBe(false);
+    expect(
+      grounded().structuredSchema.safeParse({ ...exact, evolution: exactEvolution }).success,
+    ).toBe(true);
+  });
+
   it('accepts an exact authorized citation', () => {
     const projected = grounded().projectStructuredResult(
       evolutionAnswer([{ knowledgeId: 'kb.faq.installation', version: 3 }]),
