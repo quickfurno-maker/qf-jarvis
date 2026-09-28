@@ -478,7 +478,11 @@ describe('the prompt states the rules a reviewer must never have to re-find', ()
   it('holds the continuity and discovery rules', () => {
     expect(lower).toContain('do not restart at the beginning');
     expect(lower).toContain('do not re-ask');
-    expect(lower).toContain('skipprojectdetails');
+    expect(lower).toContain('projectdetails');
+    expect(lower).toContain('keep');
+    expect(lower).toContain('skip');
+    expect(lower).toContain('questionphase');
+    expect(lower).toContain('questionfields');
     expect(lower).toContain('user_stated');
     expect(lower).toContain('model_inferred');
   });
