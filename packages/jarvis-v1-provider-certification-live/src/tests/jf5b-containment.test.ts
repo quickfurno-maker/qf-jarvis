@@ -210,6 +210,10 @@ describe('JF-5B the certification operator is off the serving path', () => {
       // acquires a credential, performs I/O or activates a provider.
       'packages/jarvis-v1-production-seal/src/index.ts',
       'packages/jarvis-v1-production-seal/src/tests/production-seal.test.ts',
+      // ADR-0175: the separately exported OpenAI v1 seal consumes only the exact OpenAI certification
+      // manifest/bindings. It is offline, pure, credential-free and not reachable from serving code.
+      'packages/jarvis-v1-production-seal/src/openai-v1/index.ts',
+      'packages/jarvis-v1-production-seal/src/tests/openai-v1-production-seal.test.ts',
     ];
     const importers: string[] = [];
     for (const root of [repoPath('packages'), repoPath('apps')]) {
