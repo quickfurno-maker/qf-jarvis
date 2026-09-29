@@ -35,6 +35,7 @@
 import {
   GROQ_CANONICAL_PROVIDER_ID,
   NARA_CANONICAL_PROVIDER_ID,
+  OPENAI_CANONICAL_PROVIDER_ID,
 } from '../contracts/provider-identity.js';
 import type { HybridRoutingPolicyInput } from './hybrid-routing-policy.js';
 
@@ -47,9 +48,10 @@ import type { HybridRoutingPolicyInput } from './hybrid-routing-policy.js';
  */
 export const GROQ_PROVIDER_ID = GROQ_CANONICAL_PROVIDER_ID;
 export const NARA_PROVIDER_ID = NARA_CANONICAL_PROVIDER_ID;
+export const OPENAI_PROVIDER_ID = OPENAI_CANONICAL_PROVIDER_ID;
 
 /** The closed provider-selection mode. Anything else is refused, never coerced. */
-export const PROVIDER_MODES = ['AUTO', 'GROQ_ONLY', 'NARA_ONLY'] as const;
+export const PROVIDER_MODES = ['AUTO', 'GROQ_ONLY', 'NARA_ONLY', 'OPENAI_ONLY'] as const;
 export type ProviderMode = (typeof PROVIDER_MODES)[number];
 
 export function isProviderMode(value: unknown): value is ProviderMode {
@@ -86,6 +88,8 @@ export function hostedOrderForProviderMode(mode: ProviderMode): readonly string[
       return Object.freeze([GROQ_PROVIDER_ID]);
     case 'NARA_ONLY':
       return Object.freeze([NARA_PROVIDER_ID]);
+    case 'OPENAI_ONLY':
+      return Object.freeze([OPENAI_PROVIDER_ID]);
   }
 }
 

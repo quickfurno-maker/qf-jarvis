@@ -80,6 +80,7 @@ const isDesignatedAdapter = (f: string): boolean =>
  * this application assembles everything, so a directory exception would let a third file appear there
  * unnoticed.
  */
+const OPENAI_CREDENTIAL_BINDING = 'src/secrets/file-openai-credential-binding.ts';
 const JF5B_BIN = 'src/bin/run-jf5b-live-certification.ts';
 const JF5B_CLI = 'src/cli/run-jf5b-live-certification.ts';
 const JF5B_COMPOSITION = 'src/composition/jf5b-live-composition.ts';
@@ -468,6 +469,11 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
           expect(code, file).not.toContain("from 'openai");
           continue;
         }
+        if (forbidden === 'openai' && normalise(file).endsWith(`/${OPENAI_CREDENTIAL_BINDING}`)) {
+          expect(code, file).not.toContain("from 'openai'");
+          expect(code, file).not.toContain('openai.com');
+          continue;
+        }
         expect(code, `${file}: ${forbidden}`).not.toContain(forbidden);
       }
       // Database vocabulary is confined to five exact modules. JF-7 adds a bounded config parser
@@ -708,6 +714,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       '@qf-jarvis/model-evaluation',
       '@qf-jarvis/model-gateway',
       '@qf-jarvis/model-gateway-composition',
+      // ADR-0174: bounded complexity classification and certified-release routing are pure policy
+      // controls. The package holds no provider credential, network client, database or execution port.
+      '@qf-jarvis/model-intelligence-control',
       '@qf-jarvis/model-reply-adapter',
       '@qf-jarvis/openai-compatible-embedding-adapter',
       '@qf-jarvis/postgres-approval-queue',
@@ -728,6 +737,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       '@qf-jarvis/rag-provisioning',
       '@qf-jarvis/riya-prompts',
       '@qf-jarvis/riya-web-conversation-service',
+      // ADR-0174: context compression and the bounded public-knowledge cache are authority-free
+      // transformations. Production persistence and live business truth remain outside this package.
+      '@qf-jarvis/semantic-context-engine',
       // ADR-0159: pure, strict content-free telemetry schema shared by the private worker writer and
       // Jarvis OS reader. It grants no database, provider, transport or business authority.
       '@qf-jarvis/worker-observation-contract',
@@ -1104,6 +1116,12 @@ describe('(78, 79, 80, 81) repository invariants', () => {
           // forbidden here -- a driver type would mean the spec was reasoning about rows.
           expect(statement, name).not.toMatch(/from ['"]pg['"]/);
           expect(statement, name).not.toMatch(/\b(supabase|dockerode|groq-sdk|openai)\b/);
+          continue;
+        }
+        if (
+          name === 'file-openai-credential-binding.test.ts' &&
+          statement.includes('../secrets/file-openai-credential-binding.js')
+        ) {
           continue;
         }
         expect(statement).not.toMatch(/\b(pg|postgres|supabase|dockerode|groq-sdk|openai)\b/);

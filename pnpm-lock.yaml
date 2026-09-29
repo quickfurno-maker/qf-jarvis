@@ -116,6 +116,9 @@ importers:
       '@qf-jarvis/model-gateway-composition':
         specifier: workspace:*
         version: link:../../packages/model-gateway-composition
+      '@qf-jarvis/model-intelligence-control':
+        specifier: workspace:*
+        version: link:../../packages/model-intelligence-control
       '@qf-jarvis/model-reply-adapter':
         specifier: workspace:*
         version: link:../../packages/model-reply-adapter
@@ -155,6 +158,9 @@ importers:
       '@qf-jarvis/riya-web-conversation-service':
         specifier: workspace:*
         version: link:../../packages/riya-web-conversation-service
+      '@qf-jarvis/semantic-context-engine':
+        specifier: workspace:*
+        version: link:../../packages/semantic-context-engine
       '@qf-jarvis/worker-observation-contract':
         specifier: workspace:*
         version: link:../../packages/worker-observation-contract

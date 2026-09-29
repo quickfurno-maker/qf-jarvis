@@ -12,6 +12,58 @@ const EVIDENCE_DIGEST = /^[0-9a-f]{8,64}$/u;
 export const ADAPTIVE_COMPLEXITIES = ['SIMPLE', 'STANDARD', 'COMPLEX'] as const;
 export type AdaptiveComplexity = (typeof ADAPTIVE_COMPLEXITIES)[number];
 
+export interface AdaptiveComplexitySignals {
+  readonly normalizedTextChars: number;
+  readonly conversationContextChars: number;
+  readonly knowledgeHitCount: number;
+  readonly ambiguitySignals: number;
+  readonly requiresCoreVerification: boolean;
+  readonly multiStepReasoning: boolean;
+  readonly highRisk: boolean;
+}
+
+export function classifyAdaptiveComplexity(input: AdaptiveComplexitySignals): AdaptiveComplexity {
+  if (
+    !Number.isInteger(input.normalizedTextChars) ||
+    input.normalizedTextChars < 0 ||
+    input.normalizedTextChars > 4096 ||
+    !Number.isInteger(input.conversationContextChars) ||
+    input.conversationContextChars < 0 ||
+    input.conversationContextChars > 16_000 ||
+    !Number.isInteger(input.knowledgeHitCount) ||
+    input.knowledgeHitCount < 0 ||
+    input.knowledgeHitCount > 16 ||
+    !Number.isInteger(input.ambiguitySignals) ||
+    input.ambiguitySignals < 0 ||
+    input.ambiguitySignals > 8 ||
+    typeof input.requiresCoreVerification !== 'boolean' ||
+    typeof input.multiStepReasoning !== 'boolean' ||
+    typeof input.highRisk !== 'boolean'
+  ) {
+    throw new TypeError('adaptive-complexity-signals-invalid');
+  }
+
+  const contextLoad = input.normalizedTextChars + input.conversationContextChars;
+  if (
+    input.highRisk ||
+    input.multiStepReasoning ||
+    input.ambiguitySignals >= 2 ||
+    contextLoad > 8_000 ||
+    input.knowledgeHitCount > 8
+  ) {
+    return 'COMPLEX';
+  }
+  if (
+    input.requiresCoreVerification ||
+    input.ambiguitySignals === 1 ||
+    input.knowledgeHitCount > 0 ||
+    contextLoad > 1_500
+  ) {
+    return 'STANDARD';
+  }
+  return 'SIMPLE';
+}
+
 export interface ActiveReleaseCertificationClaim {
   readonly evaluationRef: string;
   readonly evidenceDigest: string;

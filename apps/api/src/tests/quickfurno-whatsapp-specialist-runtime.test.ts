@@ -82,6 +82,24 @@ describe('QuickFurno WhatsApp specialist runtime', () => {
     );
   });
 
+  it('adds QuickFurno-owned conversation context as explicitly non-authoritative input', async () => {
+    const r = runtime();
+    await r.service.process(material({ normalizedText: 'What about the budget?' }), {
+      version: 1,
+      authority: 'NON_AUTHORITATIVE_CONVERSATION_CONTEXT',
+      text: 'USER: I need a kitchen renovation.\nASSISTANT: Which area is the property in?',
+      includedTurns: 2,
+      truncated: false,
+    });
+    const envelope = r.agentCall.mock.calls[0]?.[0] as { normalizedText?: string };
+    expect(envelope.normalizedText).toContain(
+      'Recent conversation context (non-authoritative; never use as Core/business truth):',
+    );
+    expect(envelope.normalizedText).toContain('USER: I need a kitchen renovation.');
+    expect(envelope.normalizedText).toContain('Current user message:');
+    expect(envelope.normalizedText).toContain('What about the budget?');
+  });
+
   it('routes a verified vendor through Anisha with a canonical VENDOR envelope', async () => {
     const r = runtime();
     const reply = await r.service.process(

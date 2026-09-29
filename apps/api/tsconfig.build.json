@@ -15,6 +15,9 @@
     { "path": "../../packages/model-gateway" },
     { "path": "../../packages/model-evaluation/tsconfig.build.json" },
     { "path": "../../packages/model-gateway-composition/tsconfig.build.json" },
+    // ADR-0174: adaptive routing is a direct production import. Keep the pure policy package in the
+    // project graph so clean CI builds its declarations before apps/api.
+    { "path": "../../packages/model-intelligence-control/tsconfig.build.json" },
     { "path": "../../packages/prompt-registry/tsconfig.build.json" },
     // QFJ-P08-B3 (ADR-0078): the durable runtime composition module. These three are the only new
     // production edges, and they exist solely so `src/runtime/durable-jarvis-runtime.ts` can create a
@@ -82,6 +85,9 @@
     { "path": "../../packages/knowledge-freshness/tsconfig.build.json" },
     { "path": "../../packages/knowledge-ingestion/tsconfig.build.json" },
     { "path": "../../packages/knowledge-index/tsconfig.build.json" },
+    // ADR-0174: bounded context composition and public semantic caching are direct production imports.
+    // This reference prevents clean CI from relying on a developer's pre-existing dist output.
+    { "path": "../../packages/semantic-context-engine/tsconfig.build.json" },
     // RAG V2 production worker: both packages are direct runtime imports from
     // quickfurno-whatsapp/production-worker.ts. Keep them explicit project references so a CLEAN
     // checkout builds their declarations before the API rather than relying on stale local dist/.

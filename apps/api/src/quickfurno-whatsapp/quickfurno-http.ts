@@ -1,5 +1,8 @@
 import { createHash, createPrivateKey, sign, type KeyObject } from 'node:crypto';
 import {
+  QFJ_WHATSAPP_CONVERSATION_CONTEXT_PATH,
+  QFJ_WHATSAPP_CONVERSATION_CONTEXT_PROTOCOL,
+  QFJ_WHATSAPP_CONVERSATION_CONTEXT_SIGNING_DOMAIN,
   QFJ_WHATSAPP_REPLY_PATH,
   QFJ_WHATSAPP_REPLY_PROTOCOL,
   QFJ_WHATSAPP_REPLY_QUALIFICATION_SIGNING_DOMAIN,
@@ -10,6 +13,7 @@ import {
   type QuickFurnoLeadQualificationMaterialV1,
   type QuickFurnoQualificationProposal,
   type QuickFurnoWhatsAppAuthorityStateV2,
+  type QuickFurnoWhatsAppConversationContextEnvelopeV1,
   type QuickFurnoWhatsAppReplyProposal,
   type QuickFurnoWhatsAppTurnMaterialV2,
   type QuickFurnoWhatsAppWorkerMaterial,
@@ -751,6 +755,78 @@ function parseQualificationMaterial(
   });
 }
 
+function parseConversationContext(
+  value: unknown,
+  requestId: string,
+): QuickFurnoWhatsAppConversationContextEnvelopeV1 | null {
+  if (
+    !isRecord(value) ||
+    !onlyKeys(value, [
+      'protocol',
+      'version',
+      'requestId',
+      'tenantId',
+      'conversationId',
+      'revision',
+      'inboundMessageId',
+      'context',
+    ]) ||
+    value['protocol'] !== QFJ_WHATSAPP_CONVERSATION_CONTEXT_PROTOCOL ||
+    value['version'] !== 1 ||
+    value['requestId'] !== requestId ||
+    value['tenantId'] !== 'quickfurno' ||
+    typeof value['conversationId'] !== 'string' ||
+    !UUID.test(value['conversationId']) ||
+    typeof value['revision'] !== 'number' ||
+    !Number.isSafeInteger(value['revision']) ||
+    value['revision'] < 0 ||
+    typeof value['inboundMessageId'] !== 'string' ||
+    !UUID.test(value['inboundMessageId']) ||
+    !isRecord(value['context'])
+  ) {
+    return null;
+  }
+  const context = value['context'];
+  if (
+    !onlyKeys(context, ['version', 'authority', 'text', 'includedTurns', 'truncated']) ||
+    context['version'] !== 1 ||
+    context['authority'] !== 'NON_AUTHORITATIVE_CONVERSATION_CONTEXT' ||
+    typeof context['text'] !== 'string' ||
+    context['text'].length > 4000 ||
+    typeof context['includedTurns'] !== 'number' ||
+    !Number.isSafeInteger(context['includedTurns']) ||
+    context['includedTurns'] < 0 ||
+    context['includedTurns'] > 12 ||
+    typeof context['truncated'] !== 'boolean'
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    protocol: QFJ_WHATSAPP_CONVERSATION_CONTEXT_PROTOCOL,
+    version: 1 as const,
+    requestId,
+    tenantId: 'quickfurno' as const,
+    conversationId: value['conversationId'],
+    revision: value['revision'],
+    inboundMessageId: value['inboundMessageId'],
+    context: Object.freeze({
+      version: 1 as const,
+      authority: 'NON_AUTHORITATIVE_CONVERSATION_CONTEXT' as const,
+      text: context['text'],
+      includedTurns: context['includedTurns'],
+      truncated: context['truncated'],
+    }),
+  });
+}
+
+export interface QuickFurnoWhatsAppConversationContextReader {
+  read(input: {
+    readonly conversationId: string;
+    readonly inboundMessageId: string;
+    readonly expectedRevision: number;
+  }): Promise<QuickFurnoWhatsAppConversationContextEnvelopeV1>;
+}
+
 export interface QuickFurnoWhatsAppMaterialReader {
   read(input: {
     readonly conversationId: string;
@@ -853,6 +929,84 @@ export function createQuickFurnoWhatsAppMaterialReader(
     },
   });
 }
+
+export function createQuickFurnoWhatsAppConversationContextReader(
+  config: QuickFurnoWhatsAppHttpConfig,
+): QuickFurnoWhatsAppConversationContextReader {
+  const { key, timeoutMs } = parsePrivateKey(config);
+  return Object.freeze({
+    async read(input: {
+      readonly conversationId: string;
+      readonly inboundMessageId: string;
+      readonly expectedRevision: number;
+    }) {
+      if (
+        !UUID.test(input.conversationId) ||
+        !UUID.test(input.inboundMessageId) ||
+        !Number.isSafeInteger(input.expectedRevision) ||
+        input.expectedRevision < 0
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
+      const requestId = config.requestId();
+      const issuedAt = config.clock();
+      if (
+        !UUID.test(requestId) ||
+        !INSTANT.test(issuedAt) ||
+        !Number.isFinite(Date.parse(issuedAt))
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
+      const body = JSON.stringify({
+        protocol: QFJ_WHATSAPP_CONVERSATION_CONTEXT_PROTOCOL,
+        version: 1,
+        caller: CALLER,
+        audience: AUDIENCE,
+        requestId,
+        issuedAt,
+        tenantId: 'quickfurno',
+        conversationId: input.conversationId,
+        inboundMessageId: input.inboundMessageId,
+        expectedRevision: input.expectedRevision,
+      });
+      const response = await signedPost({
+        config,
+        key,
+        timeoutMs,
+        path: QFJ_WHATSAPP_CONVERSATION_CONTEXT_PATH,
+        domain: QFJ_WHATSAPP_CONVERSATION_CONTEXT_SIGNING_DOMAIN,
+        requestId,
+        issuedAt,
+        body,
+      });
+      if (response.status === 409) throw new QuickFurnoWhatsAppHttpError('stale-revision');
+      if (response.status !== 200) throw new QuickFurnoWhatsAppHttpError('request-failed');
+      const text = await response.text();
+      if (
+        Buffer.byteLength(text, 'utf8') < 2 ||
+        Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      const context = parseConversationContext(parsed, requestId);
+      if (
+        context?.conversationId !== input.conversationId ||
+        context.inboundMessageId !== input.inboundMessageId ||
+        context.revision !== input.expectedRevision
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      return context;
+    },
+  });
+}
+
 export interface QuickFurnoWhatsAppAuthorityReader {
   read(input: {
     readonly tenantId: string;

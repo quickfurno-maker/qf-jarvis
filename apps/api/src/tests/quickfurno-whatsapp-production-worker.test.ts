@@ -95,9 +95,9 @@ function validConfig(root: string) {
       },
     },
     concurrency: {
-      globalMaxConcurrentTurns: 60,
-      maxConcurrentByAgent: { RIYA: 20, ANISHA: 20, AAROHI: 20 },
-      modelGateway: { maxConcurrent: 20, maxQueue: 40 },
+      globalMaxConcurrentTurns: 200,
+      maxConcurrentByAgent: { RIYA: 200, ANISHA: 200, AAROHI: 200 },
+      modelGateway: { maxConcurrent: 50, maxQueue: 150 },
     },
     spoolDirectory: spool,
     killSwitchFile: kill,
@@ -120,14 +120,15 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     expect(config.knowledge.mode).toBe('HYBRID');
     if (config.knowledge.mode !== 'HYBRID') throw new Error('expected hybrid knowledge');
     expect(config.knowledge.revision).toBe('knowledge.quickfurno.release.1');
+    expect(config.knowledge.semanticCache).toEqual({ mode: 'DISABLED' });
     expect(config.knowledge.embedding.bearerToken).toBe(
       'synthetic-embedding-token-not-used-by-loader-test',
     );
     expect(config.database?.applicationName).toBe('qf-jarvis-whatsapp-worker');
     expect(config.concurrency).toEqual({
-      globalMaxConcurrentTurns: 60,
-      maxConcurrentByAgent: { RIYA: 20, ANISHA: 20, AAROHI: 20 },
-      modelGateway: { maxConcurrent: 20, maxQueue: 40 },
+      globalMaxConcurrentTurns: 200,
+      maxConcurrentByAgent: { RIYA: 200, ANISHA: 200, AAROHI: 200 },
+      modelGateway: { maxConcurrent: 50, maxQueue: 150 },
     });
     expect(config.seal).toEqual({});
   });
@@ -181,6 +182,53 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     expect(loaded.decisionIntelligence.minConfidence).toBe(0.76);
     expect(loaded.decisionIntelligence.maxConcurrent).toBe(6);
     expect(String(loaded.decisionIntelligence.apiKey)).toBe('[REDACTED_TYPESAFE_API_KEY]');
+  });
+
+  it('loads only explicit public-topic semantic caching and refuses duplicate topics', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const config = validConfig(root);
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...config,
+        knowledge: {
+          ...config.knowledge,
+          semanticCache: {
+            mode: 'PUBLIC_KNOWLEDGE_ONLY',
+            maxEntries: 1500,
+            threshold: 0.98,
+            publicTopics: ['faq.homeowner', 'faq.vendor'],
+          },
+        },
+      }),
+    );
+    const loaded = loadQuickFurnoWhatsAppProductionWorkerConfig(path);
+    expect(loaded.knowledge.mode).toBe('HYBRID');
+    if (loaded.knowledge.mode !== 'HYBRID') throw new Error('expected hybrid knowledge');
+    expect(loaded.knowledge.semanticCache).toEqual({
+      mode: 'PUBLIC_KNOWLEDGE_ONLY',
+      maxEntries: 1500,
+      threshold: 0.98,
+      publicTopics: ['faq.homeowner', 'faq.vendor'],
+    });
+
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...config,
+        knowledge: {
+          ...config.knowledge,
+          semanticCache: {
+            mode: 'PUBLIC_KNOWLEDGE_ONLY',
+            publicTopics: ['faq.homeowner', 'faq.homeowner'],
+          },
+        },
+      }),
+    );
+    expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+      'production-worker-config-invalid',
+    );
   });
 
   it('refuses database configuration when knowledge is explicitly DISABLED', () => {
@@ -274,7 +322,7 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     );
   });
 
-  it('refuses concurrency that exceeds a 20-turn agent lane or cannot absorb all admitted turns', () => {
+  it('refuses concurrency that exceeds a 200-turn agent lane or cannot absorb all admitted turns', () => {
     const root = tempRoot();
     const path = join(root, 'worker.json');
     const config = validConfig(root);
@@ -284,7 +332,7 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
         ...config,
         concurrency: {
           ...config.concurrency,
-          maxConcurrentByAgent: { RIYA: 21, ANISHA: 20, AAROHI: 20 },
+          maxConcurrentByAgent: { RIYA: 201, ANISHA: 200, AAROHI: 200 },
         },
       }),
     );
@@ -298,7 +346,7 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
         ...config,
         concurrency: {
           ...config.concurrency,
-          modelGateway: { maxConcurrent: 10, maxQueue: 10 },
+          modelGateway: { maxConcurrent: 20, maxQueue: 20 },
         },
       }),
     );
@@ -353,6 +401,8 @@ describe('QuickFurno WhatsApp production worker containment', () => {
     expect(worker).toContain('assertPostgresKnowledgeReleaseReady');
     expect(worker).toContain('createPostgresHybridCandidateStore');
     expect(worker).toContain('createHybridKnowledgeRetriever');
+    expect(worker).toContain('createInMemoryPublicKnowledgeSemanticCache');
+    expect(worker).toContain("hybridConfig.semanticCache.mode === 'PUBLIC_KNOWLEDGE_ONLY'");
     expect(worker).toContain('knowledgeRevision: hybridConfig.revision');
     expect(worker).toContain(
       '...(agentHybridKnowledge === undefined ? {} : { agentHybridKnowledge })',
@@ -401,7 +451,12 @@ describe('QuickFurno WhatsApp production worker containment', () => {
     expect(worker).toContain('killSwitch,');
   });
 
-  it('routes production turns through the bounded parallel scheduler and configurable model gate', () => {
+  it('routes production turns through certified adaptive specialist routing and the bounded scheduler', () => {
+    expect(worker).toContain('createAdaptiveQuickFurnoWhatsAppSpecialistRuntime');
+    expect(worker).toContain('activeReleaseIds: [binding.release.releaseId]');
+    expect(worker).toContain('SIMPLE: activeRoute');
+    expect(worker).toContain('STANDARD: activeRoute');
+    expect(worker).toContain('COMPLEX: activeRoute');
     expect(worker).toContain('createQuickFurnoWhatsAppParallelScheduler');
     expect(worker).toContain(
       'globalMaxConcurrentTurns: config.concurrency.globalMaxConcurrentTurns',

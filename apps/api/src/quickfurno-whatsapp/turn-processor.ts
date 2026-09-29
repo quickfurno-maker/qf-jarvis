@@ -1,4 +1,5 @@
 import type {
+  QuickFurnoWhatsAppConversationContextReader,
   QuickFurnoWhatsAppMaterialReader,
   QuickFurnoWhatsAppReplyWriter,
 } from './quickfurno-http.js';
@@ -47,6 +48,7 @@ export interface QuickFurnoWhatsAppTurnProcessor {
 export interface QuickFurnoWhatsAppTurnProcessorConfig {
   readonly queue: QuickFurnoWhatsAppTurnQueue;
   readonly materialReader: QuickFurnoWhatsAppMaterialReader;
+  readonly conversationContextReader?: QuickFurnoWhatsAppConversationContextReader;
   readonly specialistRuntime: QuickFurnoWhatsAppSpecialistRuntime;
   readonly replyWriter: QuickFurnoWhatsAppReplyWriter;
 }
@@ -85,18 +87,33 @@ export function createQuickFurnoWhatsAppTurnProcessor(
     ref: QuickFurnoWhatsAppTurnReference,
   ): Promise<QuickFurnoWhatsAppProcessorOutcome> => {
     let material;
+    let conversationContext;
     try {
-      material = await config.materialReader.read({
-        conversationId: ref.conversationId,
-        inboundMessageId: ref.inboundMessageId,
-        expectedRevision: ref.conversationRevision,
-        ...(ref.turnPurpose === 'lead_qualification'
-          ? {
-              turnPurpose: 'lead_qualification' as const,
-              qualificationRequestId: ref.qualificationRequestId,
-            }
-          : {}),
-      });
+      const contextPromise =
+        ref.turnPurpose === 'lead_qualification' || config.conversationContextReader === undefined
+          ? Promise.resolve(undefined)
+          : config.conversationContextReader
+              .read({
+                conversationId: ref.conversationId,
+                inboundMessageId: ref.inboundMessageId,
+                expectedRevision: ref.conversationRevision,
+              })
+              .then((envelope) => envelope.context)
+              .catch(() => undefined);
+      [material, conversationContext] = await Promise.all([
+        config.materialReader.read({
+          conversationId: ref.conversationId,
+          inboundMessageId: ref.inboundMessageId,
+          expectedRevision: ref.conversationRevision,
+          ...(ref.turnPurpose === 'lead_qualification'
+            ? {
+                turnPurpose: 'lead_qualification' as const,
+                qualificationRequestId: ref.qualificationRequestId,
+              }
+            : {}),
+        }),
+        contextPromise,
+      ]);
     } catch (error) {
       if (error instanceof QuickFurnoWhatsAppHttpError && error.code === 'request-failed') {
         await config.queue.release(ref.inboundMessageId);
@@ -116,7 +133,7 @@ export function createQuickFurnoWhatsAppTurnProcessor(
     }
     let proposal;
     try {
-      proposal = await config.specialistRuntime.process(material);
+      proposal = await config.specialistRuntime.process(material, conversationContext);
     } catch {
       await config.queue.fail(ref.inboundMessageId);
       return 'failed-indeterminate';

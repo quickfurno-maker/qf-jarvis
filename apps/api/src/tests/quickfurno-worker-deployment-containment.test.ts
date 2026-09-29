@@ -91,13 +91,13 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(deploy).toContain('compose.jev.yml');
   });
 
-  it('declares the certified 20+20+20 chat envelope separately from provider concurrency', () => {
-    expect(example).toContain('"globalMaxConcurrentTurns": 60');
-    expect(example).toContain('"RIYA": 20');
-    expect(example).toContain('"ANISHA": 20');
-    expect(example).toContain('"AAROHI": 20');
-    expect(example).toContain('"maxConcurrent": 20');
-    expect(example).toContain('"maxQueue": 40');
+  it('declares the 200-client chat envelope separately from provider concurrency', () => {
+    expect(example).toContain('"globalMaxConcurrentTurns": 200');
+    expect(example).toContain('"RIYA": 200');
+    expect(example).toContain('"ANISHA": 200');
+    expect(example).toContain('"AAROHI": 200');
+    expect(example).toContain('"maxConcurrent": 50');
+    expect(example).toContain('"maxQueue": 150');
     expect(compose).toContain('stop_grace_period: 120s');
     expect(compose).toContain("cpus: '1.50'");
     expect(compose).toContain('memory: 2048m');

@@ -76,18 +76,18 @@ const databaseSchema = z
 
 const concurrencySchema = z
   .object({
-    globalMaxConcurrentTurns: z.number().int().min(1).max(60),
+    globalMaxConcurrentTurns: z.number().int().min(1).max(200),
     maxConcurrentByAgent: z
       .object({
-        RIYA: z.number().int().min(1).max(20),
-        ANISHA: z.number().int().min(1).max(20),
-        AAROHI: z.number().int().min(1).max(20),
+        RIYA: z.number().int().min(1).max(200),
+        ANISHA: z.number().int().min(1).max(200),
+        AAROHI: z.number().int().min(1).max(200),
       })
       .strict(),
     modelGateway: z
       .object({
-        maxConcurrent: z.number().int().min(1).max(60),
-        maxQueue: z.number().int().min(0).max(120),
+        maxConcurrent: z.number().int().min(1).max(200),
+        maxQueue: z.number().int().min(0).max(400),
       })
       .strict(),
   })
@@ -125,6 +125,23 @@ const decisionIntelligenceSchema = z.union([
     .strict(),
 ]);
 
+const semanticCacheSchema = z.union([
+  z.object({ mode: z.literal('DISABLED') }).strict(),
+  z
+    .object({
+      mode: z.literal('PUBLIC_KNOWLEDGE_ONLY'),
+      maxEntries: z.number().int().min(1).max(10_000).default(2_000),
+      threshold: z.number().min(0.9).max(1).default(0.97),
+      publicTopics: z.array(z.string().regex(REF)).min(1).max(256),
+    })
+    .strict()
+    .superRefine((value, ctx) => {
+      if (new Set(value.publicTopics).size !== value.publicTopics.length) {
+        ctx.addIssue({ code: 'custom', message: 'semantic cache topics must be unique' });
+      }
+    }),
+]);
+
 const knowledgeSchema = z.union([
   z.object({ mode: z.literal('DISABLED') }).strict(),
   z
@@ -135,6 +152,7 @@ const knowledgeSchema = z.union([
         .regex(REF)
         .refine((value) => value.toLowerCase() !== 'latest'),
       embedding: embeddingSchema,
+      semanticCache: semanticCacheSchema.default({ mode: 'DISABLED' }),
       agents: z
         .object({
           RIYA: searchPolicySchema,
@@ -228,6 +246,14 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
           maxBatchItems: number;
           maxInputChars: number;
         }>;
+        semanticCache:
+          | Readonly<{ mode: 'DISABLED' }>
+          | Readonly<{
+              mode: 'PUBLIC_KNOWLEDGE_ONLY';
+              maxEntries: number;
+              threshold: number;
+              publicTopics: readonly string[];
+            }>;
         agents: Readonly<Record<'RIYA' | 'ANISHA' | 'AAROHI', AgentHybridKnowledgeSearchPolicy>>;
       }>;
   readonly concurrency: Readonly<{
@@ -335,6 +361,15 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
         maxBatchItems: embedding.maxBatchItems,
         maxInputChars: embedding.maxInputChars,
       }),
+      semanticCache:
+        input.knowledge.semanticCache.mode === 'DISABLED'
+          ? Object.freeze({ mode: 'DISABLED' as const })
+          : Object.freeze({
+              mode: 'PUBLIC_KNOWLEDGE_ONLY' as const,
+              maxEntries: input.knowledge.semanticCache.maxEntries,
+              threshold: input.knowledge.semanticCache.threshold,
+              publicTopics: Object.freeze([...input.knowledge.semanticCache.publicTopics]),
+            }),
       agents: Object.freeze({
         RIYA: Object.freeze({ ...input.knowledge.agents.RIYA }),
         ANISHA: Object.freeze({ ...input.knowledge.agents.ANISHA }),

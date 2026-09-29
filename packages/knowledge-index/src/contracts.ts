@@ -169,10 +169,40 @@ export interface HybridRetrievalObservability {
   onEvent(event: HybridRetrievalEvent): void;
 }
 
+export interface HybridSemanticCacheDescriptor {
+  readonly knowledgeRevision: string;
+  readonly embeddingModelRef: string;
+  readonly tenantId: string;
+  readonly agentScope: KnowledgeAgentScope;
+  readonly purpose: KnowledgePurpose;
+  readonly dataClass: KnowledgeDataClass;
+  readonly asOf: string;
+  readonly topicFilters: readonly string[];
+  readonly candidatePool: number;
+  readonly maxResults: number;
+  readonly maxContentChars: number;
+  readonly queryEmbedding: readonly number[];
+}
+
+export interface HybridSemanticCacheWrite extends HybridSemanticCacheDescriptor {
+  readonly result: Extract<HybridKnowledgeRetrievalResult, { readonly ok: true }>;
+  readonly effectiveFrom: string;
+  readonly expiresAt: string | undefined;
+  readonly classifications: readonly KnowledgeDataClass[];
+}
+
+export interface HybridSemanticCachePort {
+  read(
+    descriptor: HybridSemanticCacheDescriptor,
+  ): Promise<HybridKnowledgeRetrievalResult | undefined>;
+  write(entry: HybridSemanticCacheWrite): Promise<void>;
+}
+
 export interface HybridKnowledgeRetrieverOptions {
   readonly embedding: KnowledgeEmbeddingPort;
   readonly store: HybridCandidateStore;
   readonly reranker?: KnowledgeRerankerPort;
   readonly privacyGate?: KnowledgePrivacyGate;
+  readonly semanticCache?: HybridSemanticCachePort;
   readonly observability?: HybridRetrievalObservability;
 }
