@@ -5,11 +5,11 @@ import { BoundedSemaphore } from '../reliability/semaphore.js';
 describe('production model-gateway capacity envelope', () => {
   it('admits 50 active requests, queues 150, and refuses request 201+ without unbounded waiting', async () => {
     const semaphore = new BoundedSemaphore(50, 150);
-    const outcomes: Array<
+    const outcomes: (
       | { readonly acquired: true }
       | { readonly acquired: false; readonly refusal: 'concurrency-limit' | 'queue-full' }
       | undefined
-    > = Array.from({ length: 250 });
+    )[] = Array.from({ length: 250 });
 
     const acquisitions = Array.from({ length: 250 }, (_, index) =>
       semaphore.acquire().then((outcome) => {
