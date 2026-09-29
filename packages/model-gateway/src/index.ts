@@ -201,6 +201,8 @@ export {
   OpenAIModelProvider,
   OpenAIApiKey,
   createOpenAIApiKey,
+  type OpenAICredentialReference,
+  type OpenAICredentialResolver,
   createOpenAIProviderConfig,
   createFetchOpenAITransport,
   OPENAI_RESPONSES_ENDPOINT,

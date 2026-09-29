@@ -80,6 +80,7 @@ const isDesignatedAdapter = (f: string): boolean =>
  * this application assembles everything, so a directory exception would let a third file appear there
  * unnoticed.
  */
+const OPENAI_CREDENTIAL_BINDING = 'src/secrets/file-openai-credential-binding.ts';
 const JF5B_BIN = 'src/bin/run-jf5b-live-certification.ts';
 const JF5B_CLI = 'src/cli/run-jf5b-live-certification.ts';
 const JF5B_COMPOSITION = 'src/composition/jf5b-live-composition.ts';
@@ -466,6 +467,11 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
           expect(code, file).toContain("jf5b_groq_model_id = 'openai/gpt-oss-120b'");
           // Still no SDK and no client: the id is a string, and the transport stays in the gateway.
           expect(code, file).not.toContain("from 'openai");
+          continue;
+        }
+        if (forbidden === 'openai' && normalise(file).endsWith(`/${OPENAI_CREDENTIAL_BINDING}`)) {
+          expect(code, file).not.toContain("from 'openai'");
+          expect(code, file).not.toContain('openai.com');
           continue;
         }
         expect(code, `${file}: ${forbidden}`).not.toContain(forbidden);
@@ -1104,6 +1110,12 @@ describe('(78, 79, 80, 81) repository invariants', () => {
           // forbidden here -- a driver type would mean the spec was reasoning about rows.
           expect(statement, name).not.toMatch(/from ['"]pg['"]/);
           expect(statement, name).not.toMatch(/\b(supabase|dockerode|groq-sdk|openai)\b/);
+          continue;
+        }
+        if (
+          name === 'file-openai-credential-binding.test.ts' &&
+          statement.includes('../secrets/file-openai-credential-binding.js')
+        ) {
           continue;
         }
         expect(statement).not.toMatch(/\b(pg|postgres|supabase|dockerode|groq-sdk|openai)\b/);

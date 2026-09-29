@@ -16,6 +16,7 @@ import { decideFallover } from '../routing/failover-policy.js';
 import {
   GROQ_PROVIDER_ID,
   NARA_PROVIDER_ID,
+  OPENAI_PROVIDER_ID,
   PROVIDER_MODES,
   fallbackPermittedForProviderMode,
   hostedOrderForProviderMode,
@@ -57,12 +58,14 @@ function stubProvider(providerId: string, executionClass: ProviderExecutionClass
 
 const GROQ = stubProvider(GROQ_PROVIDER_ID, 'HOSTED');
 const NARA = stubProvider(NARA_PROVIDER_ID, 'HOSTED');
+const OPENAI = stubProvider(OPENAI_PROVIDER_ID, 'HOSTED');
 const LOCAL = stubProvider('local-workstation', 'LOCAL');
-const ROSTER = [GROQ, NARA, LOCAL];
+const ROSTER = [GROQ, NARA, OPENAI, LOCAL];
 
 const ALL_HEALTHY = new Map<string, boolean>([
   [GROQ_PROVIDER_ID, true],
   [NARA_PROVIDER_ID, true],
+  [OPENAI_PROVIDER_ID, true],
   ['local-workstation', true],
 ]);
 const NO_CIRCUIT_OPEN = (): boolean => false;
@@ -84,8 +87,8 @@ function request(overrides: Partial<ModelRequest> = {}): ModelRequest {
 }
 
 describe('JF-2A provider mode is a closed, validated union', () => {
-  it('21. accepts exactly the three V1 modes', () => {
-    expect([...PROVIDER_MODES]).toStrictEqual(['AUTO', 'GROQ_ONLY', 'NARA_ONLY']);
+  it('21. accepts exactly the governed provider modes', () => {
+    expect([...PROVIDER_MODES]).toStrictEqual(['AUTO', 'GROQ_ONLY', 'NARA_ONLY', 'OPENAI_ONLY']);
     for (const mode of PROVIDER_MODES) {
       expect(isProviderMode(mode)).toBe(true);
       expect(parseProviderMode(mode)).toBe(mode);
@@ -130,6 +133,14 @@ describe('JF-2A mode → hosted order mapping', () => {
     expect(providerEligibleUnderMode('NARA_ONLY', GROQ_PROVIDER_ID)).toBe(false);
     expect(providerEligibleUnderMode('NARA_ONLY', NARA_PROVIDER_ID)).toBe(true);
     expect(fallbackPermittedForProviderMode('NARA_ONLY')).toBe(false);
+  });
+
+  it('19c. OPENAI_ONLY makes Groq and Nara ineligible', () => {
+    expect(hostedOrderForProviderMode('OPENAI_ONLY')).toStrictEqual([OPENAI_PROVIDER_ID]);
+    expect(providerEligibleUnderMode('OPENAI_ONLY', GROQ_PROVIDER_ID)).toBe(false);
+    expect(providerEligibleUnderMode('OPENAI_ONLY', NARA_PROVIDER_ID)).toBe(false);
+    expect(providerEligibleUnderMode('OPENAI_ONLY', OPENAI_PROVIDER_ID)).toBe(true);
+    expect(fallbackPermittedForProviderMode('OPENAI_ONLY')).toBe(false);
   });
 
   it('builds a policy the EXISTING validator accepts', () => {

@@ -6,7 +6,7 @@
  * caller branches on the literal, and cannot enumerate or mutate the set.
  *
  * Nothing here is secret-bearing. The optional credential-resolver seam is the EXISTING gateway
- * `GroqCredentialResolver` interface, carried as an opaque reference only; no implementation of it
+ * `GroqCredentialResolver` / `OpenAICredentialResolver` interfaces, carried as opaque references only; no implementation
  * ships here and it is never called.
  *
  * ### JF-2B: two modes, and only two
@@ -14,7 +14,7 @@
  * The composition now admits `OFF` and `ACTIVE`. It still refuses `SHADOW`, `CANARY` and `FALLBACK`,
  * and that refusal is not an oversight — those are MODEL-RELEASE rollout stages belonging to
  * `ProviderRolloutController`, which governs a stable/candidate release pair. `ProviderMode`
- * (`AUTO` / `GROQ_ONLY` / `NARA_ONLY`) is a PROVIDER-SELECTION axis. Wiring a rollout controller into
+ * (`AUTO` / `GROQ_ONLY` / `NARA_ONLY` / `OPENAI_ONLY`) is a PROVIDER-SELECTION axis. Wiring a rollout controller into
  * this hybrid composition to obtain those labels would make the controller take precedence over
  * `routingProfile`, and the two systems would fight: the rollout would be choosing a release while the
  * provider mode believed it was choosing a vendor. They stay separate.
@@ -35,6 +35,7 @@ import type {
   GatewayMode,
   GatewayObservabilityHook,
   GroqCredentialResolver,
+  OpenAICredentialResolver,
   ModelCapabilityRegistry,
   ModelGateway,
   ModelProvider,
@@ -198,7 +199,7 @@ export interface ProductionCompositionConfig {
    * reused rather than re-abstracted. S2-B ships no implementation and NEVER calls it: providers arrive
    * already constructed, so no credential is resolved anywhere in this package.
    */
-  readonly credentialResolver?: GroqCredentialResolver;
+  readonly credentialResolver?: GroqCredentialResolver | OpenAICredentialResolver;
   /**
    * QFJ-S2-C-B (ADR-0063 §6): the evaluation evidence this composition will honour.
    *
