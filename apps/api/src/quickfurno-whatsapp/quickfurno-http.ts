@@ -439,6 +439,13 @@ function parseAuthorityState(
   // every signed authority read so actor drift cannot silently become a different specialist turn.
   if (partyType !== canonicalPartyType(subjectType)) return null;
   const canonicalActor = canonicalActorForSubject(subjectType);
+  const isRiyaFirstContact =
+    actor === 'RIYA' &&
+    subjectType === 'client' &&
+    partyType === 'CLIENT' &&
+    dataClass === 'HOSTED_ALLOWED' &&
+    subjectStatus === 'in-progress' &&
+    subjectRef === undefined;
   if (
     value['jarvisAllowed'] &&
     (canonicalActor === null ||
@@ -448,8 +455,7 @@ function parseAuthorityState(
       value['aiPaused'] ||
       value['cancelled'] ||
       dataClass === 'HUMAN_ONLY' ||
-      subjectStatus !== 'clear' ||
-      subjectRef === undefined)
+      (!isRiyaFirstContact && (subjectStatus !== 'clear' || subjectRef === undefined)))
   ) {
     return null;
   }
