@@ -2,6 +2,11 @@ import { randomUUID } from 'node:crypto';
 
 import { createRuntimePolicy } from '@qf-jarvis/agent-runtime';
 import {
+  createFetchTypeSafeTransport,
+  createJevDecisionShadowPort,
+  JevDecisionProvider,
+} from '@qf-jarvis/jev-decision-adapter';
+import {
   closeDatabasePool,
   createDatabasePool,
   type DatabasePool,
@@ -146,6 +151,32 @@ export async function createQuickFurnoWhatsAppProductionWorker(
     throw new Error('production-model-gateway-refused');
   }
 
+  let decisionShadowPort;
+  if (config.decisionIntelligence.mode === 'SHADOW') {
+    const jev = new JevDecisionProvider({
+      model: config.decisionIntelligence.model,
+      apiKey: config.decisionIntelligence.apiKey,
+      transport: createFetchTypeSafeTransport(),
+    });
+    let discoveredModels: readonly string[];
+    try {
+      discoveredModels = await jev.listModels(
+        AbortSignal.timeout(config.decisionIntelligence.timeoutMs),
+      );
+    } catch {
+      throw new Error('production-jev-discovery-failed');
+    }
+    if (!discoveredModels.includes(config.decisionIntelligence.model)) {
+      throw new Error('production-jev-model-unavailable');
+    }
+    decisionShadowPort = createJevDecisionShadowPort({
+      provider: jev,
+      timeoutMs: config.decisionIntelligence.timeoutMs,
+      minConfidence: config.decisionIntelligence.minConfidence,
+      maxConcurrent: config.decisionIntelligence.maxConcurrent,
+    });
+  }
+
   let pool: DatabasePool | undefined;
   if (config.knowledge.mode === 'HYBRID') {
     if (config.database === undefined) throw new Error('production-worker-config-invalid');
@@ -272,6 +303,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       promptRegistry,
       capabilityProfileRef: binding.capabilityProfileRef,
       gatewayInvoker: observedGatewayInvoker,
+      ...(decisionShadowPort === undefined ? {} : { decisionShadowPort }),
       ...(agentHybridKnowledge === undefined ? {} : { agentHybridKnowledge }),
       requireEvaluationRef: true,
       provenanceRefs: {

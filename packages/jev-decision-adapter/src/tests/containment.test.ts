@@ -12,7 +12,10 @@ const manifest = JSON.parse(readFileSync(join(PKG, 'package.json'), 'utf8')) as 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) return sourceFiles(path);
+    if (entry.isDirectory()) {
+      if (entry.name === 'dist' || entry.name === 'node_modules') return [];
+      return sourceFiles(path);
+    }
     return entry.isFile() && path.endsWith('.ts') && !path.includes(join('src', 'tests'))
       ? [path]
       : [];
@@ -53,11 +56,15 @@ describe('TypeSafe Jev containment', () => {
     );
   });
 
-  it('is not composed by production yet; activation requires a separate reviewed slice', () => {
+  it('is composed only by the reviewed WhatsApp production boundary', () => {
     const refs = repositoryProductionSources()
       .filter((path) => !path.startsWith(join(PKG, 'src')))
       .filter((path) => readFileSync(path, 'utf8').includes('@qf-jarvis/jev-decision-adapter'))
-      .map((path) => relative(ROOT, path).replaceAll('\\', '/'));
-    expect(refs).toStrictEqual([]);
+      .map((path) => relative(ROOT, path).replaceAll('\\', '/'))
+      .sort();
+    expect(refs).toStrictEqual([
+      'apps/api/src/quickfurno-whatsapp/production-worker-config.ts',
+      'apps/api/src/quickfurno-whatsapp/production-worker.ts',
+    ]);
   });
 });

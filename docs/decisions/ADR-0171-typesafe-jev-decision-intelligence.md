@@ -36,7 +36,12 @@ of the assignment vocabulary.
 
 ## Activation
 
-This ADR establishes code and containment only. Production activation requires a separately installed
-TypeSafe credential, authenticated model discovery, representative evaluation, confidence-threshold
-calibration, observability, budget/rate-limit policy, and a deployment composition that remains
-fail-closed when Jev is unavailable.
+Production SHADOW composition is implemented but remains disabled by default. When an operator
+explicitly selects SHADOW, the worker requires a separately mounted TypeSafe credential, performs
+authenticated model discovery before it can reach READY, and refuses startup when the configured
+model is unavailable. Jev calls are separately bounded by timeout and concurrency; saturation drops
+shadow work rather than adding a customer-turn queue.
+
+Promotion beyond SHADOW requires representative evaluation, confidence-threshold calibration,
+decision observability, and a separate authority review. No Jev result may mutate agent assignment,
+authorize an action, authorize execution, replace QuickFurno Core truth, or bypass any existing gate.

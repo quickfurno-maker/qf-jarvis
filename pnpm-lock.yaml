@@ -95,6 +95,9 @@ importers:
       '@qf-jarvis/jarvis-v1-provider-certification-live':
         specifier: workspace:*
         version: link:../../packages/jarvis-v1-provider-certification-live
+      '@qf-jarvis/jev-decision-adapter':
+        specifier: workspace:*
+        version: link:../../packages/jev-decision-adapter
       '@qf-jarvis/knowledge-freshness':
         specifier: workspace:*
         version: link:../../packages/knowledge-freshness

@@ -1,0 +1,10 @@
+{
+  "decisionIntelligence": {
+    "mode": "SHADOW",
+    "model": "jev-latest",
+    "credentialFile": "/run/secrets/typesafe-jev-production.key",
+    "timeoutMs": 1200,
+    "minConfidence": 0.7,
+    "maxConcurrent": 8
+  }
+}

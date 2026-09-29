@@ -63,6 +63,22 @@ HYBRID knowledge is a separately governed capability. Use
 Switching from DISABLED to HYBRID creates a new certification lineage; it is not a configuration-only
 activation.
 
+## TypeSafe Jev decision shadow
+
+Jev is OFF by default. To collect bounded System One decision evidence without changing customer
+turns, use the SHADOW overlay in `worker-config.jev-shadow.example.json` and deploy with
+`QFJ_WORKER_JEV_MODE=SHADOW`.
+
+SHADOW additionally requires
+`/srv/qf-jarvis/secrets/typesafe-jev-production.key`, owned by `10003:10002` with mode 0400 or 0600. The key is mounted read-only only in SHADOW mode. Do not place it in the repository, config
+JSON, logs, reports, or chat.
+
+At startup the worker authenticates to TypeSafe model discovery and refuses READY if the configured
+model is unavailable. During serving, Jev is advisory only: calls have a hard timeout and concurrency
+ceiling, saturation skips shadow observation instead of delaying the customer turn, and every Jev
+failure leaves the existing governed LLM/Core path unchanged. Jev cannot assign an agent, authorize
+an action, execute anything, mutate Core state, or send a message.
+
 ## Base runtime files
 
 Install these before deployment; do not commit their real contents:

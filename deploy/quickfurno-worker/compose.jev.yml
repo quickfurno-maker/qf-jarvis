@@ -1,0 +1,7 @@
+services:
+  quickfurno-worker:
+    volumes:
+      - type: bind
+        source: /srv/qf-jarvis/secrets/typesafe-jev-production.key
+        target: /run/secrets/typesafe-jev-production.key
+        read_only: true

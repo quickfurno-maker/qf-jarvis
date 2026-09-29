@@ -66,6 +66,10 @@
     { "path": "../../packages/core-decision-adapter/tsconfig.build.json" },
     { "path": "../../packages/core-decision-http-transport/tsconfig.build.json" },
     { "path": "../../packages/model-reply-adapter/tsconfig.build.json" },
+    // ADR-0171: production WhatsApp may compose Jev only as bounded decision SHADOW intelligence.
+    // Keep the adapter as an explicit project reference so clean CI checkouts build its declarations
+    // before apps/api instead of accidentally depending on a developer's stale local dist/.
+    { "path": "../../packages/jev-decision-adapter/tsconfig.build.json" },
     { "path": "../../packages/riya-prompts/tsconfig.build.json" },
     // The synthetic certification context builds its Core availability snapshot through that
     // package's OWN public parser rather than casting a hand-written object into its contract. One

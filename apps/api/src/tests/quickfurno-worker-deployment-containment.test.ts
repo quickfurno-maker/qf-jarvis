@@ -13,6 +13,8 @@ const activate = read('deploy/quickfurno-worker/activate.sh');
 const disable = read('deploy/quickfurno-worker/disable.sh');
 const verifyMerged = read('deploy/quickfurno-worker/verify-merged-sha.sh');
 const example = read('deploy/quickfurno-worker/worker-config.example.json');
+const jevCompose = read('deploy/quickfurno-worker/compose.jev.yml');
+const jevExample = read('deploy/quickfurno-worker/worker-config.jev-shadow.example.json');
 const gatewayCompose = read('deploy/quickfurno-gateway/compose.production.yml');
 
 describe('QuickFurno production worker deployment containment', () => {
@@ -75,6 +77,18 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(example).not.toContain('postgres-ca.pem');
     expect(example).toContain('"sealFile": "/run/secrets/jf5c-production-seal.json"');
     expect(example).toContain('"groqCredentialFile": "/run/secrets/groq-production.key"');
+  });
+
+  it('keeps TypeSafe Jev opt-in, secret-mounted, and shadow-only at deployment', () => {
+    expect(example).toContain('"decisionIntelligence": {');
+    expect(example).toContain('"mode": "DISABLED"');
+    expect(compose).not.toContain('typesafe-jev-production.key');
+    expect(jevCompose).toContain('source: /srv/qf-jarvis/secrets/typesafe-jev-production.key');
+    expect(jevCompose).toContain('target: /run/secrets/typesafe-jev-production.key');
+    expect(jevExample).toContain('"mode": "SHADOW"');
+    expect(jevExample).toContain('"model": "jev-latest"');
+    expect(deploy).toContain('QFJ_WORKER_JEV_MODE');
+    expect(deploy).toContain('compose.jev.yml');
   });
 
   it('declares the certified 20+20+20 chat envelope separately from provider concurrency', () => {

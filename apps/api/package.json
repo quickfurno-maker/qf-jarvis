@@ -31,6 +31,7 @@
     "@qf-jarvis/governed-memory-foundation": "workspace:*",
     "@qf-jarvis/groq-staging-smoke": "workspace:*",
     "@qf-jarvis/jarvis-runtime": "workspace:*",
+    "@qf-jarvis/jev-decision-adapter": "workspace:*",
     "@qf-jarvis/jarvis-v1-production-profile": "workspace:*",
     "@qf-jarvis/jarvis-v1-production-seal": "workspace:*",
     "@qf-jarvis/jarvis-v1-provider-certification-live": "workspace:*",
