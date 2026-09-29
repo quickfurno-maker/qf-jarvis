@@ -1,14 +1,15 @@
 # Governed Knowledge and Capabilities — QF Jarvis
 
-**Status:** Approved architecture (Phase 4.1). **Not implemented.**
+**Status:** Historical Phase 4.1 architecture; subsequently implemented and hardened by later ADRs.
 **Date:** 2026-07-16
 **Decision:** [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)
+**Current authority lock:** [ADR-0173](../decisions/ADR-0173-conversation-knowledge-authority-layers.md)
 
-> **What this document is.** The approved architecture for two Phase 4.1 foundations: **governed knowledge retrieval** and the **secure capability registry**.
+> **What this document is.** The original approved architecture for governed knowledge retrieval and the secure capability registry.
 >
-> **What this document is not.** A description of anything that runs. **No knowledge system and no capability registry exist in this repository.** There is no retrieval, no vector store, no document pipeline, and no capability a runtime could invoke. This is design for a future phase.
+> **Current repository reality.** Later phases implemented governed knowledge, hybrid retrieval, knowledge freshness and bounded capability infrastructure. ADR-0173 is now authoritative for how normal conversation, approved RAG, live Core truth and offline training datasets remain separated. Historical statements below that say these systems are not implemented describe the repository at the time this document was written.
 
-Three registers, kept distinct: **approved architecture** (here), **future implementation** (Phase 4.1, with its own ADR), **current repository reality** (none of it exists).
+Read the remainder of this document as the Phase 4.1 design record. For present behavior and authority boundaries, use the later implementation ADRs and ADR-0173.
 
 ---
 
@@ -120,6 +121,6 @@ A capability that granted any of those would not be a capability; it would be a 
 
 ---
 
-## Current repository reality
+## Historical repository reality at Phase 4.1
 
-**None of this is implemented.** There is no knowledge store, no document pipeline, no retrieval of any kind, and no capability registry — bounded or otherwise. `apps/api` and `apps/worker` remain compileable boundaries. Phase 4.1 is approved architecture that a future, separately authorized phase will build, with its own implementing ADR ([ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)).
+At the time this document was approved, these capabilities were not implemented. That statement is historical, not current. Subsequent ADRs implemented governed knowledge, hybrid retrieval and related bounded runtime capabilities. The current production authority split is locked in [ADR-0173](../decisions/ADR-0173-conversation-knowledge-authority-layers.md), while production knowledge activation remains subject to the later exact-revision certification and seal requirements.
