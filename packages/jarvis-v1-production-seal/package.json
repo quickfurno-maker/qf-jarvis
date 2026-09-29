@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./openai-v1": {
+      "types": "./dist/openai-v1/index.d.ts",
+      "default": "./dist/openai-v1/index.js"
     }
   },
   "scripts": {

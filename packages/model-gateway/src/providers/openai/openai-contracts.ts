@@ -8,6 +8,9 @@ export interface OpenAIResponsesRequestBody {
   }[];
   readonly max_output_tokens: number;
   readonly store: false;
+  readonly reasoning: {
+    readonly effort: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  };
   readonly text?: {
     readonly format: {
       readonly type: 'json_schema';

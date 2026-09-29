@@ -187,6 +187,10 @@ describe('JF-5B the certification operator is off the serving path', () => {
       // composition and the CLI and nothing else, which is what keeps it four lines long.
       'apps/api/src/cli/jf5b-certification-runner.ts',
       'apps/api/src/cli/run-jf5b-live-certification.ts',
+      // ADR-0175 fast launch: the offline OpenAI six-call smoke consumes the separate OpenAI
+      // certification profile to mint a finished seal. Its bin imports only this CLI, so serving
+      // code still never imports the certification operator package.
+      'apps/api/src/cli/run-openai-launch-smoke.ts',
       // The production wiring and the engine behind it.
       'apps/api/src/composition/jf5b-live-composition.ts',
       'apps/api/src/composition/jf5b-certification-context.ts',
@@ -210,6 +214,10 @@ describe('JF-5B the certification operator is off the serving path', () => {
       // acquires a credential, performs I/O or activates a provider.
       'packages/jarvis-v1-production-seal/src/index.ts',
       'packages/jarvis-v1-production-seal/src/tests/production-seal.test.ts',
+      // ADR-0175: the separately exported OpenAI v1 seal consumes only the exact OpenAI certification
+      // manifest/bindings. It is offline, pure, credential-free and not reachable from serving code.
+      'packages/jarvis-v1-production-seal/src/openai-v1/index.ts',
+      'packages/jarvis-v1-production-seal/src/tests/openai-v1-production-seal.test.ts',
     ];
     const importers: string[] = [];
     for (const root of [repoPath('packages'), repoPath('apps')]) {

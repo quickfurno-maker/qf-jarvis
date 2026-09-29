@@ -87,6 +87,7 @@ export class OpenAIModelProvider implements ModelProvider {
       input: input.messages,
       max_output_tokens: this.completionTokensFor(input),
       store: false,
+      reasoning: { effort: this.config.reasoningEffort },
       ...(input.resultMode === 'STRUCTURED'
         ? {
             text: {

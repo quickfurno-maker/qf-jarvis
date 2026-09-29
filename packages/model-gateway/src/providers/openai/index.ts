@@ -3,6 +3,7 @@ export {
   createOpenAIProviderConfig,
   type OpenAIProviderConfig,
   type OpenAIProviderConfigInput,
+  type OpenAIReasoningEffort,
 } from './openai-config.js';
 export { OpenAIApiKey, createOpenAIApiKey } from './openai-secret.js';
 export {

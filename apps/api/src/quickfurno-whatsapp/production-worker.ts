@@ -14,17 +14,28 @@ import {
 import {
   createEstimatedBudgetPolicy,
   createFetchGroqTransport,
+  createFetchOpenAITransport,
   createGroqProviderConfig,
   createModelCapabilityProfile,
   createModelCapabilityRegistry,
+  createOpenAIProviderConfig,
   createSystemClock,
   GroqModelProvider,
+  OpenAIModelProvider,
 } from '@qf-jarvis/model-gateway';
 import {
   createLiveModelGatewayInvoker,
   createProductionModelGateway,
+  type ProductionApprovalClaim,
 } from '@qf-jarvis/model-gateway-composition';
+import type { ApprovalEvidence, ProviderReleaseRef } from '@qf-jarvis/model-evaluation';
+import type {
+  ModelGatewayInvoker,
+  ModelReplyPromptBinding,
+  ModelReplyPromptBindings,
+} from '@qf-jarvis/model-reply-adapter';
 import {
+  JARVIS_V1_OPENAI_REASONING_EFFORT_BY_TIER,
   JARVIS_V1_PRODUCTION_MAX_COMPLETION_TOKENS,
   JARVIS_V1_PRODUCTION_MAX_INPUT_TOKENS,
   JARVIS_V1_PRODUCTION_PROMPT_BY_AGENT,
@@ -42,6 +53,7 @@ import { createJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
 import { RIYA_PRODUCTION_PROMPTS } from '@qf-jarvis/riya-prompts';
 
 import { createFileGroqCredentialBinding } from '../secrets/file-groq-credential-binding.js';
+import { createFileOpenAICredentialBinding } from '../secrets/file-openai-credential-binding.js';
 import {
   createQuickFurnoWhatsAppAuthorityReader,
   createQuickFurnoWhatsAppConversationContextReader,
@@ -58,14 +70,15 @@ import {
   createQuickFurnoWhatsAppTurnProcessor,
   type QuickFurnoWhatsAppProcessorOutcome,
 } from './turn-processor.js';
+import { bindOpenAIV1SealForProduction } from './openai-production-seal-binding.js';
 import { bindJf5cSealForProduction } from './production-seal-binding.js';
 import type { QuickFurnoWhatsAppProductionWorkerConfig } from './production-worker-config.js';
 import { createQuickFurnoWorkerObservationWriter } from './production-observation.js';
 
 export interface QuickFurnoWhatsAppProductionWorker {
   readonly revision: string;
-  readonly providerMode: 'GROQ_ONLY';
-  readonly verifiedApprovalCount: 3;
+  readonly providerMode: 'GROQ_ONLY' | 'OPENAI_LUNA_SOL';
+  readonly verifiedApprovalCount: number;
   readonly maxConcurrentTurns: number;
   readonly maxConcurrentByAgent: Readonly<Record<'RIYA' | 'ANISHA' | 'AAROHI', number>>;
   run(signal: AbortSignal): Promise<void>;
@@ -77,44 +90,23 @@ function systemInstant(): string {
   return new Date().toISOString();
 }
 
-export async function createQuickFurnoWhatsAppProductionWorker(
-  config: QuickFurnoWhatsAppProductionWorkerConfig,
-): Promise<QuickFurnoWhatsAppProductionWorker> {
-  // Seal verification happens before credential resolution, database I/O or spool claims.
-  // Knowledge is part of the certified binding only when this deployment actually enables it.
-  const expectedKnowledgeRevision =
-    config.knowledge.mode === 'HYBRID' ? config.knowledge.revision : null;
-  const sealed = bindJf5cSealForProduction(config.seal, config.revision, expectedKnowledgeRevision);
-  if (!sealed.ok) throw new Error(`production-seal-refused:${sealed.reason}`);
-  const binding = sealed.binding;
+interface ProductionRuntimeStack {
+  readonly tier: 'GROQ' | 'LUNA' | 'SOL';
+  readonly release: ProviderReleaseRef;
+  readonly capabilityProfileRef: string;
+  readonly promptBindings: ModelReplyPromptBindings;
+  readonly riyaConversationEvolutionPromptBinding: ModelReplyPromptBinding;
+  readonly riyaGroundedConversationEvolutionPromptBinding: ModelReplyPromptBinding;
+  readonly riyaGroundedReplyPromptBinding: ModelReplyPromptBinding;
+  readonly evaluationEvidence: readonly ApprovalEvidence[];
+  readonly productionApprovals: readonly ProductionApprovalClaim[];
+  readonly baseGatewayInvoker: ModelGatewayInvoker;
+}
 
-  const credentialBinding = createFileGroqCredentialBinding({
-    credentialReference: Object.freeze({ ref: config.groqCredentialReference }),
-    absoluteFilePath: config.groqCredentialFile,
-  });
-  const apiKey = await credentialBinding.resolver.resolve({
-    ref: config.groqCredentialReference,
-  });
-
-  const gatewayClock = createSystemClock();
-  const provider = new GroqModelProvider(
-    createGroqProviderConfig({
-      providerId: 'groq',
-      modelId: binding.release.modelId,
-      modelVersion: binding.release.modelVersion,
-      executionClass: 'HOSTED',
-      maxInputTokens: JARVIS_V1_PRODUCTION_MAX_INPUT_TOKENS,
-      maxCompletionTokens: JARVIS_V1_PRODUCTION_MAX_COMPLETION_TOKENS,
-      supportsStrictJsonSchema: true,
-      apiKey,
-      transport: createFetchGroqTransport(),
-      dataControlsAttested: true,
-    }),
-    gatewayClock,
-  );
-  const capabilityRegistry = createModelCapabilityRegistry([
+function capabilityRegistryFor(release: ProviderReleaseRef) {
+  return createModelCapabilityRegistry([
     createModelCapabilityProfile({
-      release: binding.release,
+      release,
       taskClasses: ['RESPONSE_GENERATION'],
       resultModes: ['STRUCTURED'],
       structuredOutputMode: 'strict-json-schema',
@@ -125,36 +117,192 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       supportsStreaming: false,
     }),
   ]);
-  const killSwitch = createQuickFurnoWorkerKillSwitch(config.killSwitchFile);
-  const production = createProductionModelGateway({
-    mode: 'ACTIVE',
-    providerMode: 'GROQ_ONLY',
-    providers: [provider],
-    approvedReleases: [binding.release],
-    capabilityRegistry,
-    budgetPolicy: createEstimatedBudgetPolicy({}),
-    killSwitch,
-    clock: gatewayClock,
-    concurrency: config.concurrency.modelGateway,
-    circuit: { failureThreshold: 3, cooldownMs: 30_000 },
-    defaultRetryBudget: 0,
-    allowFallback: false,
-    credentialResolver: credentialBinding.resolver,
-    evaluationEvidence: binding.evaluationEvidence,
-    productionApprovals: binding.productionApprovals,
+}
+
+function splitOpenAIConcurrency(input: Readonly<{ maxConcurrent: number; maxQueue: number }>) {
+  const solConcurrent = Math.max(1, Math.floor(input.maxConcurrent * 0.2));
+  const lunaConcurrent = input.maxConcurrent - solConcurrent;
+  const solQueue = Math.max(1, Math.floor(input.maxQueue * 0.2));
+  const lunaQueue = input.maxQueue - solQueue;
+  if (lunaConcurrent < 1 || lunaQueue < 1) throw new Error('production-worker-config-invalid');
+  return Object.freeze({
+    LUNA: Object.freeze({ maxConcurrent: lunaConcurrent, maxQueue: lunaQueue }),
+    SOL: Object.freeze({ maxConcurrent: solConcurrent, maxQueue: solQueue }),
   });
-  if (
-    !production.ok ||
-    !production.composition.status.activatable ||
-    production.composition.status.providerMode !== 'GROQ_ONLY' ||
-    production.composition.status.fallbackEnabled ||
-    production.composition.status.retryBudget !== 0 ||
-    production.composition.status.verifiedApprovalCount !== 3
-  ) {
-    throw new Error('production-model-gateway-refused');
+}
+
+function adaptiveTextSignals(text: string) {
+  const normalized = text.toLowerCase();
+  const requiresCoreVerification =
+    /\b(price|pricing|package|credit|credits|payment|paid|order|status|assigned|assignment|active|activation|account|balance|refund)\b/u.test(
+      normalized,
+    );
+  const highRisk =
+    /\b(legal|lawsuit|fraud|scam|threat|harassment|abuse|refund dispute|chargeback|privacy complaint)\b/u.test(
+      normalized,
+    );
+  const multiStepReasoning =
+    text.length > 1200 ||
+    /\b(compare|analyse|analyze|strategy|plan|trade-?off|step by step|multiple options|pros and cons)\b/u.test(
+      normalized,
+    );
+  const ambiguitySignals =
+    /\b(this|that|it|they|same one|previous one|earlier)\b/u.test(normalized) && text.length < 220
+      ? 1
+      : 0;
+  return Object.freeze({
+    requiresCoreVerification,
+    highRisk,
+    multiStepReasoning,
+    ambiguitySignals,
+  });
+}
+
+export async function createQuickFurnoWhatsAppProductionWorker(
+  config: QuickFurnoWhatsAppProductionWorkerConfig,
+): Promise<QuickFurnoWhatsAppProductionWorker> {
+  // Seal verification happens before credential resolution, database I/O or spool claims.
+  // Knowledge is part of the certified binding only when this deployment actually enables it.
+  const expectedKnowledgeRevision =
+    config.knowledge.mode === 'HYBRID' ? config.knowledge.revision : null;
+  const gatewayClock = createSystemClock();
+  const killSwitch = createQuickFurnoWorkerKillSwitch(config.killSwitchFile);
+  const runtimeStacks: ProductionRuntimeStack[] = [];
+  let providerMode: QuickFurnoWhatsAppProductionWorker['providerMode'];
+  let verifiedApprovalCount: number;
+
+  if (config.modelProvider.mode === 'GROQ_ONLY') {
+    const sealed = bindJf5cSealForProduction(
+      config.modelProvider.seal,
+      config.revision,
+      expectedKnowledgeRevision,
+    );
+    if (!sealed.ok) throw new Error(`production-seal-refused:${sealed.reason}`);
+    const binding = sealed.binding;
+    const credentialBinding = createFileGroqCredentialBinding({
+      credentialReference: Object.freeze({ ref: config.modelProvider.credentialReference }),
+      absoluteFilePath: config.modelProvider.credentialFile,
+    });
+    const apiKey = await credentialBinding.resolver.resolve({
+      ref: config.modelProvider.credentialReference,
+    });
+    const provider = new GroqModelProvider(
+      createGroqProviderConfig({
+        providerId: 'groq',
+        modelId: binding.release.modelId,
+        modelVersion: binding.release.modelVersion,
+        executionClass: 'HOSTED',
+        maxInputTokens: JARVIS_V1_PRODUCTION_MAX_INPUT_TOKENS,
+        maxCompletionTokens: JARVIS_V1_PRODUCTION_MAX_COMPLETION_TOKENS,
+        supportsStrictJsonSchema: true,
+        apiKey,
+        transport: createFetchGroqTransport(),
+        dataControlsAttested: true,
+      }),
+      gatewayClock,
+    );
+    const production = createProductionModelGateway({
+      mode: 'ACTIVE',
+      providerMode: 'GROQ_ONLY',
+      providers: [provider],
+      approvedReleases: [binding.release],
+      capabilityRegistry: capabilityRegistryFor(binding.release),
+      budgetPolicy: createEstimatedBudgetPolicy({}),
+      killSwitch,
+      clock: gatewayClock,
+      concurrency: config.concurrency.modelGateway,
+      circuit: { failureThreshold: 3, cooldownMs: 30_000 },
+      defaultRetryBudget: 0,
+      allowFallback: false,
+      credentialResolver: credentialBinding.resolver,
+      evaluationEvidence: binding.evaluationEvidence,
+      productionApprovals: binding.productionApprovals,
+    });
+    if (
+      !production.ok ||
+      !production.composition.status.activatable ||
+      production.composition.status.providerMode !== 'GROQ_ONLY' ||
+      production.composition.status.fallbackEnabled ||
+      production.composition.status.retryBudget !== 0 ||
+      production.composition.status.verifiedApprovalCount !== 3
+    )
+      throw new Error('production-model-gateway-refused');
+    runtimeStacks.push({
+      tier: 'GROQ',
+      ...binding,
+      baseGatewayInvoker: createLiveModelGatewayInvoker(production.composition.gateway),
+    });
+    providerMode = 'GROQ_ONLY';
+    verifiedApprovalCount = 3;
+  } else {
+    const sealed = bindOpenAIV1SealForProduction(
+      config.modelProvider.seal,
+      config.revision,
+      expectedKnowledgeRevision,
+    );
+    if (!sealed.ok) throw new Error(`production-seal-refused:${sealed.reason}`);
+    const credentialBinding = createFileOpenAICredentialBinding({
+      credentialReference: Object.freeze({ ref: config.modelProvider.credentialReference }),
+      absoluteFilePath: config.modelProvider.credentialFile,
+    });
+    const apiKey = await credentialBinding.resolver.resolve({
+      ref: config.modelProvider.credentialReference,
+    });
+    const concurrency = splitOpenAIConcurrency(config.concurrency.modelGateway);
+    for (const tier of ['LUNA', 'SOL'] as const) {
+      const binding = sealed.binding[tier];
+      const provider = new OpenAIModelProvider(
+        createOpenAIProviderConfig({
+          providerId: 'openai',
+          modelId: binding.release.modelId,
+          modelVersion: binding.release.modelVersion,
+          executionClass: 'HOSTED',
+          maxInputTokens: JARVIS_V1_PRODUCTION_MAX_INPUT_TOKENS,
+          maxCompletionTokens: JARVIS_V1_PRODUCTION_MAX_COMPLETION_TOKENS,
+          supportsStrictJsonSchema: true,
+          reasoningEffort: JARVIS_V1_OPENAI_REASONING_EFFORT_BY_TIER[tier],
+          apiKey,
+          transport: createFetchOpenAITransport(),
+          dataControlsAttested: true,
+        }),
+        gatewayClock,
+      );
+      const production = createProductionModelGateway({
+        mode: 'ACTIVE',
+        providerMode: 'OPENAI_ONLY',
+        providers: [provider],
+        approvedReleases: [binding.release],
+        capabilityRegistry: capabilityRegistryFor(binding.release),
+        budgetPolicy: createEstimatedBudgetPolicy({}),
+        killSwitch,
+        clock: gatewayClock,
+        concurrency: concurrency[tier],
+        circuit: { failureThreshold: 3, cooldownMs: 30_000 },
+        defaultRetryBudget: 0,
+        allowFallback: false,
+        credentialResolver: credentialBinding.resolver,
+        evaluationEvidence: binding.evaluationEvidence,
+        productionApprovals: binding.productionApprovals,
+      });
+      if (
+        !production.ok ||
+        !production.composition.status.activatable ||
+        production.composition.status.providerMode !== 'OPENAI_ONLY' ||
+        production.composition.status.fallbackEnabled ||
+        production.composition.status.retryBudget !== 0 ||
+        production.composition.status.verifiedApprovalCount !== 3
+      )
+        throw new Error('production-model-gateway-refused');
+      runtimeStacks.push({
+        ...binding,
+        baseGatewayInvoker: createLiveModelGatewayInvoker(production.composition.gateway),
+      });
+    }
+    providerMode = 'OPENAI_LUNA_SOL';
+    verifiedApprovalCount = 6;
   }
 
-  let decisionShadowPort;
+  let decisionShadowPort: Parameters<typeof createJarvisRuntime>[0]['decisionShadowPort'];
   if (config.decisionIntelligence.mode === 'SHADOW') {
     const jev = new JevDecisionProvider({
       model: config.decisionIntelligence.model,
@@ -201,21 +349,21 @@ export async function createQuickFurnoWhatsAppProductionWorker(
           })
         : Object.freeze({ mode: 'DISABLED' as const }),
   });
-  const baseGatewayInvoker = createLiveModelGatewayInvoker(production.composition.gateway);
-  const observedGatewayInvoker = Object.freeze({
-    async invoke(request: Parameters<typeof baseGatewayInvoker.invoke>[0]) {
-      const result = await baseGatewayInvoker.invoke(request);
-      observation.recordModelOutcome(
-        result.ok,
-        result.ok ? result.response.provenance.usedFallback : false,
-      );
-      if (result.ok) {
-        observation.recordModelLatency(result.response.latencyMs, systemInstant());
-        observation.recordModelUsage(result.response.usage);
-      }
-      return result;
-    },
-  });
+  const observedGatewayInvoker = (baseGatewayInvoker: ModelGatewayInvoker): ModelGatewayInvoker =>
+    Object.freeze({
+      async invoke(request: Parameters<ModelGatewayInvoker['invoke']>[0]) {
+        const result = await baseGatewayInvoker.invoke(request);
+        observation.recordModelOutcome(
+          result.ok,
+          result.ok ? result.response.provenance.usedFallback : false,
+        );
+        if (result.ok) {
+          observation.recordModelLatency(result.response.latencyMs, systemInstant());
+          observation.recordModelUsage(result.response.usage);
+        }
+        return result;
+      },
+    });
 
   let closed = false;
   try {
@@ -299,72 +447,83 @@ export async function createQuickFurnoWhatsAppProductionWorker(
     const authoritativeState = createQuickFurnoWhatsAppAuthorityStatePort(
       createQuickFurnoWhatsAppAuthorityReader(httpConfig),
     );
-    const runtime = createJarvisRuntime({
-      authoritativeState,
-      policy: createRuntimePolicy({
-        policyRevision: config.policyRevision,
-        unknownRouting: 'HUMAN',
-      }),
-      clock: systemInstant,
-      release: binding.release,
-      promptBindings: binding.promptBindings,
-      riyaConversationEvolutionPromptBinding: binding.riyaConversationEvolutionPromptBinding,
-      riyaGroundedConversationEvolutionPromptBinding:
-        binding.riyaGroundedConversationEvolutionPromptBinding,
-      riyaGroundedReplyPromptBinding: binding.riyaGroundedReplyPromptBinding,
-      promptRegistry,
-      capabilityProfileRef: binding.capabilityProfileRef,
-      gatewayInvoker: observedGatewayInvoker,
-      ...(decisionShadowPort === undefined ? {} : { decisionShadowPort }),
-      ...(agentHybridKnowledge === undefined ? {} : { agentHybridKnowledge }),
-      requireEvaluationRef: true,
-      provenanceRefs: {
-        runtimeRef: 'qfj.jarvis-runtime.quickfurno-authority-v2',
-        releaseRef: binding.release.releaseId,
-        providerRef: binding.release.providerId,
-        configRef: binding.release.configDigest,
-      },
+    const specialists = runtimeStacks.map((stack) => {
+      const runtime = createJarvisRuntime({
+        authoritativeState,
+        policy: createRuntimePolicy({
+          policyRevision: config.policyRevision,
+          unknownRouting: 'HUMAN',
+        }),
+        clock: systemInstant,
+        release: stack.release,
+        promptBindings: stack.promptBindings,
+        riyaConversationEvolutionPromptBinding: stack.riyaConversationEvolutionPromptBinding,
+        riyaGroundedConversationEvolutionPromptBinding:
+          stack.riyaGroundedConversationEvolutionPromptBinding,
+        riyaGroundedReplyPromptBinding: stack.riyaGroundedReplyPromptBinding,
+        promptRegistry,
+        capabilityProfileRef: stack.capabilityProfileRef,
+        gatewayInvoker: observedGatewayInvoker(stack.baseGatewayInvoker),
+        ...(decisionShadowPort === undefined ? {} : { decisionShadowPort }),
+        ...(agentHybridKnowledge === undefined ? {} : { agentHybridKnowledge }),
+        requireEvaluationRef: true,
+        provenanceRefs: {
+          runtimeRef: 'qfj.jarvis-runtime.quickfurno-authority-v2',
+          releaseRef: stack.release.releaseId,
+          providerRef: stack.release.providerId,
+          configRef: stack.release.configDigest,
+        },
+      });
+      return Object.freeze({
+        tier: stack.tier,
+        releaseId: stack.release.releaseId,
+        runtime: createQuickFurnoWhatsAppSpecialistRuntime({
+          runtimeId: config.runtimeId,
+          jarvisRuntime: runtime,
+        }),
+      });
     });
 
-    // WhatsApp intentionally does not compose the durable Riya continuity/turn stores. QuickFurno
-    // already owns the durable inbound message, conversation revision, consent and takeover state;
-    // a second Jarvis-owned client-continuity store remains disabled until its lifecycle policy is
-    // separately approved. The specialist runtime therefore executes one governed proposal per
-    // QuickFurno-bound turn for RIYA/ANISHA/AAROHI alike.
-    const baseSpecialistRuntime = createQuickFurnoWhatsAppSpecialistRuntime({
-      runtimeId: config.runtimeId,
-      jarvisRuntime: runtime,
-    });
-    const activeRoute = Object.freeze({
-      releaseId: binding.release.releaseId,
-      runtime: baseSpecialistRuntime,
-    });
+    const groq = specialists.find((item) => item.tier === 'GROQ');
+    const luna = specialists.find((item) => item.tier === 'LUNA');
+    const sol = specialists.find((item) => item.tier === 'SOL');
+    const routes =
+      providerMode === 'GROQ_ONLY'
+        ? (() => {
+            if (groq === undefined) throw new Error('production-model-gateway-refused');
+            const route = Object.freeze({ releaseId: groq.releaseId, runtime: groq.runtime });
+            return Object.freeze({ SIMPLE: route, STANDARD: route, COMPLEX: route });
+          })()
+        : (() => {
+            if (luna === undefined || sol === undefined) {
+              throw new Error('production-model-gateway-refused');
+            }
+            return Object.freeze({
+              SIMPLE: Object.freeze({ releaseId: luna.releaseId, runtime: luna.runtime }),
+              STANDARD: Object.freeze({ releaseId: luna.releaseId, runtime: luna.runtime }),
+              COMPLEX: Object.freeze({ releaseId: sol.releaseId, runtime: sol.runtime }),
+            });
+          })();
+
     const specialistRuntime = createAdaptiveQuickFurnoWhatsAppSpecialistRuntime({
-      // Today the exact production seal activates one release, so all three complexity bands route
-      // to the same certified runtime. Luna/Sol can be inserted only after their own exact
-      // compositions are ACTIVE-certified; this wrapper cannot route to an unlisted release.
-      activeReleaseIds: [binding.release.releaseId],
-      routes: {
-        SIMPLE: activeRoute,
-        STANDARD: activeRoute,
-        COMPLEX: activeRoute,
-      },
-      signals: (material) => ({
-        normalizedTextChars:
+      activeReleaseIds: specialists.map((item) => item.releaseId),
+      routes,
+      signals: (material) => {
+        const text =
           'purpose' in material
-            ? Math.min(
-                4096,
-                material.qualification.questionText.length +
-                  material.qualification.answerText.length,
-              )
-            : (material.normalizedText?.length ?? 0),
-        conversationContextChars: 0,
-        knowledgeHitCount: 0,
-        ambiguitySignals: 0,
-        requiresCoreVerification: false,
-        multiStepReasoning: false,
-        highRisk: false,
-      }),
+            ? `${material.qualification.questionText} ${material.qualification.answerText}`
+            : (material.normalizedText ?? '');
+        const adaptive = adaptiveTextSignals(text);
+        return {
+          normalizedTextChars: Math.min(4096, text.length),
+          conversationContextChars: 0,
+          knowledgeHitCount: 0,
+          ambiguitySignals: adaptive.ambiguitySignals,
+          requiresCoreVerification: adaptive.requiresCoreVerification,
+          multiStepReasoning: adaptive.multiStepReasoning,
+          highRisk: adaptive.highRisk,
+        };
+      },
     });
     const spool = await createFileDurableTurnSpool(config.spoolDirectory);
     await spool.recoverStale(config.staleProcessingMs, Date.now());
@@ -441,8 +600,8 @@ export async function createQuickFurnoWhatsAppProductionWorker(
 
     return Object.freeze({
       revision: config.revision,
-      providerMode: 'GROQ_ONLY' as const,
-      verifiedApprovalCount: 3 as const,
+      providerMode,
+      verifiedApprovalCount,
       maxConcurrentTurns: config.concurrency.globalMaxConcurrentTurns,
       maxConcurrentByAgent: config.concurrency.maxConcurrentByAgent,
       processOne: processObservedOne,

@@ -38,7 +38,7 @@ CMD ["node", "apps/api/dist/bin/run-quickfurno-whatsapp-production-worker.js", "
 
 ARG GIT_SHA=unknown
 LABEL org.opencontainers.image.title="qf-jarvis-quickfurno-worker" \
-      org.opencontainers.image.description="Private evidence-gated Groq-only QuickFurno WhatsApp worker" \
+      org.opencontainers.image.description="Private evidence-gated QuickFurno WhatsApp worker with governed Groq or OpenAI Luna/Sol inference" \
       org.opencontainers.image.source="https://github.com/quickfurno-maker/qf-jarvis" \
       org.opencontainers.image.revision="${GIT_SHA}" \
       org.opencontainers.image.licenses="UNLICENSED"

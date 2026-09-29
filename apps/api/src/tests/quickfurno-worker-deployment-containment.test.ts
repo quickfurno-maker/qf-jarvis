@@ -7,6 +7,10 @@ const ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const read = (relative: string): string => readFileSync(`${ROOT}/${relative}`, 'utf8');
 
 const compose = read('deploy/quickfurno-worker/compose.production.yml');
+const openaiCompose = read('deploy/quickfurno-worker/compose.openai.production.yml');
+const openaiExample = read('deploy/quickfurno-worker/worker-config.openai.example.json');
+const openaiLaunch = read('deploy/quickfurno-worker/launch-openai.sh');
+const openaiKeyInstaller = read('deploy/quickfurno-worker/install-openai-key.sh');
 const dockerfile = read('deploy/quickfurno-worker/Dockerfile');
 const deploy = read('deploy/quickfurno-worker/deploy.sh');
 const activate = read('deploy/quickfurno-worker/activate.sh');
@@ -77,6 +81,44 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(example).not.toContain('postgres-ca.pem');
     expect(example).toContain('"sealFile": "/run/secrets/jf5c-production-seal.json"');
     expect(example).toContain('"groqCredentialFile": "/run/secrets/groq-production.key"');
+  });
+
+  it('has a separate least-privilege OpenAI deployment with no Groq secret mounted', () => {
+    expect(openaiCompose).toContain('source: /srv/qf-jarvis/secrets/openai-production.key');
+    expect(openaiCompose).toContain('target: /run/secrets/openai-production.key');
+    expect(openaiCompose).toContain('source: /srv/qf-jarvis/seals/openai-v1-production-seal.json');
+    expect(openaiCompose).not.toContain('groq-production.key');
+    expect(openaiCompose).not.toContain('jf5c-production-seal.json');
+    expect(openaiCompose).toContain("user: '10003:10002'");
+    expect(openaiCompose).toContain('read_only: true');
+    expect(openaiCompose).toContain('no-new-privileges:true');
+    expect(openaiCompose).not.toMatch(/^\s*ports:/m);
+  });
+
+  it('defines a launch-ready OpenAI config with the same 200/50/150 capacity envelope', () => {
+    expect(openaiExample).toContain('"sealFile": "/run/secrets/openai-v1-production-seal.json"');
+    expect(openaiExample).toContain('"credentialFile": "/run/secrets/openai-production.key"');
+    expect(openaiExample).toContain('"credentialReference": "openai.qfj.production.v1"');
+    expect(openaiExample).toContain('"globalMaxConcurrentTurns": 200');
+    expect(openaiExample).toContain('"maxConcurrent": 50');
+    expect(openaiExample).toContain('"maxQueue": 150');
+    expect(openaiExample).not.toContain('groqCredentialFile');
+  });
+
+  it('launches OpenAI only after six-call smoke, exact seal, disabled deploy and READY proof', () => {
+    expect(openaiLaunch).toContain('run-openai-launch-smoke.js');
+    expect(openaiLaunch).toContain("node -e '");
+    expect(openaiLaunch).toContain('config.openai={');
+    expect(openaiLaunch).toContain('QFJ_WORKER_PROVIDER_MODE=OPENAI_LUNA_SOL');
+    expect(openaiLaunch).toContain('QFJ_WORKER_SKIP_BUILD=1');
+    expect(openaiLaunch).toContain('providerMode=OPENAI_LUNA_SOL');
+    expect(openaiLaunch).toContain('approvals=6');
+    expect(openaiLaunch.indexOf('"$HERE/disable.sh"')).toBeLessThan(
+      openaiLaunch.indexOf('"$HERE/activate.sh"'),
+    );
+    expect(openaiKeyInstaller).toContain('read -r -s KEY');
+    expect(openaiKeyInstaller).toContain('-m 0400');
+    expect(openaiKeyInstaller).not.toContain('echo "$KEY"');
   });
 
   it('keeps TypeSafe Jev opt-in, secret-mounted, and shadow-only at deployment', () => {

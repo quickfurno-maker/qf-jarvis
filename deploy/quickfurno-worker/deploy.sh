@@ -8,11 +8,14 @@ REPO_DIR="${REPO_DIR:-/srv/qf-jarvis/repo}"
 
 CONFIG='/srv/qf-jarvis/secrets/qf-jarvis-whatsapp-worker.json'
 GROQ='/srv/qf-jarvis/secrets/groq-production.key'
+OPENAI='/srv/qf-jarvis/secrets/openai-production.key'
 JEV='/srv/qf-jarvis/secrets/typesafe-jev-production.key'
 SIGNING='/srv/qf-jarvis/secrets/quickfurno-signing.key'
 EMBEDDING='/srv/qf-jarvis/secrets/embedding-production.key'
-SEAL='/srv/qf-jarvis/seals/jf5c-production-seal.json'
+GROQ_SEAL='/srv/qf-jarvis/seals/jf5c-production-seal.json'
+OPENAI_SEAL='/srv/qf-jarvis/seals/openai-v1-production-seal.json'
 CA='/srv/qf-jarvis/secrets/postgres-ca.pem'
+PROVIDER_MODE="${QFJ_WORKER_PROVIDER_MODE:-GROQ_ONLY}"
 KNOWLEDGE_MODE="${QFJ_WORKER_KNOWLEDGE_MODE:-DISABLED}"
 JEV_MODE="${QFJ_WORKER_JEV_MODE:-DISABLED}"
 SPOOL='/srv/qf-jarvis/state/quickfurno-gateway-turns'
@@ -27,12 +30,19 @@ die() { echo "FATAL: $1" >&2; exit 1; }
 
 # Deployment is intentionally impossible in an armed state. Activation is a different operator step.
 [[ -f "$DISABLE" ]] || die "$DISABLE is missing. Run disable.sh before deploy."
+[[ "$PROVIDER_MODE" == "GROQ_ONLY" || "$PROVIDER_MODE" == "OPENAI_LUNA_SOL" ]] ||
+  die "QFJ_WORKER_PROVIDER_MODE must be GROQ_ONLY or OPENAI_LUNA_SOL."
 [[ "$KNOWLEDGE_MODE" == "DISABLED" || "$KNOWLEDGE_MODE" == "HYBRID" ]] ||
   die "QFJ_WORKER_KNOWLEDGE_MODE must be DISABLED or HYBRID."
 [[ "$JEV_MODE" == "DISABLED" || "$JEV_MODE" == "SHADOW" ]] ||
   die "QFJ_WORKER_JEV_MODE must be DISABLED or SHADOW."
 
-required_files=("$CONFIG" "$GROQ" "$SIGNING" "$SEAL")
+required_files=("$CONFIG" "$SIGNING")
+if [[ "$PROVIDER_MODE" == "OPENAI_LUNA_SOL" ]]; then
+  required_files+=("$OPENAI" "$OPENAI_SEAL")
+else
+  required_files+=("$GROQ" "$GROQ_SEAL")
+fi
 if [[ "$JEV_MODE" == "SHADOW" ]]; then
   required_files+=("$JEV")
 fi
@@ -79,10 +89,20 @@ trap 'rm -rf "$BUILD_CTX"' EXIT
 git -c core.autocrlf=false -c core.eol=lf -C "$REPO_DIR" archive --format=tar "$SHA" |
   tar -x -C "$BUILD_CTX"
 
-echo "==> building qf-jarvis-whatsapp-worker:$SHA"
-docker build   --file "$BUILD_CTX/deploy/quickfurno-worker/Dockerfile"   --build-arg "GIT_SHA=$SHA"   --tag "qf-jarvis-whatsapp-worker:$SHA"   "$BUILD_CTX"
+if [[ "${QFJ_WORKER_SKIP_BUILD:-0}" == "1" ]]; then
+  image_revision="$(docker image inspect "qf-jarvis-whatsapp-worker:$SHA" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null || true)"
+  [[ "$image_revision" == "$SHA" ]] || die "prebuilt worker image is missing or has the wrong revision."
+  echo "==> reusing exact prebuilt qf-jarvis-whatsapp-worker:$SHA"
+else
+  echo "==> building qf-jarvis-whatsapp-worker:$SHA"
+  docker build --file "$BUILD_CTX/deploy/quickfurno-worker/Dockerfile" --build-arg "GIT_SHA=$SHA" --tag "qf-jarvis-whatsapp-worker:$SHA" "$BUILD_CTX"
+fi
 
-BASE="$BUILD_CTX/deploy/quickfurno-worker/compose.production.yml"
+if [[ "$PROVIDER_MODE" == "OPENAI_LUNA_SOL" ]]; then
+  BASE="$BUILD_CTX/deploy/quickfurno-worker/compose.openai.production.yml"
+else
+  BASE="$BUILD_CTX/deploy/quickfurno-worker/compose.production.yml"
+fi
 KNOWLEDGE_OVERRIDE="$BUILD_CTX/deploy/quickfurno-worker/compose.knowledge.yml"
 JEV_OVERRIDE="$BUILD_CTX/deploy/quickfurno-worker/compose.jev.yml"
 compose_args=(-p qf-jarvis-whatsapp-worker -f "$BASE")
@@ -92,7 +112,7 @@ fi
 if [[ "$JEV_MODE" == "SHADOW" ]]; then
   compose_args+=(-f "$JEV_OVERRIDE")
 fi
-echo "==> starting worker disabled (knowledge=$KNOWLEDGE_MODE jev=$JEV_MODE)"
+echo "==> starting worker disabled (provider=$PROVIDER_MODE knowledge=$KNOWLEDGE_MODE jev=$JEV_MODE)"
 QFJ_WORKER_IMAGE_TAG="$SHA" docker compose "${compose_args[@]}" up -d
 
 for _ in $(seq 1 45); do
@@ -130,6 +150,18 @@ prove "observation source" "$OBSERVABILITY"   "$(docker inspect qf-jarvis-whatsa
 prove "observation writable" "true"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/run/qfj-observability"}}{{.RW}}{{end}}{{end}}')"
 prove "kill switch visible" "true"   "$(docker exec qf-jarvis-whatsapp-worker node -e "const fs=require('node:fs');console.log(fs.existsSync('/var/run/qfj-control/DISABLE_MODEL'))")"
 
+openai_mount="$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/openai-production.key"}}{{.Source}}{{end}}{{end}}')"
+openai_seal_mount="$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/openai-v1-production-seal.json"}}{{.Source}}{{end}}{{end}}')"
+groq_mount="$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/groq-production.key"}}{{.Source}}{{end}}{{end}}')"
+if [[ "$PROVIDER_MODE" == "OPENAI_LUNA_SOL" ]]; then
+  prove "OpenAI secret source" "$OPENAI" "$openai_mount"
+  prove "OpenAI seal source" "$OPENAI_SEAL" "$openai_seal_mount"
+  prove "Groq secret absent" "" "$groq_mount"
+else
+  prove "Groq secret source" "$GROQ" "$groq_mount"
+  prove "OpenAI secret absent" "" "$openai_mount"
+fi
+
 jev_mount="$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/typesafe-jev-production.key"}}{{.Source}}{{end}}{{end}}')"
 if [[ "$JEV_MODE" == "SHADOW" ]]; then
   prove "TypeSafe Jev secret source" "$JEV" "$jev_mount"
@@ -149,18 +181,21 @@ fi
 
 [[ "$fail" -eq 0 ]] || die "disabled deployment proof failed."
 
+if [[ "$PROVIDER_MODE" == "OPENAI_LUNA_SOL" ]]; then
+  PROVIDER_GATE="the six-call OpenAI launch smoke passed and the exact OpenAI v1 production seal is mounted"
+else
+  PROVIDER_GATE="the exact merged SHA has the matching Groq JF-5C production seal mounted"
+fi
+
 cat <<EOF
 
-DISABLED deployment verified for $SHA (knowledge=$KNOWLEDGE_MODE jev=$JEV_MODE).
+DISABLED deployment verified for $SHA (provider=$PROVIDER_MODE knowledge=$KNOWLEDGE_MODE jev=$JEV_MODE).
 No public port exists and the worker cannot claim a turn while DISABLE_MODEL exists.
 
-Do not activate until:
-  - the exact merged SHA has a passing JF-5B run,
-  - all three blinded human reviews ACCEPT,
-  - owner ACCEPT is recorded,
-  - the matching JF-5C v2 seal is mounted,
+Before activation confirm:
+  - $PROVIDER_GATE,
   - QuickFurno's matching merged SHA/config is deployed,
-  - the operator has approved the production canary.
+  - the worker READY line reports the intended provider mode and approval count.
 
 Activation is a separate command:
   $HERE/activate.sh $SHA

@@ -81,6 +81,7 @@ const isDesignatedAdapter = (f: string): boolean =>
  * unnoticed.
  */
 const OPENAI_CREDENTIAL_BINDING = 'src/secrets/file-openai-credential-binding.ts';
+const OPENAI_PRODUCTION_SEAL_BINDING = 'src/quickfurno-whatsapp/openai-production-seal-binding.ts';
 const JF5B_BIN = 'src/bin/run-jf5b-live-certification.ts';
 const JF5B_CLI = 'src/cli/run-jf5b-live-certification.ts';
 const JF5B_COMPOSITION = 'src/composition/jf5b-live-composition.ts';
@@ -95,6 +96,17 @@ const JF5B_FILES: readonly string[] = Object.freeze([
 ]);
 const isJf5bFile = (f: string, only: readonly string[] = JF5B_FILES): boolean =>
   only.some((one) => normalise(f).endsWith(`/${one}`));
+
+// OpenAI launch operators are offline deployment utilities. They may read/write bounded local
+// artifacts and emit fixed status lines, but they are never imported by the serving worker.
+const OPENAI_LAUNCH_SMOKE_BIN = 'src/bin/run-openai-launch-smoke.ts';
+const OPENAI_LAUNCH_SMOKE_CLI = 'src/cli/run-openai-launch-smoke.ts';
+const OPENAI_LAUNCH_FILES: readonly string[] = Object.freeze([
+  OPENAI_LAUNCH_SMOKE_BIN,
+  OPENAI_LAUNCH_SMOKE_CLI,
+]);
+const isOpenAILaunchFile = (f: string): boolean =>
+  OPENAI_LAUNCH_FILES.some((one) => normalise(f).endsWith(`/${one}`));
 
 const JF7_BIN = 'src/bin/run-quickfurno-whatsapp-production-worker.ts';
 const JF7_CONFIG = 'src/quickfurno-whatsapp/production-worker-config.ts';
@@ -134,6 +146,12 @@ const PROCESS_ALLOWLIST: Readonly<Record<string, readonly string[]>> = Object.fr
   // which explains why a live certification is the one operation that must read a terminal.
   'src/bin/run-jf5b-live-certification.ts': ['process.exitCode', 'process.argv'],
   'src/composition/jf5b-live-composition.ts': ['process.stdout', 'process.stderr', 'process.stdin'],
+  [OPENAI_LAUNCH_SMOKE_BIN]: [
+    'process.argv',
+    'process.stdout',
+    'process.stderr',
+    'process.exitCode',
+  ],
   // JF-7 production worker process boundary. It reads only argv, writes fixed status lines, and owns
   // signal registration/removal plus the exit code. It never reads environment variables.
   [JF7_BIN]: [
@@ -316,6 +334,10 @@ describe('(68) node:fs is confined to one designated adapter', () => {
         expect(code, file).not.toMatch(/readFile|open\(|createReadStream/);
         continue;
       }
+      if (normalise(file).endsWith(`/${OPENAI_LAUNCH_SMOKE_CLI}`)) {
+        expect(code, file).toMatch(/import \{ mkdirSync, writeFileSync \} from 'node:fs'/);
+        continue;
+      }
       expect(code).not.toMatch(/from ['"]node:fs(\/promises)?['"]/);
     }
   });
@@ -474,6 +496,37 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
           expect(code, file).not.toContain('openai.com');
           continue;
         }
+        if (
+          forbidden === 'openai' &&
+          normalise(file).endsWith(`/${OPENAI_PRODUCTION_SEAL_BINDING}`)
+        ) {
+          // Pure artifact verification only: no provider construction, credential seam, network, SDK,
+          // filesystem, or transport is permitted here.
+          expect(code, file).not.toContain("from 'openai'");
+          expect(code, file).not.toContain('openai.com');
+          expect(code, file).not.toMatch(
+            /credentialResolver|fetch\(|transport|new OpenAIModelProvider/,
+          );
+          continue;
+        }
+        if (forbidden === 'openai' && isJf7File(file, [JF7_CONFIG])) {
+          // The config parser may name the selected provider and governed artifact paths. It does not
+          // construct a provider, resolve the OpenAI credential, or own network transport.
+          expect(code, file).not.toContain("from 'openai'");
+          expect(code, file).not.toContain('openai.com');
+          expect(code, file).not.toMatch(
+            /OpenAIModelProvider|createFetchOpenAITransport|credentialResolver/,
+          );
+          continue;
+        }
+        if (forbidden === 'openai' && isOpenAILaunchFile(file)) {
+          // The two offline OpenAI launch operators are allowed to name the provider and its governed
+          // artifact paths, but still cannot import the vendor SDK/client or shell out.
+          expect(code, file).not.toContain("from 'openai'");
+          expect(code, file).not.toContain('openai.com');
+          expect(code, file).not.toMatch(/child_process|exec\(|spawn\(/);
+          continue;
+        }
         expect(code, `${file}: ${forbidden}`).not.toContain(forbidden);
       }
       // Database vocabulary is confined to five exact modules. JF-7 adds a bounded config parser
@@ -584,6 +637,8 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       // ADR-0170: the parallel scheduler owns one abortable idle-poll delay. It does not repeat via
       // setInterval or self-reschedule; every arm is cleared on abort before the promise resolves.
       'src/quickfurno-whatsapp/parallel-turn-scheduler.ts': 1,
+      // Offline OpenAI launch smoke owns one hard provider-call deadline and clears it in finally.
+      [OPENAI_LAUNCH_SMOKE_CLI]: 1,
     });
     const timerFiles = productionFiles().filter((file) =>
       codeOnly(readFileSync(file, 'utf8')).includes('setTimeout'),

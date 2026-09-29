@@ -130,7 +130,70 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
       maxConcurrentByAgent: { RIYA: 200, ANISHA: 200, AAROHI: 200 },
       modelGateway: { maxConcurrent: 50, maxQueue: 150 },
     });
-    expect(config.seal).toEqual({});
+    expect(config.modelProvider).toMatchObject({
+      mode: 'GROQ_ONLY',
+      seal: {},
+      credentialReference: 'groq.qfj.production.v1',
+    });
+  });
+
+  it('loads an OpenAI Luna/Sol provider config without any Groq credential fields', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const openaiSeal = join(root, 'openai-seal.json');
+    const openaiKey = join(root, 'openai.key');
+    writeFileSync(openaiSeal, '{}');
+    writeFileSync(openaiKey, 'synthetic-openai-key-not-used-by-loader-test');
+    const legacy = validConfig(root);
+    const {
+      sealFile: _sealFile,
+      groqCredentialReference: _groqCredentialReference,
+      groqCredentialFile: _groqCredentialFile,
+      ...withoutGroq
+    } = legacy;
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...withoutGroq,
+        openai: {
+          sealFile: openaiSeal,
+          credentialReference: 'openai.qfj.production.v1',
+          credentialFile: openaiKey,
+        },
+      }),
+    );
+
+    const config = loadQuickFurnoWhatsAppProductionWorkerConfig(path);
+    expect(config.modelProvider).toMatchObject({
+      mode: 'OPENAI_LUNA_SOL',
+      seal: {},
+      credentialReference: 'openai.qfj.production.v1',
+      credentialFile: openaiKey,
+    });
+  });
+
+  it('refuses mixed OpenAI and Groq provider configuration', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const config = validConfig(root);
+    const openaiSeal = join(root, 'openai-seal.json');
+    const openaiKey = join(root, 'openai.key');
+    writeFileSync(openaiSeal, '{}');
+    writeFileSync(openaiKey, 'synthetic-openai-key-not-used-by-loader-test');
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...config,
+        openai: {
+          sealFile: openaiSeal,
+          credentialReference: 'openai.qfj.production.v1',
+          credentialFile: openaiKey,
+        },
+      }),
+    );
+    expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+      'production-worker-config-invalid',
+    );
   });
 
   it('loads DISABLED knowledge without a database, CA file, embedding endpoint or embedding credential', () => {
@@ -365,6 +428,7 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
 describe('QuickFurno WhatsApp production worker containment', () => {
   const worker = source('../quickfurno-whatsapp/production-worker.ts');
   const binder = source('../quickfurno-whatsapp/production-seal-binding.ts');
+  const openaiBinder = source('../quickfurno-whatsapp/openai-production-seal-binding.ts');
   const killSwitch = source('../quickfurno-whatsapp/production-kill-switch.ts');
   const network = source('../quickfurno-whatsapp/production-network.ts');
   const bin = source('../bin/run-quickfurno-whatsapp-production-worker.ts');
@@ -382,6 +446,9 @@ describe('QuickFurno WhatsApp production worker containment', () => {
       expect(worker, forbidden).not.toContain(forbidden);
     }
     expect(worker).toContain("providerMode: 'GROQ_ONLY'");
+    expect(worker).toContain("providerMode: 'OPENAI_ONLY'");
+    expect(worker).toContain('new OpenAIModelProvider');
+    expect(worker).toContain('createFetchOpenAITransport');
     expect(worker).toContain('defaultRetryBudget: 0');
     expect(worker).toContain('allowFallback: false');
   });
@@ -451,12 +518,16 @@ describe('QuickFurno WhatsApp production worker containment', () => {
     expect(worker).toContain('killSwitch,');
   });
 
-  it('routes production turns through certified adaptive specialist routing and the bounded scheduler', () => {
+  it('routes production turns through bounded Luna/Sol adaptive specialist routing and scheduler', () => {
     expect(worker).toContain('createAdaptiveQuickFurnoWhatsAppSpecialistRuntime');
-    expect(worker).toContain('activeReleaseIds: [binding.release.releaseId]');
-    expect(worker).toContain('SIMPLE: activeRoute');
-    expect(worker).toContain('STANDARD: activeRoute');
-    expect(worker).toContain('COMPLEX: activeRoute');
+    expect(worker).toContain('activeReleaseIds: specialists.map((item) => item.releaseId)');
+    expect(worker).toContain('releaseId: luna.releaseId');
+    expect(worker).toContain('releaseId: sol.releaseId');
+    expect(worker).toContain('SIMPLE: Object.freeze');
+    expect(worker).toContain('STANDARD: Object.freeze');
+    expect(worker).toContain('COMPLEX: Object.freeze');
+    expect(worker).toContain('splitOpenAIConcurrency');
+    expect(worker).toContain('reasoningEffort: JARVIS_V1_OPENAI_REASONING_EFFORT_BY_TIER[tier]');
     expect(worker).toContain('createQuickFurnoWhatsAppParallelScheduler');
     expect(worker).toContain(
       'globalMaxConcurrentTurns: config.concurrency.globalMaxConcurrentTurns',
@@ -475,8 +546,11 @@ describe('QuickFurno WhatsApp production worker containment', () => {
   it('serving code imports the neutral profile and never the live certification operator', () => {
     expect(worker).toContain('@qf-jarvis/jarvis-v1-production-profile');
     expect(binder).toContain('@qf-jarvis/jarvis-v1-production-profile');
-    expect(worker).not.toContain('@qf-jarvis/jarvis-v1-provider-certification-live');
-    expect(binder).not.toContain('@qf-jarvis/jarvis-v1-provider-certification-live');
+    expect(openaiBinder).toContain('@qf-jarvis/jarvis-v1-production-profile');
+    for (const servingSource of [worker, binder, openaiBinder]) {
+      expect(servingSource).not.toContain('@qf-jarvis/jarvis-v1-provider-certification-live');
+      expect(servingSource).not.toContain('@qf-jarvis/jarvis-v1-production-seal/openai-v1');
+    }
   });
 });
 

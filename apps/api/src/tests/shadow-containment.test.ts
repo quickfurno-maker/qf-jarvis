@@ -363,6 +363,12 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     // The specialist seam reuses the existing bounded Mastra turn wrapper; it does not define a new workflow.
     'src/quickfurno-whatsapp/specialist-runtime.ts',
   ]);
+  const OPENAI_TOOLS_DISABLED_POSTURE_FILES: readonly string[] = Object.freeze([
+    // Pure seal verification only. The literal `tools: 'NONE'` is part of the immutable config
+    // digest proving that OpenAI tools are disabled; this file constructs no provider, registry,
+    // tool call, capability, credential, network client or execution port.
+    'src/quickfurno-whatsapp/openai-production-seal-binding.ts',
+  ]);
 
   it('(130, 131) no tool, execution, workflow or database capability is reachable', () => {
     for (const file of allFiles()) {
@@ -388,6 +394,14 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
       const orchestratesQuickFurnoWhatsApp = QUICKFURNO_WHATSAPP_WORKFLOW_FILES.some((allowed) =>
         normalise(file).endsWith(`/${allowed}`),
       );
+      const bindsOpenAIToolsDisabledPosture = OPENAI_TOOLS_DISABLED_POSTURE_FILES.some((allowed) =>
+        normalise(file).endsWith(`/${allowed}`),
+      );
+      if (bindsOpenAIToolsDisabledPosture) {
+        expect(code, file).toContain("toolaccess: 'none'");
+        expect(code, file).not.toContain('toolcall');
+        expect(code, file).not.toContain('tool_call');
+      }
       if (CONTAINMENT_VOCABULARY_SPECS.some((allowed) => normalise(file).endsWith(`/${allowed}`))) {
         continue;
       }
@@ -397,7 +411,7 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
         'webhook',
         'toolcall',
         'tool_call',
-        'tools:',
+        ...(bindsOpenAIToolsDisabledPosture ? [] : ['tools:']),
         ...(orchestratesCustomerTurn || orchestratesDurableJourney || orchestratesQuickFurnoWhatsApp
           ? []
           : ['workflow']),
@@ -1002,7 +1016,7 @@ describe('(133-148) the declared budget and every prior lock', () => {
     // budget rather than left to lose a race with whatever runs beside it.
   }, 30_000);
 
-  it('the three executables are declared as bins and each runs nothing on import', () => {
+  it('the four executables are declared as bins and each runs nothing on import', () => {
     const manifest = JSON.parse(readFileSync(join(APP_DIR, 'package.json'), 'utf8')) as {
       bin?: Record<string, string>;
     };
@@ -1013,6 +1027,7 @@ describe('(133-148) the declared budget and every prior lock', () => {
     expect(manifest.bin).toEqual({
       'qfj-generate-shadow-evidence': './dist/bin/generate-shadow-evidence.js',
       'qfj-jf5b-certify': './dist/bin/run-jf5b-live-certification.js',
+      'qfj-openai-launch-smoke': './dist/bin/run-openai-launch-smoke.js',
       'qfj-run-shadow-once': './dist/bin/run-shadow-once.js',
     });
     // Only the bin entries execute; every other module is import-safe.
