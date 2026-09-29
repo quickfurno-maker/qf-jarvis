@@ -2,8 +2,9 @@
  * The pre/post-gateway state gate (QFJ-M4, ADR-0057 §J).
  *
  * The same content-free check runs IMMEDIATELY BEFORE gateway invocation and IMMEDIATELY AFTER the
- * gateway result: a cancellation, a human takeover, an AI pause, a non-clear subject status, or a
- * party/assignment/data-class mismatch against the plan blocks drafting; a revision change between the
+ * gateway result: a cancellation, a human takeover, an AI pause, a privacy-blocked subject status,
+ * or a party/assignment/data-class mismatch against the plan blocks drafting. The only non-clear state
+ * allowed is the explicit no-subject Riya CLIENT first-contact onboarding case. A revision change between the
  * two reads blocks drafting after the result. Any block prevents a reply draft from returning.
  */
 import type { ReplyPlan } from '@qf-jarvis/agent-runtime';
@@ -22,14 +23,20 @@ export function stateBlockReason(
   if (state.humanTakeover || state.aiPaused) {
     return 'model-state-blocked';
   }
-  if (state.subjectStatus !== 'clear') {
-    return 'model-state-blocked';
-  }
   if (
     state.partyType !== plan.partyType ||
     state.assignedActor !== plan.assignedActor ||
     state.dataClass !== plan.dataClass
   ) {
+    return 'model-state-blocked';
+  }
+  const boundedRiyaFirstContact =
+    state.subjectStatus === 'in-progress' &&
+    state.subjectRef === undefined &&
+    state.partyType === 'CLIENT' &&
+    state.assignedActor === 'RIYA' &&
+    state.dataClass === 'HOSTED_ALLOWED';
+  if (state.subjectStatus !== 'clear' && !boundedRiyaFirstContact) {
     return 'model-state-blocked';
   }
   return null;

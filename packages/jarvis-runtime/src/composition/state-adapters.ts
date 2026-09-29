@@ -88,6 +88,7 @@ export function replyStateReaderFor(
         aiPaused: s.aiPaused,
         cancelled: s.cancelled,
         subjectStatus: s.subjectStatus,
+        ...(s.subjectRef === undefined ? {} : { subjectRef: s.subjectRef }),
       };
     },
   });
