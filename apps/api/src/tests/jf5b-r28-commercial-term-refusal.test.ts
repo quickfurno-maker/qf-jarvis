@@ -68,6 +68,7 @@ describe('JF-5B-R28 owner-reviewed commercial-term refusal', () => {
       ' ya koi bhi commercial term confirm ya offer nahi kar sakta',
       ' ya koi bhi commercial term confirm ya offer nahi kar sakti',
       ' pradan karne mein saksham nahi hoon',
+      ' ya koi bhi मूल्य‑संबंधी प्रस्ताव देने के लिए अधिकृत नहीं हूँ',
     ]);
   });
 });
