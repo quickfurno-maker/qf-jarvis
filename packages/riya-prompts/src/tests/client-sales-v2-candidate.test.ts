@@ -4,9 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  RIYA_CLIENT_SALES_SYSTEM_TEMPLATE_V2_CANDIDATE,
-} from '../client-sales/system-template-v2-candidate.js';
+import { RIYA_CLIENT_SALES_SYSTEM_TEMPLATE_V2_CANDIDATE } from '../client-sales/system-template-v2-candidate.js';
 
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const template = RIYA_CLIENT_SALES_SYSTEM_TEMPLATE_V2_CANDIDATE;
