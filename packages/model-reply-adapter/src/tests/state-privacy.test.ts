@@ -103,6 +103,68 @@ describe('pre-gateway state gate', () => {
   }
 });
 
+describe('bounded Riya first-contact state', () => {
+  it('allows CLIENT Riya in-progress without a canonical subject reference', async () => {
+    const invoker = scriptedGatewayInvoker(structuredReply());
+    const adapter = makeAdapter(
+      scriptedReplyStateReader(clearReplyState({ subjectStatus: 'in-progress' })),
+      invoker,
+    );
+    const result = await adapter.draftReplyDetailed(replyPlan());
+    expect(result.ok).toBe(true);
+    expect(result.gatewayInvoked).toBe(true);
+    expect(invoker.invoked()).toBe(1);
+  });
+
+  it('still blocks in-progress once a canonical subject reference exists', async () => {
+    const invoker = scriptedGatewayInvoker(structuredReply());
+    const adapter = makeAdapter(
+      scriptedReplyStateReader(
+        clearReplyState({ subjectStatus: 'in-progress', subjectRef: 'client.canonical.1' }),
+      ),
+      invoker,
+    );
+    const result = await adapter.draftReplyDetailed(replyPlan());
+    expect(result.reason).toBe('model-state-blocked');
+    expect(result.gatewayInvoked).toBe(false);
+    expect(invoker.invoked()).toBe(0);
+  });
+
+  it('does not open the exception to another actor or party', async () => {
+    const invoker = scriptedGatewayInvoker(structuredReply());
+    const adapter = makeAdapter(
+      scriptedReplyStateReader(
+        clearReplyState({
+          subjectStatus: 'in-progress',
+          partyType: 'VENDOR',
+          assignedActor: 'ANISHA',
+        }),
+      ),
+      invoker,
+    );
+    const result = await adapter.draftReplyDetailed(
+      replyPlan({ partyType: 'VENDOR', assignedActor: 'ANISHA' }),
+    );
+    expect(result.reason).toBe('model-state-blocked');
+    expect(result.gatewayInvoked).toBe(false);
+    expect(invoker.invoked()).toBe(0);
+  });
+
+  it('fails closed if a canonical subject appears after the gateway result', async () => {
+    const invoker = scriptedGatewayInvoker(structuredReply());
+    const reader = scriptedReplyStateReader(
+      clearReplyState({ subjectStatus: 'in-progress' }),
+      clearReplyState({ subjectStatus: 'in-progress', subjectRef: 'client.canonical.1' }),
+    );
+    const adapter = makeAdapter(reader, invoker);
+    const result = await adapter.draftReplyDetailed(replyPlan());
+    expect(result.reason).toBe('model-state-blocked');
+    expect(result.gatewayInvoked).toBe(true);
+    expect(result.draft).toBeUndefined();
+    expect(reader.reads()).toBe(2);
+  });
+});
+
 describe('post-gateway state gate', () => {
   it('(25) a revision change after the result blocks the draft', async () => {
     const invoker = scriptedGatewayInvoker(structuredReply());

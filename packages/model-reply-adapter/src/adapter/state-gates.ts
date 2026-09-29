@@ -22,7 +22,16 @@ export function stateBlockReason(
   if (state.humanTakeover || state.aiPaused) {
     return 'model-state-blocked';
   }
-  if (state.subjectStatus !== 'clear') {
+  const boundedRiyaFirstContact =
+    state.subjectStatus === 'in-progress' &&
+    state.subjectRef === undefined &&
+    state.partyType === 'CLIENT' &&
+    state.assignedActor === 'RIYA' &&
+    state.dataClass === 'HOSTED_ALLOWED' &&
+    plan.partyType === 'CLIENT' &&
+    plan.assignedActor === 'RIYA' &&
+    plan.dataClass === 'HOSTED_ALLOWED';
+  if (state.subjectStatus !== 'clear' && !boundedRiyaFirstContact) {
     return 'model-state-blocked';
   }
   if (
