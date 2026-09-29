@@ -16,6 +16,7 @@ import type {
   KnowledgeRetrievalResult,
 } from '@qf-jarvis/governed-knowledge';
 import type {
+  JarvisDecisionShadowPort,
   ModelGatewayInvoker,
   ModelReplyPromptBinding,
   ModelReplyPromptBindings,
@@ -132,6 +133,8 @@ export interface JarvisRuntimeConfig {
 
   /** Optional M4 gateway invoker; absent -> the model adapter fails closed (unavailable) at runtime. */
   readonly gatewayInvoker?: ModelGatewayInvoker;
+  /** Optional ADR-0171 decision-intelligence shadow observer. It cannot change routing, replies or authority. */
+  readonly decisionShadowPort?: JarvisDecisionShadowPort;
 
   /** Optional M3 Core transport; absent -> the Core decision is deferred (MODEL_DRAFTED), never faked. */
   readonly coreTransport?: CoreDecisionTransport;

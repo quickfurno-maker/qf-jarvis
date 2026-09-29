@@ -11,9 +11,10 @@
   // are EXCLUDED so nothing test-only reaches dist/; the shipped test support under
   // src/testing IS emitted (the public `./testing` subpath). Project references: the adapter
   // composes @qf-jarvis/agent-runtime (ModelReplyPort/contracts) and @qf-jarvis/model-gateway
-  // (public request/response/provenance contracts) — both one-way.
+  // (public request/response/provenance contracts) â€” both one-way.
   "references": [
     { "path": "../agent-runtime/tsconfig.build.json" },
+    { "path": "../decision-intelligence/tsconfig.build.json" },
     { "path": "../model-gateway" },
     { "path": "../prompt-registry/tsconfig.build.json" }
   ],

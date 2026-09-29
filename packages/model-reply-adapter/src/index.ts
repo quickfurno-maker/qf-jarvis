@@ -70,3 +70,5 @@ export type {
   ModelReplyPromptBinding,
   ModelReplyPromptBindings,
 } from './adapter/create-model-reply-adapter.js';
+
+export type { JarvisDecisionShadowPort } from '@qf-jarvis/decision-intelligence';
