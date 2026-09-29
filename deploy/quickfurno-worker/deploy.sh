@@ -8,11 +8,13 @@ REPO_DIR="${REPO_DIR:-/srv/qf-jarvis/repo}"
 
 CONFIG='/srv/qf-jarvis/secrets/qf-jarvis-whatsapp-worker.json'
 GROQ='/srv/qf-jarvis/secrets/groq-production.key'
+JEV='/srv/qf-jarvis/secrets/typesafe-jev-production.key'
 SIGNING='/srv/qf-jarvis/secrets/quickfurno-signing.key'
 EMBEDDING='/srv/qf-jarvis/secrets/embedding-production.key'
 SEAL='/srv/qf-jarvis/seals/jf5c-production-seal.json'
 CA='/srv/qf-jarvis/secrets/postgres-ca.pem'
 KNOWLEDGE_MODE="${QFJ_WORKER_KNOWLEDGE_MODE:-DISABLED}"
+JEV_MODE="${QFJ_WORKER_JEV_MODE:-DISABLED}"
 SPOOL='/srv/qf-jarvis/state/quickfurno-gateway-turns'
 CONTROL='/srv/qf-jarvis/state/quickfurno-worker-control'
 OBSERVABILITY='/srv/qf-jarvis/state/observability'
@@ -27,8 +29,13 @@ die() { echo "FATAL: $1" >&2; exit 1; }
 [[ -f "$DISABLE" ]] || die "$DISABLE is missing. Run disable.sh before deploy."
 [[ "$KNOWLEDGE_MODE" == "DISABLED" || "$KNOWLEDGE_MODE" == "HYBRID" ]] ||
   die "QFJ_WORKER_KNOWLEDGE_MODE must be DISABLED or HYBRID."
+[[ "$JEV_MODE" == "DISABLED" || "$JEV_MODE" == "SHADOW" ]] ||
+  die "QFJ_WORKER_JEV_MODE must be DISABLED or SHADOW."
 
 required_files=("$CONFIG" "$GROQ" "$SIGNING" "$SEAL")
+if [[ "$JEV_MODE" == "SHADOW" ]]; then
+  required_files+=("$JEV")
+fi
 if [[ "$KNOWLEDGE_MODE" == "HYBRID" ]]; then
   required_files+=("$EMBEDDING" "$CA")
 fi
@@ -77,11 +84,15 @@ docker build   --file "$BUILD_CTX/deploy/quickfurno-worker/Dockerfile"   --build
 
 BASE="$BUILD_CTX/deploy/quickfurno-worker/compose.production.yml"
 KNOWLEDGE_OVERRIDE="$BUILD_CTX/deploy/quickfurno-worker/compose.knowledge.yml"
+JEV_OVERRIDE="$BUILD_CTX/deploy/quickfurno-worker/compose.jev.yml"
 compose_args=(-p qf-jarvis-whatsapp-worker -f "$BASE")
 if [[ "$KNOWLEDGE_MODE" == "HYBRID" ]]; then
   compose_args+=(-f "$KNOWLEDGE_OVERRIDE")
 fi
-echo "==> starting worker disabled (knowledge=$KNOWLEDGE_MODE)"
+if [[ "$JEV_MODE" == "SHADOW" ]]; then
+  compose_args+=(-f "$JEV_OVERRIDE")
+fi
+echo "==> starting worker disabled (knowledge=$KNOWLEDGE_MODE jev=$JEV_MODE)"
 QFJ_WORKER_IMAGE_TAG="$SHA" docker compose "${compose_args[@]}" up -d
 
 for _ in $(seq 1 45); do
@@ -119,6 +130,13 @@ prove "observation source" "$OBSERVABILITY"   "$(docker inspect qf-jarvis-whatsa
 prove "observation writable" "true"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/run/qfj-observability"}}{{.RW}}{{end}}{{end}}')"
 prove "kill switch visible" "true"   "$(docker exec qf-jarvis-whatsapp-worker node -e "const fs=require('node:fs');console.log(fs.existsSync('/var/run/qfj-control/DISABLE_MODEL'))")"
 
+jev_mount="$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/typesafe-jev-production.key"}}{{.Source}}{{end}}{{end}}')"
+if [[ "$JEV_MODE" == "SHADOW" ]]; then
+  prove "TypeSafe Jev secret source" "$JEV" "$jev_mount"
+else
+  prove "TypeSafe Jev secret absent" "" "$jev_mount"
+fi
+
 embedding_mount="$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/embedding-production.key"}}{{.Source}}{{end}}{{end}}')"
 ca_mount="$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/postgres-ca.pem"}}{{.Source}}{{end}}{{end}}')"
 if [[ "$KNOWLEDGE_MODE" == "HYBRID" ]]; then
@@ -133,7 +151,7 @@ fi
 
 cat <<EOF
 
-DISABLED deployment verified for $SHA (knowledge=$KNOWLEDGE_MODE).
+DISABLED deployment verified for $SHA (knowledge=$KNOWLEDGE_MODE jev=$JEV_MODE).
 No public port exists and the worker cannot claim a turn while DISABLE_MODEL exists.
 
 Do not activate until:

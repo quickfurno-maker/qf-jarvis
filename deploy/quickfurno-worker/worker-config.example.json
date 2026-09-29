@@ -13,6 +13,9 @@
   "knowledge": {
     "mode": "DISABLED"
   },
+  "decisionIntelligence": {
+    "mode": "DISABLED"
+  },
   "concurrency": {
     "globalMaxConcurrentTurns": 60,
     "maxConcurrentByAgent": {

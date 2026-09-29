@@ -693,6 +693,10 @@ describe('the staging smoke stays out of the production boundary', () => {
       '@qf-jarvis/jarvis-v1-production-profile',
       '@qf-jarvis/jarvis-v1-production-seal',
       '@qf-jarvis/jarvis-v1-provider-certification-live',
+      // ADR-0171: the WhatsApp production boundary may compose TypeSafe Jev only as bounded
+      // decision SHADOW intelligence. The adapter owns no database, action, execution or Core
+      // authority and is separately containment-locked to the two reviewed production files.
+      '@qf-jarvis/jev-decision-adapter',
       // ADR-0161: deterministic freshness orchestration uses the authority-free fingerprint engine
       // and the existing ingestion normalizer. It can only build a sealed inactive candidate.
       '@qf-jarvis/knowledge-freshness',

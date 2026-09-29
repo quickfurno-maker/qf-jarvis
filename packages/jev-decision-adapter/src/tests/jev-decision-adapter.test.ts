@@ -3,6 +3,7 @@ import { createJarvisDecisionPreflight } from '@qf-jarvis/decision-intelligence'
 import {
   JevDecisionProvider,
   TYPESAFE_MODELS_ENDPOINT,
+  createJevDecisionShadowPort,
   TYPESAFE_SYSTEM_ONE_ENDPOINT,
   createTypeSafeApiKey,
   type TypeSafeHttpRequest,
@@ -113,6 +114,45 @@ describe('Jev decision adapter', () => {
       ),
     ).rejects.toThrow('jev-data-class-refused');
     expect(transport.requests).toHaveLength(0);
+  });
+
+  it('drops saturated shadow observations instead of queueing customer work', async () => {
+    let release: (() => void) | undefined;
+    const transport: TypeSafeTransport = {
+      async send(request) {
+        if (request.url === TYPESAFE_MODELS_ENDPOINT) {
+          return { status: 200, bodyText: JSON.stringify({ models: [{ name: 'jev-latest' }] }) };
+        }
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return new CapturingTransport().response;
+      },
+    };
+    const provider = new JevDecisionProvider({
+      model: 'jev-latest',
+      apiKey: createTypeSafeApiKey('sentinel'),
+      transport,
+    });
+    const shadow = createJevDecisionShadowPort({ provider, maxConcurrent: 1, timeoutMs: 5_000 });
+    const first = shadow.observe({
+      actorRef: 'RIYA',
+      dataClass: 'HOSTED_ALLOWED',
+      taskClass: 'RESPONSE_GENERATION',
+      normalizedText: 'first',
+    });
+    await Promise.resolve();
+    await expect(
+      shadow.observe({
+        actorRef: 'ANISHA',
+        dataClass: 'HOSTED_ALLOWED',
+        taskClass: 'RESPONSE_GENERATION',
+        normalizedText: 'second',
+      }),
+    ).resolves.toBeUndefined();
+    expect(release).toBeTypeOf('function');
+    release?.();
+    await first;
   });
 
   it('rejects malformed provider answers rather than guessing', async () => {

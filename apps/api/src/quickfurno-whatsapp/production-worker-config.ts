@@ -7,6 +7,7 @@ import {
   type DatabaseConfigInput,
 } from '@qf-jarvis/event-backbone';
 import type { AgentHybridKnowledgeSearchPolicy } from '@qf-jarvis/jarvis-runtime';
+import { createTypeSafeApiKey, type TypeSafeApiKey } from '@qf-jarvis/jev-decision-adapter';
 import { z } from 'zod';
 
 const MAX_CONFIG_BYTES = 256 * 1024;
@@ -14,6 +15,7 @@ const MAX_SEAL_BYTES = 512 * 1024;
 const MAX_CA_BYTES = 256 * 1024;
 const MAX_PRIVATE_KEY_BYTES = 32 * 1024;
 const MAX_EMBEDDING_CREDENTIAL_BYTES = 16 * 1024;
+const MAX_JEV_CREDENTIAL_BYTES = 16 * 1024;
 const SHA40 = /^[0-9a-f]{40}$/u;
 const REF = /^[A-Za-z0-9._:-]{1,128}$/u;
 const KEY_ID = /^[A-Za-z0-9._:-]{1,64}$/u;
@@ -109,6 +111,20 @@ const concurrencySchema = z
     }
   });
 
+const decisionIntelligenceSchema = z.union([
+  z.object({ mode: z.literal('DISABLED') }).strict(),
+  z
+    .object({
+      mode: z.literal('SHADOW'),
+      model: z.string().regex(MODEL_REF),
+      credentialFile: absolutePath,
+      timeoutMs: z.number().int().min(50).max(5_000).default(1_200),
+      minConfidence: z.number().min(0).max(1).default(0.7),
+      maxConcurrent: z.number().int().min(1).max(32).default(8),
+    })
+    .strict(),
+]);
+
 const knowledgeSchema = z.union([
   z.object({ mode: z.literal('DISABLED') }).strict(),
   z
@@ -147,6 +163,7 @@ const schema = z
       })
       .strict(),
     knowledge: knowledgeSchema,
+    decisionIntelligence: decisionIntelligenceSchema.default({ mode: 'DISABLED' }),
     concurrency: concurrencySchema,
     spoolDirectory: absolutePath,
     killSwitchFile: absolutePath,
@@ -187,6 +204,16 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
     privateKeyPem: string;
     timeoutMs: number;
   }>;
+  readonly decisionIntelligence:
+    | Readonly<{ mode: 'DISABLED' }>
+    | Readonly<{
+        mode: 'SHADOW';
+        model: string;
+        apiKey: TypeSafeApiKey;
+        timeoutMs: number;
+        minConfidence: number;
+        maxConcurrent: number;
+      }>;
   readonly knowledge:
     | Readonly<{ mode: 'DISABLED' }>
     | Readonly<{
@@ -316,6 +343,26 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
     });
   }
 
+  let decisionIntelligence: QuickFurnoWhatsAppProductionWorkerConfig['decisionIntelligence'];
+  if (input.decisionIntelligence.mode === 'DISABLED') {
+    decisionIntelligence = Object.freeze({ mode: 'DISABLED' as const });
+  } else {
+    try {
+      decisionIntelligence = Object.freeze({
+        mode: 'SHADOW' as const,
+        model: input.decisionIntelligence.model,
+        apiKey: createTypeSafeApiKey(
+          secretText(input.decisionIntelligence.credentialFile, MAX_JEV_CREDENTIAL_BYTES),
+        ),
+        timeoutMs: input.decisionIntelligence.timeoutMs,
+        minConfidence: input.decisionIntelligence.minConfidence,
+        maxConcurrent: input.decisionIntelligence.maxConcurrent,
+      });
+    } catch {
+      throw new Error('production-worker-config-invalid');
+    }
+  }
+
   const seal = parseJsonFile(input.sealFile, MAX_SEAL_BYTES);
   return Object.freeze({
     revision: input.revision,
@@ -330,6 +377,7 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
       privateKeyPem,
       timeoutMs: input.quickfurno.timeoutMs,
     }),
+    decisionIntelligence,
     knowledge,
     concurrency: Object.freeze({
       globalMaxConcurrentTurns: input.concurrency.globalMaxConcurrentTurns,

@@ -150,6 +150,37 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     const config = loadQuickFurnoWhatsAppProductionWorkerConfig(path);
     expect(config.database).toBeUndefined();
     expect(config.knowledge).toEqual({ mode: 'DISABLED' });
+    expect(config.decisionIntelligence).toEqual({ mode: 'DISABLED' });
+  });
+
+  it('loads Jev SHADOW configuration from a bounded mounted credential without exposing the key', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const jevKeyFile = join(root, 'typesafe-jev.key');
+    writeFileSync(jevKeyFile, 'synthetic-typesafe-key');
+    const config = validConfig(root);
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...config,
+        decisionIntelligence: {
+          mode: 'SHADOW',
+          model: 'jev-latest',
+          credentialFile: jevKeyFile,
+          timeoutMs: 900,
+          minConfidence: 0.76,
+          maxConcurrent: 6,
+        },
+      }),
+    );
+    const loaded = loadQuickFurnoWhatsAppProductionWorkerConfig(path);
+    expect(loaded.decisionIntelligence.mode).toBe('SHADOW');
+    if (loaded.decisionIntelligence.mode !== 'SHADOW') throw new Error('expected Jev shadow');
+    expect(loaded.decisionIntelligence.model).toBe('jev-latest');
+    expect(loaded.decisionIntelligence.timeoutMs).toBe(900);
+    expect(loaded.decisionIntelligence.minConfidence).toBe(0.76);
+    expect(loaded.decisionIntelligence.maxConcurrent).toBe(6);
+    expect(String(loaded.decisionIntelligence.apiKey)).toBe('[REDACTED_TYPESAFE_API_KEY]');
   });
 
   it('refuses database configuration when knowledge is explicitly DISABLED', () => {
@@ -305,6 +336,16 @@ describe('QuickFurno WhatsApp production worker containment', () => {
     expect(worker).toContain("providerMode: 'GROQ_ONLY'");
     expect(worker).toContain('defaultRetryBudget: 0');
     expect(worker).toContain('allowFallback: false');
+  });
+
+  it('binds TypeSafe Jev only as bounded SHADOW decision intelligence', () => {
+    expect(worker).toContain("config.decisionIntelligence.mode === 'SHADOW'");
+    expect(worker).toContain('new JevDecisionProvider');
+    expect(worker).toContain('jev.listModels');
+    expect(worker).toContain('createJevDecisionShadowPort');
+    expect(worker).toContain('...(decisionShadowPort === undefined ? {} : { decisionShadowPort })');
+    expect(worker).not.toContain('actionProposalAuthorized: true');
+    expect(worker).not.toContain('executionAuthorized: true');
   });
 
   it('binds hybrid knowledge only inside the explicit HYBRID branch', () => {
