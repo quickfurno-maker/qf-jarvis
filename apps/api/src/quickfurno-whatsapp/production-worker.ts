@@ -50,7 +50,10 @@ import { createPromptRegistry } from '@qf-jarvis/prompt-registry';
 import { createFileDurableTurnSpool } from '@qf-jarvis/quickfurno-gateway/durable-turn-spool';
 import { createInMemoryPublicKnowledgeSemanticCache } from '@qf-jarvis/semantic-context-engine';
 import { createJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
-import { RIYA_PRODUCTION_PROMPTS } from '@qf-jarvis/riya-prompts';
+import {
+  RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1,
+  RIYA_PRODUCTION_PROMPTS,
+} from '@qf-jarvis/riya-prompts';
 
 import { createFileGroqCredentialBinding } from '../secrets/file-groq-credential-binding.js';
 import { createFileOpenAICredentialBinding } from '../secrets/file-openai-credential-binding.js';
@@ -65,11 +68,18 @@ import { quickFurnoWorkerHttpPost } from './production-network.js';
 import { createAdaptiveQuickFurnoWhatsAppSpecialistRuntime } from './adaptive-specialist-runtime.js';
 import { createQuickFurnoWhatsAppAuthorityStatePort } from './authority-state-port.js';
 import { createQuickFurnoWhatsAppParallelScheduler } from './parallel-turn-scheduler.js';
-import { createQuickFurnoWhatsAppSpecialistRuntime } from './specialist-runtime.js';
+import {
+  createQuickFurnoWhatsAppSpecialistRuntime,
+  type QuickFurnoWhatsAppSpecialistRuntime,
+} from './specialist-runtime.js';
 import {
   createQuickFurnoWhatsAppTurnProcessor,
   type QuickFurnoWhatsAppProcessorOutcome,
 } from './turn-processor.js';
+import type {
+  QuickFurnoWhatsAppConversationContextV1,
+  QuickFurnoWhatsAppWorkerMaterial,
+} from './contracts.js';
 import { bindOpenAIV1SealForProduction } from './openai-production-seal-binding.js';
 import { bindJf5cSealForProduction } from './production-seal-binding.js';
 import type { QuickFurnoWhatsAppProductionWorkerConfig } from './production-worker-config.js';
@@ -448,7 +458,8 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       createQuickFurnoWhatsAppAuthorityReader(httpConfig),
     );
     const specialists = runtimeStacks.map((stack) => {
-      const runtime = createJarvisRuntime({
+      const gatewayInvoker = observedGatewayInvoker(stack.baseGatewayInvoker);
+      const sharedRuntimeConfig = {
         authoritativeState,
         policy: createRuntimePolicy({
           policyRevision: config.policyRevision,
@@ -463,24 +474,53 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         riyaGroundedReplyPromptBinding: stack.riyaGroundedReplyPromptBinding,
         promptRegistry,
         capabilityProfileRef: stack.capabilityProfileRef,
-        gatewayInvoker: observedGatewayInvoker(stack.baseGatewayInvoker),
+        gatewayInvoker,
         ...(decisionShadowPort === undefined ? {} : { decisionShadowPort }),
         ...(agentHybridKnowledge === undefined ? {} : { agentHybridKnowledge }),
-        requireEvaluationRef: true,
+        requireEvaluationRef: true as const,
         provenanceRefs: {
           runtimeRef: 'qfj.jarvis-runtime.quickfurno-authority-v2',
           releaseRef: stack.release.releaseId,
           providerRef: stack.release.providerId,
           configRef: stack.release.configDigest,
         },
+      };
+
+      // Anisha and Aarohi are certified on RESPONSE_GENERATION, which remains the generic runtime
+      // default. Riya's governed client-sales prompt is intentionally certified on
+      // RIYA_CONVERSATION_EVOLUTION. Keep the task class scoped to RIYA rather than changing the
+      // shared runtime default, otherwise fixing first-contact Riya would silently break the other
+      // two agents' exact prompt-registry lookups.
+      const genericRuntime = createJarvisRuntime(sharedRuntimeConfig);
+      const riyaRuntime = createJarvisRuntime({
+        ...sharedRuntimeConfig,
+        taskClass: RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1.taskClass,
       });
+      const genericSpecialist = createQuickFurnoWhatsAppSpecialistRuntime({
+        runtimeId: config.runtimeId,
+        jarvisRuntime: genericRuntime,
+      });
+      const riyaSpecialist = createQuickFurnoWhatsAppSpecialistRuntime({
+        runtimeId: config.runtimeId,
+        jarvisRuntime: riyaRuntime,
+      });
+      const runtime: QuickFurnoWhatsAppSpecialistRuntime = Object.freeze({
+        process(
+          material: QuickFurnoWhatsAppWorkerMaterial,
+          conversationContext?: QuickFurnoWhatsAppConversationContextV1,
+        ) {
+          const selected =
+            'purpose' in material || material.assignedActor === 'RIYA'
+              ? riyaSpecialist
+              : genericSpecialist;
+          return selected.process(material, conversationContext);
+        },
+      });
+
       return Object.freeze({
         tier: stack.tier,
         releaseId: stack.release.releaseId,
-        runtime: createQuickFurnoWhatsAppSpecialistRuntime({
-          runtimeId: config.runtimeId,
-          jarvisRuntime: runtime,
-        }),
+        runtime,
       });
     });
 

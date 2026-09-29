@@ -537,6 +537,16 @@ describe('QuickFurno WhatsApp production worker containment', () => {
     expect(worker).not.toContain('concurrency: { maxConcurrent: 1, maxQueue: 1 }');
   });
 
+  it('keeps Riya on her evaluated conversation task class without changing Anisha or Aarohi defaults', () => {
+    expect(worker).toContain('RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1');
+    expect(worker).toContain('taskClass: RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1.taskClass');
+    expect(worker).toContain("material.assignedActor === 'RIYA'");
+    expect(worker).toContain('? riyaSpecialist');
+    expect(worker).toContain(': genericSpecialist');
+    expect(worker).toContain('const genericRuntime = createJarvisRuntime(sharedRuntimeConfig)');
+    expect(worker).not.toContain("taskClass: 'RIYA_CONVERSATION_EVOLUTION'");
+  });
+
   it('confines direct QuickFurno HTTP to one no-retry network adapter', () => {
     expect(worker).not.toMatch(/\bfetch\s*\(/);
     expect(network.match(/\bfetch\s*\(/g)).toHaveLength(2);
