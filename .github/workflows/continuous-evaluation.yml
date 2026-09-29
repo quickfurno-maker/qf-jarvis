@@ -72,6 +72,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Riya V2 formatting diagnostic
+        run: |
+          pnpm exec prettier --write packages/riya-prompts/src/tests/client-sales-v2-candidate.test.ts
+          git diff -- packages/riya-prompts/src/tests/client-sales-v2-candidate.test.ts
+
       - name: Build workspace packages
         run: pnpm build
 
