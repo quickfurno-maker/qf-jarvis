@@ -184,7 +184,7 @@ function frameEnd(text: string, index: number): number {
 }
 
 /** The characters that end a clause. A refusal does not reach across one. */
-const CLAUSE_BOUNDARIES = ['.', '!', '?', ';', '\n', '\r', '•', '—'];
+const CLAUSE_BOUNDARIES = ['.', '!', '?', ';', '\n', '\r', '•', '—', '।'];
 
 /**
  * The CONTRASTIVE connectives that also end a refusal's scope.
@@ -437,6 +437,9 @@ const COMMERCIAL_TERM_DISCOUNT_REFUSAL_SUFFIXES: readonly string[] = Object.free
   ' ya koi bhi commercial term confirm ya offer nahi kar sakti',
   // JF-5B-R29: exact Groq/Aarohi refusal from the 2026-09-28 rerun.
   ' pradan karne mein saksham nahi hoon',
+  // 2026-09-29 owner-reviewed Groq/Aarohi Hindi authority refusal. The Devanagari danda is a
+  // clause boundary, so a later sentence is evaluated independently and cannot ride this suppression.
+  ' ya koi bhi मूल्य‑संबंधी प्रस्ताव देने के लिए अधिकृत नहीं हूँ',
 ]);
 
 function isCommercialTermDiscountRefusal(
