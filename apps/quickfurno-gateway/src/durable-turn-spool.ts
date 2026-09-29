@@ -11,6 +11,8 @@ export interface DurableTurnRecordV1 {
   readonly receivedAt: string;
   readonly assignedActor: 'AAROHI' | 'ANISHA' | 'RIYA';
   readonly subjectType: 'unknown' | 'prospect' | 'client' | 'vendor';
+  readonly turnPurpose?: 'lead_qualification';
+  readonly qualificationRequestId?: string;
   readonly acceptedAt: string;
 }
 
@@ -55,6 +57,12 @@ function stableRecord(turn: WhatsAppTurnV1, acceptedAt: string): DurableTurnReco
     receivedAt: turn.receivedAt,
     assignedActor: turn.assignedActor,
     subjectType: turn.subjectType,
+    ...(turn.turnPurpose === 'lead_qualification'
+      ? {
+          turnPurpose: 'lead_qualification' as const,
+          qualificationRequestId: turn.qualificationRequestId,
+        }
+      : {}),
     acceptedAt,
   });
 }
@@ -66,7 +74,9 @@ function sameIdentity(a: DurableTurnRecordV1, b: DurableTurnRecordV1): boolean {
     a.inboundMessageId === b.inboundMessageId &&
     a.receivedAt === b.receivedAt &&
     a.assignedActor === b.assignedActor &&
-    a.subjectType === b.subjectType
+    a.subjectType === b.subjectType &&
+    a.turnPurpose === b.turnPurpose &&
+    a.qualificationRequestId === b.qualificationRequestId
   );
 }
 
@@ -84,10 +94,12 @@ function parseRecord(value: unknown): DurableTurnRecordV1 | null {
     'acceptedAt',
   ];
   const currentKeys = [...legacyKeys, 'requestId'];
+  const qualificationKeys = [...currentKeys, 'turnPurpose', 'qualificationRequestId'];
   const actualKeys = Object.keys(r).sort().join(',');
   if (
     actualKeys !== [...legacyKeys].sort().join(',') &&
-    actualKeys !== currentKeys.sort().join(',')
+    actualKeys !== currentKeys.sort().join(',') &&
+    actualKeys !== qualificationKeys.sort().join(',')
   )
     return null;
   const version = r['version'];
@@ -98,6 +110,8 @@ function parseRecord(value: unknown): DurableTurnRecordV1 | null {
   const receivedAt = r['receivedAt'];
   const assignedActor = r['assignedActor'];
   const subjectType = r['subjectType'];
+  const turnPurpose = r['turnPurpose'];
+  const qualificationRequestId = r['qualificationRequestId'];
   const acceptedAt = r['acceptedAt'];
   if (
     version !== 1 ||
@@ -119,6 +133,15 @@ function parseRecord(value: unknown): DurableTurnRecordV1 | null {
     !['unknown', 'prospect', 'client', 'vendor'].includes(subjectType)
   )
     return null;
+  if (
+    turnPurpose !== undefined &&
+    (turnPurpose !== 'lead_qualification' ||
+      assignedActor !== 'RIYA' ||
+      typeof qualificationRequestId !== 'string' ||
+      !UUID.test(qualificationRequestId))
+  )
+    return null;
+  if (turnPurpose === undefined && qualificationRequestId !== undefined) return null;
   return Object.freeze({
     version: 1,
     ...(requestId === undefined ? {} : { requestId }),
@@ -128,6 +151,12 @@ function parseRecord(value: unknown): DurableTurnRecordV1 | null {
     receivedAt,
     assignedActor: assignedActor as DurableTurnRecordV1['assignedActor'],
     subjectType: subjectType as DurableTurnRecordV1['subjectType'],
+    ...(turnPurpose === 'lead_qualification'
+      ? {
+          turnPurpose: 'lead_qualification' as const,
+          qualificationRequestId: qualificationRequestId as string,
+        }
+      : {}),
     acceptedAt,
   });
 }

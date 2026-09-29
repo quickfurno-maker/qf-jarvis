@@ -8,6 +8,7 @@ import {
 } from '../quickfurno-whatsapp/quickfurno-http.js';
 import {
   QFJ_WHATSAPP_REPLY_PATH,
+  QFJ_WHATSAPP_REPLY_QUALIFICATION_SIGNING_DOMAIN,
   QFJ_WHATSAPP_REPLY_SIGNING_DOMAIN,
   QFJ_WHATSAPP_TURN_MATERIAL_PATH,
   QFJ_WHATSAPP_TURN_MATERIAL_SIGNING_DOMAIN,
@@ -136,6 +137,8 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
       subjectType: 'client',
       tenantId: 'quickfurno',
     });
+    expect('purpose' in result).toBe(false);
+    if ('purpose' in result) throw new Error('expected-conversation-material');
     expect(result.inbound).toMatchObject({
       messageType: 'image',
       attachment: { mediaId: 'media-123' },
@@ -285,6 +288,72 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
       kind: 'text',
       heading: 'Anisha · Partner Concierge',
     });
+  });
+
+  it('reply writer signs V3 qualification callback without conversational reply authority', async () => {
+    let captured: Record<string, unknown> | undefined;
+    const post = vi.fn<QuickFurnoWhatsAppHttpPost>((_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      captured = request;
+      const signature = init.headers['x-qfj-signature'];
+      if (signature === undefined) throw new Error('signature missing in test request');
+      expect(
+        verify(
+          null,
+          Buffer.from(
+            signingInput(
+              QFJ_WHATSAPP_REPLY_QUALIFICATION_SIGNING_DOMAIN,
+              QFJ_WHATSAPP_REPLY_PATH,
+              String(request['requestId']),
+              String(request['issuedAt']),
+              init.body,
+            ),
+            'utf8',
+          ),
+          keys.publicKey,
+          Buffer.from(signature, 'base64url'),
+        ),
+      ).toBe(true);
+      return Promise.resolve({
+        status: 202,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              protocol: 'qfj.whatsapp.reply',
+              version: 3,
+              requestId: request['requestId'],
+              status: 'applied',
+              qualificationRequestId: request['qualificationRequestId'],
+            }),
+          ),
+      });
+    });
+    const writer = createQuickFurnoWhatsAppReplyWriter(config(post));
+    const outcome = await writer.write({
+      conversationId: '22222222-2222-4222-8222-222222222222',
+      expectedRevision: 7,
+      proposal: {
+        actor: 'RIYA',
+        proposalId: 'riya-qualification:request:message',
+        boundRevision: 7,
+        qualificationRequestId: '66666666-6666-4666-8666-666666666666',
+        inboundMessageId: '33333333-3333-4333-8333-333333333333',
+        target: 'budget',
+        outcome: 'matched',
+        value: '₹3–7 lakh',
+      },
+    });
+    expect(outcome).toBe('queued');
+    expect(captured).toMatchObject({
+      version: 3,
+      actor: 'RIYA',
+      target: 'budget',
+      outcome: 'matched',
+      value: '₹3–7 lakh',
+      qualificationRequestId: '66666666-6666-4666-8666-666666666666',
+    });
+    expect(captured).not.toHaveProperty('experience');
+    expect(captured).not.toHaveProperty('body');
   });
 
   it('maps a QuickFurno revision conflict to a terminal stale result', async () => {
