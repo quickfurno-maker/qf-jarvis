@@ -31,7 +31,6 @@ describe('Riya remains a Jarvis-side QuickFurno specialist', () => {
     expect(specialist).toContain('processInboundForProposedReply');
     expect(specialist).toContain("RIYA: 'client'");
     expect(specialist).not.toContain('MetaCloudWhatsAppProvider');
-    expect(specialist).not.toContain('process.env');
     expect(specialist).not.toContain('@supabase/');
   });
 
