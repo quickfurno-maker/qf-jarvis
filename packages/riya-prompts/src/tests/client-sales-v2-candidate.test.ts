@@ -10,7 +10,9 @@ import {
   RIYA_CLIENT_SALES_PROMPT_VERSION_V2_CANDIDATE,
   RIYA_V2_CANDIDATE_PROMPTS,
 } from '../client-sales-v2/definition.js';
-import {\n  RIYA_CLIENT_SALES_SYSTEM_TEMPLATE_V2_CANDIDATE,\n} from '../client-sales-v2/system-template.js';
+import {
+  RIYA_CLIENT_SALES_SYSTEM_TEMPLATE_V2_CANDIDATE,
+} from '../client-sales-v2/system-template.js';
 
 const template = RIYA_CLIENT_SALES_SYSTEM_TEMPLATE_V2_CANDIDATE;
 const lower = template.toLowerCase();
@@ -50,7 +52,13 @@ describe('Riya v2 is a separate Jarvis-side entity serving only QuickFurno', () 
   });
 
   it('cannot impersonate Core, another agent, a vendor or a human', () => {
-    for (const marker of [\n      'not quickfurno core',\n      'not anisha',\n      'not aarohi',\n      'not a vendor',\n      'not a human',\n    ]) {
+    for (const marker of [
+      'not quickfurno core',
+      'not anisha',
+      'not aarohi',
+      'not a vendor',
+      'not a human',
+    ]) {
       expect(lower).toContain(marker);
     }
   });
@@ -59,7 +67,9 @@ describe('Riya v2 is a separate Jarvis-side entity serving only QuickFurno', () 
     expect(lower).toContain('you cannot book');
     expect(lower).toContain('you cannot run tools or workflows');
     expect(lower).toContain('quickfurno core decides and executes; you propose');
-    expect(lower).toContain(\n      'never say an action happened unless the turn explicitly says it happened',\n    );
+    expect(lower).toContain(
+      'never say an action happened unless the turn explicitly says it happened',
+    );
   });
 });
 
