@@ -10,9 +10,7 @@ import {
   RIYA_CLIENT_SALES_PROMPT_VERSION_V2_CANDIDATE,
   RIYA_V2_CANDIDATE_PROMPTS,
 } from '../client-sales-v2/definition.js';
-import {
-  RIYA_CLIENT_SALES_SYSTEM_TEMPLATE_V2_CANDIDATE,
-} from '../client-sales-v2/system-template.js';
+import { RIYA_CLIENT_SALES_SYSTEM_TEMPLATE_V2_CANDIDATE } from '../client-sales-v2/system-template.js';
 
 const template = RIYA_CLIENT_SALES_SYSTEM_TEMPLATE_V2_CANDIDATE;
 const lower = template.toLowerCase();
