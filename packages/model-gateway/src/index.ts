@@ -195,6 +195,19 @@ export {
   type GroqStagingObservabilityHook,
 } from './providers/groq/index.js';
 
+// Phase 1 OpenAI provider adapter — hosted inference-only Responses API integration.
+// Composition symbols only; no SDK type, tool surface, arbitrary endpoint, key accessor, or activation.
+export {
+  OpenAIModelProvider,
+  OpenAIApiKey,
+  createOpenAIApiKey,
+  createOpenAIProviderConfig,
+  createFetchOpenAITransport,
+  OPENAI_RESPONSES_ENDPOINT,
+  type OpenAIProviderConfig,
+  type OpenAIProviderConfigInput,
+  type OpenAITransport,
+} from './providers/openai/index.js';
 // The local OpenAI-compatible provider (QFJ-P04.01C, ADR-0047) — first LOCAL-execution provider.
 // Composition symbols only; no raw HTTP/SDK type, no token accessor, no internal IP parser. A validated
 // private endpoint + an optional token + a transport are injected at composition.

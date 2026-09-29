@@ -928,7 +928,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // JF-5B (ADR-0152): 93 -> 95. The Nara alias guard and its frozen refusal list become
       // reachable so an operator outside the gateway can refuse a router alias returned by
       // authenticated discovery. A pure predicate: no key, no transport, no behaviour change.
-      'model-gateway': 95,
+      // Phase 1 OpenAI (ADR-0172): 95 -> 101 for six reviewed composition-only exports. No bridge,
+      // Core, JAO, production-worker, tool, or activation authority is added by this count change.
+      'model-gateway': 101,
       'model-gateway-composition': 2,
       // MVP-P2A.2 HF1: 24 -> 27. The semantic approval-digest helper and its two readable parts.
       // Pure functions over an already-parsed SmokeConfig -- no filesystem, no clock, no network, no
