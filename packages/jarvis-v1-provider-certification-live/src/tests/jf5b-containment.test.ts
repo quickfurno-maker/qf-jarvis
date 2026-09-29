@@ -187,6 +187,10 @@ describe('JF-5B the certification operator is off the serving path', () => {
       // composition and the CLI and nothing else, which is what keeps it four lines long.
       'apps/api/src/cli/jf5b-certification-runner.ts',
       'apps/api/src/cli/run-jf5b-live-certification.ts',
+      // ADR-0175 fast launch: the offline OpenAI six-call smoke consumes the separate OpenAI
+      // certification profile to mint a finished seal. Its bin imports only this CLI, so serving
+      // code still never imports the certification operator package.
+      'apps/api/src/cli/run-openai-launch-smoke.ts',
       // The production wiring and the engine behind it.
       'apps/api/src/composition/jf5b-live-composition.ts',
       'apps/api/src/composition/jf5b-certification-context.ts',

@@ -14,7 +14,8 @@
     "build": "tsc --build tsconfig.build.json",
     "typecheck": "tsc --build tsconfig.build.json",
     "typecheck:tests": "tsc --noEmit -p tsconfig.json",
-    "start:quickfurno-whatsapp-worker": "node ./dist/bin/run-quickfurno-whatsapp-production-worker.js"
+    "start:quickfurno-whatsapp-worker": "node ./dist/bin/run-quickfurno-whatsapp-production-worker.js",
+    "openai:launch-smoke": "node ./dist/bin/run-openai-launch-smoke.js"
   },
   "dependencies": {
     "@mastra/core": "1.61.0",
@@ -69,6 +70,7 @@
   },
   "bin": {
     "qfj-generate-shadow-evidence": "./dist/bin/generate-shadow-evidence.js",
+    "qfj-openai-launch-smoke": "./dist/bin/run-openai-launch-smoke.js",
     "qfj-jf5b-certify": "./dist/bin/run-jf5b-live-certification.js",
     "qfj-run-shadow-once": "./dist/bin/run-shadow-once.js"
   }

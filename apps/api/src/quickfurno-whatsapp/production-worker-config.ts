@@ -168,9 +168,17 @@ const schema = z
   .object({
     revision: z.string().regex(SHA40),
     deploymentMode: z.literal('SINGLE_OWNER'),
-    sealFile: absolutePath,
-    groqCredentialReference: z.string().regex(REF),
-    groqCredentialFile: absolutePath,
+    sealFile: absolutePath.optional(),
+    groqCredentialReference: z.string().regex(REF).optional(),
+    groqCredentialFile: absolutePath.optional(),
+    openai: z
+      .object({
+        sealFile: absolutePath,
+        credentialReference: z.string().regex(REF),
+        credentialFile: absolutePath,
+      })
+      .strict()
+      .optional(),
     database: databaseSchema.optional(),
     quickfurno: z
       .object({
@@ -193,6 +201,36 @@ const schema = z
   })
   .strict()
   .superRefine((value, ctx) => {
+    const legacyGroq = [
+      value.sealFile,
+      value.groqCredentialReference,
+      value.groqCredentialFile,
+    ].filter((item) => item !== undefined).length;
+    if (value.openai === undefined && legacyGroq !== 3) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['openai'],
+        message: 'exactly one complete provider configuration is required',
+      });
+    }
+    if (value.openai !== undefined && legacyGroq !== 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['openai'],
+        message: 'OpenAI and legacy Groq provider configuration cannot be mixed',
+      });
+    }
+    if (
+      value.openai !== undefined &&
+      (value.concurrency.modelGateway.maxConcurrent < 2 ||
+        value.concurrency.modelGateway.maxQueue < 2)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['concurrency', 'modelGateway'],
+        message: 'OpenAI Luna/Sol requires at least two concurrent and two queued model slots',
+      });
+    }
     if (value.knowledge.mode === 'HYBRID' && value.database === undefined) {
       ctx.addIssue({
         code: 'custom',
@@ -212,9 +250,19 @@ const schema = z
 export interface QuickFurnoWhatsAppProductionWorkerConfig {
   readonly revision: string;
   readonly deploymentMode: 'SINGLE_OWNER';
-  readonly seal: unknown;
-  readonly groqCredentialReference: string;
-  readonly groqCredentialFile: string;
+  readonly modelProvider:
+    | Readonly<{
+        mode: 'GROQ_ONLY';
+        seal: unknown;
+        credentialReference: string;
+        credentialFile: string;
+      }>
+    | Readonly<{
+        mode: 'OPENAI_LUNA_SOL';
+        seal: unknown;
+        credentialReference: string;
+        credentialFile: string;
+      }>;
   readonly database?: DatabaseConfig;
   readonly quickfurno: Readonly<{
     baseUrl: string;
@@ -398,13 +446,34 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
     }
   }
 
-  const seal = parseJsonFile(input.sealFile, MAX_SEAL_BYTES);
+  let modelProvider: QuickFurnoWhatsAppProductionWorkerConfig['modelProvider'];
+  if (input.openai !== undefined) {
+    modelProvider = Object.freeze({
+      mode: 'OPENAI_LUNA_SOL' as const,
+      seal: parseJsonFile(input.openai.sealFile, MAX_SEAL_BYTES),
+      credentialReference: input.openai.credentialReference,
+      credentialFile: input.openai.credentialFile,
+    });
+  } else {
+    if (
+      input.sealFile === undefined ||
+      input.groqCredentialReference === undefined ||
+      input.groqCredentialFile === undefined
+    ) {
+      throw new Error('production-worker-config-invalid');
+    }
+    modelProvider = Object.freeze({
+      mode: 'GROQ_ONLY' as const,
+      seal: parseJsonFile(input.sealFile, MAX_SEAL_BYTES),
+      credentialReference: input.groqCredentialReference,
+      credentialFile: input.groqCredentialFile,
+    });
+  }
+
   return Object.freeze({
     revision: input.revision,
     deploymentMode: input.deploymentMode,
-    seal,
-    groqCredentialReference: input.groqCredentialReference,
-    groqCredentialFile: input.groqCredentialFile,
+    modelProvider,
     ...(database === undefined ? {} : { database }),
     quickfurno: Object.freeze({
       baseUrl: input.quickfurno.baseUrl,

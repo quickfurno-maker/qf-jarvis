@@ -1,0 +1,40 @@
+{
+  "revision": "0000000000000000000000000000000000000000",
+  "deploymentMode": "SINGLE_OWNER",
+  "openai": {
+    "sealFile": "/run/secrets/openai-v1-production-seal.json",
+    "credentialReference": "openai.qfj.production.v1",
+    "credentialFile": "/run/secrets/openai-production.key"
+  },
+  "quickfurno": {
+    "baseUrl": "https://REPLACE_AT_DEPLOYMENT/",
+    "keyId": "REPLACE_AT_DEPLOYMENT",
+    "privateKeyFile": "/run/secrets/quickfurno-signing.key",
+    "timeoutMs": 5000
+  },
+  "knowledge": {
+    "mode": "DISABLED"
+  },
+  "decisionIntelligence": {
+    "mode": "DISABLED"
+  },
+  "concurrency": {
+    "globalMaxConcurrentTurns": 200,
+    "maxConcurrentByAgent": {
+      "RIYA": 200,
+      "ANISHA": 200,
+      "AAROHI": 200
+    },
+    "modelGateway": {
+      "maxConcurrent": 50,
+      "maxQueue": 150
+    }
+  },
+  "spoolDirectory": "/var/lib/qfj-turns",
+  "killSwitchFile": "/var/run/qfj-control/DISABLE_MODEL",
+  "operationalSnapshotFile": "/var/run/qfj-observability/whatsapp-worker.json",
+  "runtimeId": "qfj.whatsapp.production.v1",
+  "policyRevision": "policy.quickfurno.production.v1",
+  "idlePollMs": 500,
+  "staleProcessingMs": 300000
+}

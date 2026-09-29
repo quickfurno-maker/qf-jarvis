@@ -1,9 +1,17 @@
 import {
+  JARVIS_V1_OPENAI_CATALOGUE_OBSERVATION,
+  JARVIS_V1_OPENAI_DATA_CONTROLS_REF,
+  JARVIS_V1_OPENAI_MODEL_BY_TIER,
+  JARVIS_V1_OPENAI_PROVIDER_MODE,
+  JARVIS_V1_OPENAI_RELEASE_ID_BY_TIER,
+  JARVIS_V1_OPENAI_REASONING_EFFORT_BY_TIER,
+  JARVIS_V1_OPENAI_TIERS,
   JARVIS_V1_PRODUCTION_AGENTS,
   JARVIS_V1_PRODUCTION_CAPABILITY_PROFILE_REF,
   JARVIS_V1_PRODUCTION_MAX_COMPLETION_TOKENS,
   JARVIS_V1_PRODUCTION_MAX_INPUT_TOKENS,
   JARVIS_V1_PRODUCTION_PROMPT_BY_AGENT,
+  type JarvisV1OpenAITier,
   type JarvisV1ProductionAgent,
 } from '@qf-jarvis/jarvis-v1-production-profile';
 import { OPENAI_RESPONSES_ENDPOINT } from '@qf-jarvis/model-gateway';
@@ -16,22 +24,15 @@ import {
 } from '@qf-jarvis/model-evaluation';
 import { z } from 'zod';
 
-export const OPENAI_V1_CERTIFICATION_TIERS = ['LUNA', 'SOL'] as const;
-export type OpenAIV1CertificationTier = (typeof OPENAI_V1_CERTIFICATION_TIERS)[number];
+export const OPENAI_V1_CERTIFICATION_TIERS = JARVIS_V1_OPENAI_TIERS;
+export type OpenAIV1CertificationTier = JarvisV1OpenAITier;
 export const OPENAI_V1_CERTIFICATION_AGENTS = JARVIS_V1_PRODUCTION_AGENTS;
 export type OpenAIV1CertificationAgent = JarvisV1ProductionAgent;
-export const OPENAI_V1_PROVIDER_MODE = 'OPENAI_ONLY' as const;
-export const OPENAI_V1_CATALOGUE_OBSERVATION = 'openai-catalogue-observed-2026-09-29' as const;
-export const OPENAI_V1_DATA_CONTROLS_REF =
-  'datacontrols.openai.observed.2026-09-29.responses-store-false.default-abuse-monitoring' as const;
-export const OPENAI_V1_MODEL_BY_TIER = Object.freeze({
-  LUNA: 'gpt-6-luna',
-  SOL: 'gpt-6-sol',
-} as const);
-export const OPENAI_V1_RELEASE_ID_BY_TIER = Object.freeze({
-  LUNA: 'rel.openai.gpt6-luna.20260929',
-  SOL: 'rel.openai.gpt6-sol.20260929',
-} as const);
+export const OPENAI_V1_PROVIDER_MODE = JARVIS_V1_OPENAI_PROVIDER_MODE;
+export const OPENAI_V1_CATALOGUE_OBSERVATION = JARVIS_V1_OPENAI_CATALOGUE_OBSERVATION;
+export const OPENAI_V1_DATA_CONTROLS_REF = JARVIS_V1_OPENAI_DATA_CONTROLS_REF;
+export const OPENAI_V1_MODEL_BY_TIER = JARVIS_V1_OPENAI_MODEL_BY_TIER;
+export const OPENAI_V1_RELEASE_ID_BY_TIER = JARVIS_V1_OPENAI_RELEASE_ID_BY_TIER;
 export const OPENAI_V1_CAPABILITY_PROFILE_REF = JARVIS_V1_PRODUCTION_CAPABILITY_PROFILE_REF;
 export const OPENAI_V1_MAX_INPUT_TOKENS = JARVIS_V1_PRODUCTION_MAX_INPUT_TOKENS;
 export const OPENAI_V1_MAX_COMPLETION_TOKENS = JARVIS_V1_PRODUCTION_MAX_COMPLETION_TOKENS;
@@ -62,6 +63,7 @@ export function openAIV1ConfigDigest(tier: OpenAIV1CertificationTier): string {
     store: false,
     tools: 'NONE',
     strictJsonSchema: true,
+    reasoningEffort: JARVIS_V1_OPENAI_REASONING_EFFORT_BY_TIER[tier],
     maxInputTokens: OPENAI_V1_MAX_INPUT_TOKENS,
     maxCompletionTokens: OPENAI_V1_MAX_COMPLETION_TOKENS,
     dataControlsRef: OPENAI_V1_DATA_CONTROLS_REF,

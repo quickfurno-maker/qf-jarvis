@@ -17,6 +17,26 @@ export const JARVIS_V1_PRODUCTION_CAPABILITY_PROFILE_REF = 'cap.jf5b.structured.
 export const JARVIS_V1_PRODUCTION_MAX_INPUT_TOKENS = 16_384 as const;
 export const JARVIS_V1_PRODUCTION_MAX_COMPLETION_TOKENS = 4_096 as const;
 
+export const JARVIS_V1_OPENAI_PROVIDER_MODE = 'OPENAI_ONLY' as const;
+export const JARVIS_V1_OPENAI_CATALOGUE_OBSERVATION =
+  'openai-catalogue-observed-2026-09-29' as const;
+export const JARVIS_V1_OPENAI_DATA_CONTROLS_REF =
+  'datacontrols.openai.observed.2026-09-29.responses-store-false.default-abuse-monitoring' as const;
+export const JARVIS_V1_OPENAI_TIERS = ['LUNA', 'SOL'] as const;
+export type JarvisV1OpenAITier = (typeof JARVIS_V1_OPENAI_TIERS)[number];
+export const JARVIS_V1_OPENAI_MODEL_BY_TIER = Object.freeze({
+  LUNA: 'gpt-6-luna',
+  SOL: 'gpt-6-sol',
+} as const);
+export const JARVIS_V1_OPENAI_RELEASE_ID_BY_TIER = Object.freeze({
+  LUNA: 'rel.openai.gpt6-luna.20260929',
+  SOL: 'rel.openai.gpt6-sol.20260929',
+} as const);
+export const JARVIS_V1_OPENAI_REASONING_EFFORT_BY_TIER = Object.freeze({
+  LUNA: 'low',
+  SOL: 'high',
+} as const);
+
 export const JARVIS_V1_PRODUCTION_AGENTS = ['RIYA', 'ANISHA', 'AAROHI'] as const;
 export type JarvisV1ProductionAgent = (typeof JARVIS_V1_PRODUCTION_AGENTS)[number];
 

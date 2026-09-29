@@ -1002,7 +1002,7 @@ describe('(133-148) the declared budget and every prior lock', () => {
     // budget rather than left to lose a race with whatever runs beside it.
   }, 30_000);
 
-  it('the three executables are declared as bins and each runs nothing on import', () => {
+  it('the four executables are declared as bins and each runs nothing on import', () => {
     const manifest = JSON.parse(readFileSync(join(APP_DIR, 'package.json'), 'utf8')) as {
       bin?: Record<string, string>;
     };
@@ -1013,6 +1013,7 @@ describe('(133-148) the declared budget and every prior lock', () => {
     expect(manifest.bin).toEqual({
       'qfj-generate-shadow-evidence': './dist/bin/generate-shadow-evidence.js',
       'qfj-jf5b-certify': './dist/bin/run-jf5b-live-certification.js',
+      'qfj-openai-launch-smoke': './dist/bin/run-openai-launch-smoke.js',
       'qfj-run-shadow-once': './dist/bin/run-shadow-once.js',
     });
     // Only the bin entries execute; every other module is import-safe.
