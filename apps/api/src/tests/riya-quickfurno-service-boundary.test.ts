@@ -9,9 +9,9 @@ const read = (path: string) => readFileSync(join(ROOT, path), 'utf8');
 
 describe('Riya remains a Jarvis-side QuickFurno specialist', () => {
   it('keeps QuickFurno transport outside the Riya conversation service', () => {
-    const manifest = JSON.parse(
-      read('packages/riya-web-conversation-service/package.json'),
-    ) as { dependencies?: Record<string, string> };
+    const manifest = JSON.parse(read('packages/riya-web-conversation-service/package.json')) as {
+      dependencies?: Record<string, string>;
+    };
     const dependencies = Object.keys(manifest.dependencies ?? {});
 
     for (const forbidden of [
