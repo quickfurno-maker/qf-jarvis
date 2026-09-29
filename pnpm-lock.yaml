@@ -1239,6 +1239,20 @@ importers:
         specifier: workspace:*
         version: link:../knowledge-index
 
+  packages/system-one-decision-policy:
+    dependencies:
+      '@qf-jarvis/system-one-decision-runtime':
+        specifier: workspace:*
+        version: link:../system-one-decision-runtime
+
+  packages/system-one-decision-runtime: {}
+
+  packages/typesafe-jev-adapter:
+    dependencies:
+      '@qf-jarvis/system-one-decision-runtime':
+        specifier: workspace:*
+        version: link:../system-one-decision-runtime
+
   packages/worker-observation-contract:
     dependencies:
       zod:
