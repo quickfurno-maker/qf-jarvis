@@ -86,7 +86,7 @@ const TASK_CLASSES: readonly string[] = [
 ];
 
 /** The digest the owner reviewed. See the pinning note below. */
-const REVIEWED_DIGEST = 'd0c2da57f53c2541274e090b8dec997c885f65f60c6bd8467e98d0be684b71fb';
+const REVIEWED_DIGEST = '544af07707769b7123e97d76d7901b53dec73192f2067cd2b03adf8713902e62';
 
 // ---------------------------------------------------------------------------
 // Identity.
@@ -464,6 +464,10 @@ describe('the prompt states the rules a reviewer must never have to re-find', ()
     expect(lower).toContain('if the schema includes evolution fields');
     expect(lower).toContain('if the schema is reply-only');
     expect(lower).toContain('do not invent observations, a question plan, a phase change');
+    expect(lower).toContain(
+      'if the schema includes "questionfields", return at most two field names',
+    );
+    expect(lower).toContain('never include a third field');
   });
 
   it('holds the structured-output rule without restating the schema', () => {

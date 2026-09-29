@@ -39,17 +39,17 @@ import {
  * prompt still instructed the model to record `"SET"` and `"CLEAR"` — strings the schema no longer
  * has anywhere. One paragraph was rewritten to name the two arrays instead.
  *
- * Nothing else about the prompt changed: no personality, no sales strategy, no safety instruction, no
- * knowledge policy, no business authority. Every RWC-P4A rule the old wording carried is still
- * stated — a set carries a value, `user_stated` versus `model_inferred`, a clear only on an explicit
- * withdrawal and only `user_stated`.
+ * JF-5B-R30 moves it again: the production evolution prompt now states the already-governed
+ * `questionFields.max(2)` limit explicitly so the model cannot claim a third planned field while the
+ * runtime schema correctly refuses it. No schema bound, authority rule, retry policy or provider
+ * posture changed.
  *
- * The consequence is that this candidate's prompt identity is no longer byte-identical to the one S11
- * and SDH4 ran behind, so evidence from those runs is comparable on the request contract but not on
- * prompt bytes.
+ * The consequence is that this candidate's prompt identity is no longer byte-identical to earlier
+ * evidence runs. Historical artifacts remain historical; the current candidate config digest changes
+ * because prompt bytes are part of that identity.
  */
 export const RIYA_CLIENT_PROMPT_DIGEST =
-  'd0c2da57f53c2541274e090b8dec997c885f65f60c6bd8467e98d0be684b71fb';
+  '544af07707769b7123e97d76d7901b53dec73192f2067cd2b03adf8713902e62';
 
 export const CANDIDATE_RELEASE_ID = 'rel.groq.qfj.riya-candidate.gpt-oss-20b.v1';
 export const CANDIDATE_PROVIDER_ID = 'groq';
