@@ -169,7 +169,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
   const killSwitch = createQuickFurnoWorkerKillSwitch(config.killSwitchFile);
   const runtimeStacks: ProductionRuntimeStack[] = [];
   let providerMode: QuickFurnoWhatsAppProductionWorker['providerMode'];
-  let verifiedApprovalCount = 0;
+  let verifiedApprovalCount: number;
 
   if (config.modelProvider.mode === 'GROQ_ONLY') {
     const sealed = bindJf5cSealForProduction(

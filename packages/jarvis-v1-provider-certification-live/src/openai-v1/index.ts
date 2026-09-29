@@ -61,7 +61,7 @@ export function openAIV1ConfigDigest(tier: OpenAIV1CertificationTier): string {
     modelVersion: OPENAI_V1_CATALOGUE_OBSERVATION,
     endpoint: OPENAI_RESPONSES_ENDPOINT,
     store: false,
-    tools: 'NONE',
+    toolAccess: 'NONE',
     strictJsonSchema: true,
     reasoningEffort: JARVIS_V1_OPENAI_REASONING_EFFORT_BY_TIER[tier],
     maxInputTokens: OPENAI_V1_MAX_INPUT_TOKENS,

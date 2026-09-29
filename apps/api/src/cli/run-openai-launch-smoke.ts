@@ -145,7 +145,9 @@ async function runCase(input: {
     schemaDigest: sha256(WIRE_JSON_SCHEMA),
   });
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 45_000);
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, 45_000);
   try {
     const result = await provider.invoke({
       runId: `openai-launch-${input.tier.toLowerCase()}-${input.agent.toLowerCase()}`,

@@ -69,8 +69,13 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 function stringArray(value: unknown): readonly string[] | null {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) return null;
-  return Object.freeze([...value] as string[]);
+  if (!Array.isArray(value)) return null;
+  const items: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') return null;
+    items.push(item);
+  }
+  return Object.freeze(items);
 }
 function sameSet(left: readonly string[], right: readonly string[]): boolean {
   const a = [...left].sort();
@@ -84,7 +89,7 @@ function expectedConfigDigest(tier: JarvisV1OpenAITier): string {
     modelVersion: JARVIS_V1_OPENAI_CATALOGUE_OBSERVATION,
     endpoint: OPENAI_RESPONSES_ENDPOINT,
     store: false,
-    tools: 'NONE',
+    toolAccess: 'NONE',
     strictJsonSchema: true,
     reasoningEffort: JARVIS_V1_OPENAI_REASONING_EFFORT_BY_TIER[tier],
     maxInputTokens: JARVIS_V1_PRODUCTION_MAX_INPUT_TOKENS,
@@ -278,8 +283,7 @@ export function bindOpenAIV1SealForProduction(
         expectedKnowledgeRevision !== undefined &&
         record(raw) &&
         record(raw['binding']) &&
-        raw['binding']['knowledgeRevision'] !==
-          (expectedKnowledgeRevision === null ? undefined : expectedKnowledgeRevision)
+        raw['binding']['knowledgeRevision'] !== (expectedKnowledgeRevision ?? undefined)
       )
         return refuse('knowledge-revision-mismatch');
       return refuse('release-mismatch');
