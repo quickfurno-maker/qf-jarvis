@@ -65,9 +65,9 @@ describe('the candidate identity is exact and has no wildcard in it', () => {
     expect(CANDIDATE_DATA_CONTROLS_REF).toBe('att.groq.qfj-staging.global-zdr.2026-07-28');
   });
 
-  it('the reviewed Riya prompt digest is the one from PR #117', () => {
+  it('the current reviewed Riya prompt digest matches the bounded questionFields prompt', () => {
     expect(RIYA_CLIENT_PROMPT_DIGEST).toBe(
-      'd0c2da57f53c2541274e090b8dec997c885f65f60c6bd8467e98d0be684b71fb',
+      '544af07707769b7123e97d76d7901b53dec73192f2067cd2b03adf8713902e62',
     );
   });
 
