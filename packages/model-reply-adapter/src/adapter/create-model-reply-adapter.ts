@@ -30,6 +30,7 @@ import type {
 } from '../contracts/observability.js';
 import { NOOP_MODEL_REPLY_ADAPTER_OBSERVABILITY } from '../contracts/observability.js';
 import type { ModelPromptIdentity } from '@qf-jarvis/agent-runtime';
+import type { JarvisDecisionShadowPort } from '@qf-jarvis/decision-intelligence';
 import type { PromptRegistry } from '@qf-jarvis/prompt-registry';
 import type { ModelGatewayInvoker } from '../gateway/model-gateway-invoker.js';
 import {
@@ -116,6 +117,8 @@ export interface ModelReplyAdapterConfig {
   readonly clock: () => string;
   /** The injected gateway invoker (a thin facade over the existing gateway). Missing → fail closed. */
   readonly invoker?: ModelGatewayInvoker;
+  /** Optional hosted decision-intelligence SHADOW observer. It may observe only after the first state gate and never changes the turn. */
+  readonly decisionShadowPort?: JarvisDecisionShadowPort;
   readonly budgets?: Partial<GatewayRequestBudgets>;
   readonly observability?: ModelReplyAdapterObservabilityHook;
 }
@@ -324,6 +327,22 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
       undefined,
       undefined,
     );
+
+    // ADR-0171: optional System One decision intelligence runs in SHADOW only, after privacy/state
+    // admission and before the expensive generative call. Failure is deliberately non-authoritative:
+    // it cannot block, reroute, authorize, mutate assignment, or change the model request in this slice.
+    if (config.decisionShadowPort !== undefined && plan.dataClass === 'HOSTED_ALLOWED') {
+      try {
+        await config.decisionShadowPort.observe({
+          actorRef: plan.assignedActor,
+          dataClass: plan.dataClass,
+          taskClass: plan.taskClass,
+          normalizedText: plan.normalizedText,
+        });
+      } catch {
+        // Shadow evidence failure leaves the existing governed model path byte-equivalent.
+      }
+    }
 
     // Resolve the authoritative prompt -- ONCE, and only after the first state gate has passed, so a
     // blocked conversation costs no resolution and a missing registry can never mask a state block.

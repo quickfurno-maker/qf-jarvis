@@ -589,6 +589,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // neither ClientConfirmationV1 nor CommunicationAuthorizationV1.
       'core-riya-intake',
       'core-service-availability-read',
+      // ADR-0171: provider-neutral bounded System One decision contracts. Advisory only: no
+      // assignment mutation, action authorization, execution, persistence or transport.
+      'decision-intelligence',
       // ADR-0162: deterministic no-effect digital-twin scenario runner. It accepts only injected
       // candidates, refuses any simulated provider/Core/channel/workflow/database effect, and owns
       // no transport, provider, database or production activation surface.
@@ -637,6 +640,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // authority, it reaches no database, and a live provider call needs an explicit flag AND a
       // phrase typed at a terminal.
       'jarvis-v1-provider-certification-live',
+      // ADR-0171: TypeSafe Jev transport/adapter behind the provider-neutral decision contract.
+      // Fixed official endpoint, injected redacted credential, hosted-data gate and shadow-only use.
+      'jev-decision-adapter',
       // ADR-0161: deterministic source-revision/digest/approval drift assessment. It may
       // make a changed approved corpus eligible for a STAGING build, but cannot ingest, seal,
       // activate or publish a release.

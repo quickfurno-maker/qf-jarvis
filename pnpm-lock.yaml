@@ -486,6 +486,8 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/decision-intelligence: {}
+
   packages/digital-twin-simulation:
     devDependencies:
       '@qf-jarvis/governed-agent-handoff':
@@ -707,6 +709,12 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/jev-decision-adapter:
+    dependencies:
+      '@qf-jarvis/decision-intelligence':
+        specifier: workspace:*
+        version: link:../decision-intelligence
+
   packages/knowledge-freshness: {}
 
   packages/knowledge-index:
@@ -759,6 +767,9 @@ importers:
       '@qf-jarvis/agent-runtime':
         specifier: workspace:*
         version: link:../agent-runtime
+      '@qf-jarvis/decision-intelligence':
+        specifier: workspace:*
+        version: link:../decision-intelligence
       '@qf-jarvis/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway

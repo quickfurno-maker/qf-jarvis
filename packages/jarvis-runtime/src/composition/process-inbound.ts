@@ -435,6 +435,9 @@ export async function composeAndProcessInternal(
             ? {}
             : { structuredOutputProfile: sharedGroundedReplyProfile(shared.bridge) }),
           ...(config.gatewayInvoker === undefined ? {} : { invoker: config.gatewayInvoker }),
+          ...(config.decisionShadowPort === undefined
+            ? {}
+            : { decisionShadowPort: config.decisionShadowPort }),
         })
       : // The Riya-aware adapter. It binds the DEDICATED evolution prompt for CLIENT and nothing
         // else -- no legacy prompt fields, and deliberately no other scope, so a missing evolution
@@ -452,6 +455,9 @@ export async function composeAndProcessInternal(
           // published capability, and a provider still clamps it to its own configured ceiling.
           budgets: { completionBudget: RIYA_COMPLETION_BUDGET_TOKENS },
           ...(config.gatewayInvoker === undefined ? {} : { invoker: config.gatewayInvoker }),
+          ...(config.decisionShadowPort === undefined
+            ? {}
+            : { decisionShadowPort: config.decisionShadowPort }),
         });
 
   // The capturing wrapper. `draftReply` delegates to `draftReplyDetailed` ONCE and returns only the
