@@ -78,6 +78,7 @@ jobs:
       - name: Run governed evaluation regression set
         run: >-
           pnpm exec vitest run
+          packages/riya-prompts/src/tests
           packages/model-evaluation/src/tests
           packages/knowledge-index/src/tests/quality.test.ts
           packages/governed-memory-foundation/src/tests
