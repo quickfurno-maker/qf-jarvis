@@ -19,8 +19,11 @@ export const QFJ_WHATSAPP_MEDIA_KIND_HEADER = 'x-qfj-media-kind' as const;
 export const QFJ_WHATSAPP_MEDIA_SHA256_HEADER = 'x-qfj-media-sha256' as const;
 export const QFJ_WHATSAPP_REPLY_PROTOCOL = 'qfj.whatsapp.reply' as const;
 export const QFJ_WHATSAPP_REPLY_VERSION = 2 as const;
+export const QFJ_WHATSAPP_REPLY_QUALIFICATION_VERSION = 3 as const;
 export const QFJ_WHATSAPP_REPLY_PATH = '/api/internal/jarvis/whatsapp-reply' as const;
 export const QFJ_WHATSAPP_REPLY_SIGNING_DOMAIN = 'qfj.whatsapp.reply.http.sig.v2' as const;
+export const QFJ_WHATSAPP_REPLY_QUALIFICATION_SIGNING_DOMAIN =
+  'qfj.whatsapp.reply.http.sig.v3' as const;
 
 export type QuickFurnoWhatsAppAgent = 'AAROHI' | 'ANISHA' | 'RIYA';
 export type QuickFurnoWhatsAppAuthorityActor = QuickFurnoWhatsAppAgent | 'HUMAN' | 'SYSTEM';
@@ -128,3 +131,45 @@ export interface QuickFurnoWhatsAppReplyProposal {
   readonly boundRevision: number;
   readonly body: string;
 }
+
+export type QuickFurnoQualificationTarget = 'budget' | 'timeline' | 'propertyType';
+
+export interface QuickFurnoLeadQualificationMaterialV1 {
+  readonly protocol: typeof QFJ_WHATSAPP_TURN_MATERIAL_PROTOCOL;
+  readonly version: 2;
+  readonly requestId: string;
+  readonly tenantId: 'quickfurno';
+  readonly conversationId: string;
+  readonly revision: number;
+  readonly purpose: 'lead_qualification';
+  readonly assignedActor: 'RIYA';
+  readonly inboundMessageId: string;
+  readonly receivedAt: string;
+  readonly dataClass: 'HOSTED_ALLOWED';
+  readonly qualification: {
+    readonly requestId: string;
+    readonly target: QuickFurnoQualificationTarget;
+    readonly questionText: string;
+    readonly allowedOptions: readonly string[];
+    readonly answerText: string;
+  };
+}
+
+export interface QuickFurnoQualificationProposal {
+  readonly actor: 'RIYA';
+  readonly proposalId: string;
+  readonly boundRevision: number;
+  readonly qualificationRequestId: string;
+  readonly inboundMessageId: string;
+  readonly target: QuickFurnoQualificationTarget;
+  readonly outcome: 'matched' | 'no_match';
+  readonly value?: string;
+}
+
+export type QuickFurnoWhatsAppWorkerMaterial =
+  | QuickFurnoWhatsAppTurnMaterialV2
+  | QuickFurnoLeadQualificationMaterialV1;
+
+export type QuickFurnoWhatsAppWorkerProposal =
+  | QuickFurnoWhatsAppReplyProposal
+  | QuickFurnoQualificationProposal;

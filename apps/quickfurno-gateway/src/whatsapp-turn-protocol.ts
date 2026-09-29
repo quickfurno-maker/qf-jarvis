@@ -27,6 +27,8 @@ export interface WhatsAppTurnV1 {
   readonly receivedAt: string;
   readonly assignedActor: 'AAROHI' | 'ANISHA' | 'RIYA';
   readonly subjectType: 'unknown' | 'prospect' | 'client' | 'vendor';
+  readonly turnPurpose?: 'conversation' | 'lead_qualification';
+  readonly qualificationRequestId?: string;
   readonly normalizedText?: string;
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -48,7 +50,7 @@ export function parseWhatsAppTurn(value: unknown): WhatsAppTurnV1 | null {
     'assignedActor',
     'subjectType',
   ];
-  const allowed = [...required, 'normalizedText'];
+  const allowed = [...required, 'turnPurpose', 'qualificationRequestId', 'normalizedText'];
   if (
     !Object.keys(value).every((key) => allowed.includes(key)) ||
     !required.every((key) => key in value)
@@ -67,6 +69,8 @@ export function parseWhatsAppTurn(value: unknown): WhatsAppTurnV1 | null {
   const receivedAt = value['receivedAt'];
   const assignedActor = value['assignedActor'];
   const subjectType = value['subjectType'];
+  const turnPurpose = value['turnPurpose'];
+  const qualificationRequestId = value['qualificationRequestId'];
   const normalizedText = value['normalizedText'];
 
   if (
@@ -104,6 +108,17 @@ export function parseWhatsAppTurn(value: unknown): WhatsAppTurnV1 | null {
     !['unknown', 'prospect', 'client', 'vendor'].includes(subjectType)
   )
     return null;
+  const purpose = turnPurpose === undefined ? 'conversation' : turnPurpose;
+  if (purpose !== 'conversation' && purpose !== 'lead_qualification') return null;
+  if (purpose === 'lead_qualification') {
+    if (
+      assignedActor !== 'RIYA' ||
+      typeof qualificationRequestId !== 'string' ||
+      !UUID.test(qualificationRequestId)
+    ) return null;
+  } else if (qualificationRequestId !== undefined) {
+    return null;
+  }
   if (
     normalizedText !== undefined &&
     (typeof normalizedText !== 'string' || normalizedText.length > 4096)
@@ -123,6 +138,10 @@ export function parseWhatsAppTurn(value: unknown): WhatsAppTurnV1 | null {
     receivedAt,
     assignedActor: assignedActor as WhatsAppTurnV1['assignedActor'],
     subjectType: subjectType as WhatsAppTurnV1['subjectType'],
+    ...(purpose === 'conversation' ? {} : { turnPurpose: purpose }),
+    ...(purpose === 'lead_qualification'
+      ? { qualificationRequestId: qualificationRequestId as string }
+      : {}),
     ...(normalizedText === undefined ? {} : { normalizedText }),
   });
 }

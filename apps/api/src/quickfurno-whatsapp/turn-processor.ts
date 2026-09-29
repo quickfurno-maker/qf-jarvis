@@ -11,6 +11,8 @@ export interface QuickFurnoWhatsAppTurnReference {
   readonly inboundMessageId: string;
   readonly assignedActor: 'AAROHI' | 'ANISHA' | 'RIYA';
   readonly subjectType: 'unknown' | 'prospect' | 'client' | 'vendor';
+  readonly turnPurpose?: 'lead_qualification';
+  readonly qualificationRequestId?: string;
 }
 
 export interface QuickFurnoWhatsAppTurnClaimSelection {
@@ -56,16 +58,24 @@ function materialMatches(
     readonly revision: number;
     readonly inboundMessageId: string;
     readonly assignedActor: string;
-    readonly subjectType: string;
+    readonly subjectType?: string;
+    readonly purpose?: string;
+    readonly qualification?: { readonly requestId: string };
   },
 ): boolean {
-  return (
-    material.conversationId === ref.conversationId &&
-    material.revision === ref.conversationRevision &&
-    material.inboundMessageId === ref.inboundMessageId &&
-    material.assignedActor === ref.assignedActor &&
-    material.subjectType === ref.subjectType
-  );
+  if (
+    material.conversationId !== ref.conversationId ||
+    material.revision !== ref.conversationRevision ||
+    material.inboundMessageId !== ref.inboundMessageId ||
+    material.assignedActor !== ref.assignedActor
+  ) return false;
+  if (ref.turnPurpose === 'lead_qualification') {
+    return (
+      material.purpose === 'lead_qualification' &&
+      material.qualification?.requestId === ref.qualificationRequestId
+    );
+  }
+  return material.purpose === undefined && material.subjectType === ref.subjectType;
 }
 export function createQuickFurnoWhatsAppTurnProcessor(
   config: QuickFurnoWhatsAppTurnProcessorConfig,
@@ -79,6 +89,12 @@ export function createQuickFurnoWhatsAppTurnProcessor(
         conversationId: ref.conversationId,
         inboundMessageId: ref.inboundMessageId,
         expectedRevision: ref.conversationRevision,
+        ...(ref.turnPurpose === 'lead_qualification'
+          ? {
+              turnPurpose: 'lead_qualification' as const,
+              qualificationRequestId: ref.qualificationRequestId,
+            }
+          : {}),
       });
     } catch (error) {
       if (error instanceof QuickFurnoWhatsAppHttpError && error.code === 'request-failed') {

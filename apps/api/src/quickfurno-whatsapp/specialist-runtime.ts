@@ -2,15 +2,17 @@ import { createInboundEnvelope } from '@qf-jarvis/agent-runtime';
 import type { ProposedReplyJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
 import { runCustomerTurnWorkflow } from '../riya-customer-orchestration/mastra-customer-turn-runner.js';
 import type {
+  QuickFurnoLeadQualificationMaterialV1,
+  QuickFurnoQualificationProposal,
   QuickFurnoWhatsAppAgent,
   QuickFurnoWhatsAppReplyProposal,
   QuickFurnoWhatsAppTurnMaterialV2,
+  QuickFurnoWhatsAppWorkerMaterial,
+  QuickFurnoWhatsAppWorkerProposal,
 } from './contracts.js';
 
 export interface QuickFurnoWhatsAppSpecialistRuntime {
-  process(
-    material: QuickFurnoWhatsAppTurnMaterialV2,
-  ): Promise<QuickFurnoWhatsAppReplyProposal | null>;
+  process(material: QuickFurnoWhatsAppWorkerMaterial): Promise<QuickFurnoWhatsAppWorkerProposal | null>;
 }
 
 export interface QuickFurnoWhatsAppSpecialistRuntimeConfig {
@@ -18,11 +20,17 @@ export interface QuickFurnoWhatsAppSpecialistRuntimeConfig {
   readonly jarvisRuntime: ProposedReplyJarvisRuntime;
 }
 
+function isQualificationMaterial(
+  material: QuickFurnoWhatsAppWorkerMaterial,
+): material is QuickFurnoLeadQualificationMaterialV1 {
+  return 'purpose' in material && material.purpose === 'lead_qualification';
+}
+
 const expectedSubjectByActor: Readonly<
   Record<QuickFurnoWhatsAppAgent, QuickFurnoWhatsAppTurnMaterialV2['subjectType']>
 > = Object.freeze({ RIYA: 'client', ANISHA: 'vendor', AAROHI: 'prospect' });
 
-function proposalFrom(
+function conversationProposal(
   material: QuickFurnoWhatsAppTurnMaterialV2,
   proposal:
     | {
@@ -42,6 +50,49 @@ function proposalFrom(
     body: proposal.replyBody,
   });
 }
+
+function qualificationResult(
+  material: QuickFurnoLeadQualificationMaterialV1,
+  proposal:
+    | {
+        readonly proposalId: string;
+        readonly boundRevision: number;
+        readonly replyBody: string;
+      }
+    | undefined,
+): QuickFurnoQualificationProposal {
+  const exact =
+    proposal !== undefined &&
+    proposal.boundRevision === material.revision &&
+    material.qualification.allowedOptions.includes(proposal.replyBody.trim())
+      ? proposal.replyBody.trim()
+      : null;
+  return Object.freeze({
+    actor: 'RIYA',
+    proposalId:
+      proposal?.proposalId ??
+      `riya-qualification:${material.qualification.requestId}:${material.inboundMessageId}`,
+    boundRevision: material.revision,
+    qualificationRequestId: material.qualification.requestId,
+    inboundMessageId: material.inboundMessageId,
+    target: material.qualification.target,
+    outcome: exact === null ? 'no_match' : 'matched',
+    ...(exact === null ? {} : { value: exact }),
+  });
+}
+
+function qualificationPrompt(material: QuickFurnoLeadQualificationMaterialV1): string {
+  return [
+    'QuickFurno qualification interpretation.',
+    `Question: ${material.qualification.questionText}`,
+    `Client answer: ${material.qualification.answerText}`,
+    `Allowed options: ${material.qualification.allowedOptions.join(' | ')}`,
+    'Return EXACTLY one allowed option only when the client explicitly supports it.',
+    'Otherwise return exactly __NO_MATCH__.',
+    'Do not explain, infer, recommend, or add punctuation.',
+  ].join('\n');
+}
+
 export function createQuickFurnoWhatsAppSpecialistRuntime(
   config: QuickFurnoWhatsAppSpecialistRuntimeConfig,
 ): QuickFurnoWhatsAppSpecialistRuntime {
@@ -50,21 +101,38 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
   }
 
   return Object.freeze({
-    async process(material: QuickFurnoWhatsAppTurnMaterialV2) {
-      if (expectedSubjectByActor[material.assignedActor] !== material.subjectType) {
-        return null;
+    async process(material: QuickFurnoWhatsAppWorkerMaterial) {
+      if (isQualificationMaterial(material)) {
+        const envelope = createInboundEnvelope({
+          runtimeId: config.runtimeId,
+          conversationId: material.conversationId,
+          messageId: material.inboundMessageId,
+          tenantId: material.tenantId,
+          channel: 'WHATSAPP',
+          partyType: 'CLIENT',
+          direction: 'INBOUND',
+          receivedAt: material.receivedAt,
+          providerMessageRef: `qf.qualification:${material.inboundMessageId}`,
+          dataClass: material.dataClass,
+          normalizedText: qualificationPrompt(material),
+        });
+        try {
+          const result = await runCustomerTurnWorkflow(
+            () => config.jarvisRuntime.processInboundForProposedReply(envelope),
+            'WHATSAPP',
+            {},
+          );
+          return qualificationResult(material, result.proposedReply);
+        } catch {
+          // Qualification never retries the model after execution uncertainty.
+          // Core receives no_match and deterministically re-asks the exact question.
+          return qualificationResult(material, undefined);
+        }
       }
 
-      // The certified live provider is text-only. LOCAL_ONLY media may cross the separately signed
-      // content bridge, but it must never be silently coerced into a hosted text-model turn.
-      if (material.dataClass !== 'HOSTED_ALLOWED' || material.normalizedText === undefined) {
-        return null;
-      }
+      if (expectedSubjectByActor[material.assignedActor] !== material.subjectType) return null;
+      if (material.dataClass !== 'HOSTED_ALLOWED' || material.normalizedText === undefined) return null;
 
-      // Production WhatsApp deliberately keeps Riya stateless inside Jarvis. QuickFurno owns the
-      // durable turn, revision, consent and takeover evidence; this boundary must not create a second
-      // store of client discovery state while its retention/erasure policy is unresolved. The richer
-      // Riya continuity service remains available to separately governed surfaces.
       const envelope = createInboundEnvelope({
         runtimeId: config.runtimeId,
         conversationId: material.conversationId,
@@ -89,7 +157,7 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         'WHATSAPP',
         {},
       );
-      return proposalFrom(material, result.proposedReply);
+      return conversationProposal(material, result.proposedReply);
     },
   });
 }

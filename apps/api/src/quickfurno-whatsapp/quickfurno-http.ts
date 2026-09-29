@@ -2,13 +2,18 @@ import { createHash, createPrivateKey, sign, type KeyObject } from 'node:crypto'
 import {
   QFJ_WHATSAPP_REPLY_PATH,
   QFJ_WHATSAPP_REPLY_PROTOCOL,
+  QFJ_WHATSAPP_REPLY_QUALIFICATION_SIGNING_DOMAIN,
   QFJ_WHATSAPP_REPLY_SIGNING_DOMAIN,
   QFJ_WHATSAPP_TURN_MATERIAL_PATH,
   QFJ_WHATSAPP_TURN_MATERIAL_PROTOCOL,
   QFJ_WHATSAPP_TURN_MATERIAL_SIGNING_DOMAIN,
+  type QuickFurnoLeadQualificationMaterialV1,
+  type QuickFurnoQualificationProposal,
   type QuickFurnoWhatsAppAuthorityStateV2,
   type QuickFurnoWhatsAppReplyProposal,
   type QuickFurnoWhatsAppTurnMaterialV2,
+  type QuickFurnoWhatsAppWorkerMaterial,
+  type QuickFurnoWhatsAppWorkerProposal,
 } from './contracts.js';
 
 const KEY_ID_HEADER = 'x-qfj-key-id';
@@ -651,12 +656,79 @@ async function signedPost(args: {
     clearTimeout(timer);
   }
 }
+function parseQualificationMaterial(
+  value: unknown,
+  requestId: string,
+): QuickFurnoLeadQualificationMaterialV1 | null {
+  if (!isRecord(value)) return null;
+  const expected = [
+    'protocol','version','requestId','tenantId','conversationId','revision',
+    'purpose','assignedActor','inboundMessageId','receivedAt','dataClass','qualification',
+  ];
+  if (!onlyKeys(value, expected) || !expected.every((key) => key in value)) return null;
+  if (
+    value['protocol'] !== QFJ_WHATSAPP_TURN_MATERIAL_PROTOCOL ||
+    value['version'] !== 2 ||
+    value['requestId'] !== requestId ||
+    value['tenantId'] !== 'quickfurno' ||
+    value['purpose'] !== 'lead_qualification' ||
+    value['assignedActor'] !== 'RIYA' ||
+    value['dataClass'] !== 'HOSTED_ALLOWED'
+  ) return null;
+  const conversationId = value['conversationId'];
+  const revision = value['revision'];
+  const inboundMessageId = value['inboundMessageId'];
+  const receivedAt = value['receivedAt'];
+  if (
+    typeof conversationId !== 'string' || !UUID.test(conversationId) ||
+    typeof inboundMessageId !== 'string' || !UUID.test(inboundMessageId) ||
+    typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0 ||
+    typeof receivedAt !== 'string' || !INSTANT.test(receivedAt) || !Number.isFinite(Date.parse(receivedAt))
+  ) return null;
+  const q = value['qualification'];
+  if (!isRecord(q) || !onlyKeys(q, ['requestId','target','questionText','allowedOptions','answerText'])) return null;
+  const qualificationRequestId = q['requestId'];
+  const target = q['target'];
+  const questionText = boundedString(q['questionText'], 512);
+  const answerText = boundedString(q['answerText'], 512);
+  const allowedOptions = q['allowedOptions'];
+  if (
+    typeof qualificationRequestId !== 'string' || !UUID.test(qualificationRequestId) ||
+    typeof target !== 'string' || !['budget','timeline','propertyType'].includes(target) ||
+    !questionText || !answerText ||
+    !Array.isArray(allowedOptions) || allowedOptions.length < 2 || allowedOptions.length > 12 ||
+    allowedOptions.some((option) => typeof option !== 'string' || option.length < 1 || option.length > 128)
+  ) return null;
+  return Object.freeze({
+    protocol: QFJ_WHATSAPP_TURN_MATERIAL_PROTOCOL,
+    version: 2,
+    requestId,
+    tenantId: 'quickfurno',
+    conversationId,
+    revision,
+    purpose: 'lead_qualification',
+    assignedActor: 'RIYA',
+    inboundMessageId,
+    receivedAt,
+    dataClass: 'HOSTED_ALLOWED',
+    qualification: Object.freeze({
+      requestId: qualificationRequestId,
+      target: target as QuickFurnoLeadQualificationMaterialV1['qualification']['target'],
+      questionText,
+      allowedOptions: Object.freeze([...allowedOptions]) as readonly string[],
+      answerText,
+    }),
+  });
+}
+
 export interface QuickFurnoWhatsAppMaterialReader {
   read(input: {
     readonly conversationId: string;
     readonly inboundMessageId: string;
     readonly expectedRevision: number;
-  }): Promise<QuickFurnoWhatsAppTurnMaterialV2>;
+    readonly turnPurpose?: 'lead_qualification';
+    readonly qualificationRequestId?: string;
+  }): Promise<QuickFurnoWhatsAppWorkerMaterial>;
 }
 
 export function createQuickFurnoWhatsAppMaterialReader(
@@ -668,12 +740,18 @@ export function createQuickFurnoWhatsAppMaterialReader(
       readonly conversationId: string;
       readonly inboundMessageId: string;
       readonly expectedRevision: number;
+      readonly turnPurpose?: 'lead_qualification';
+      readonly qualificationRequestId?: string;
     }) {
       if (
         !UUID.test(input.conversationId) ||
         !UUID.test(input.inboundMessageId) ||
         !Number.isSafeInteger(input.expectedRevision) ||
-        input.expectedRevision < 0
+        input.expectedRevision < 0 ||
+        (input.turnPurpose === 'lead_qualification' &&
+          (typeof input.qualificationRequestId !== 'string' ||
+            !UUID.test(input.qualificationRequestId))) ||
+        (input.turnPurpose === undefined && input.qualificationRequestId !== undefined)
       ) {
         throw new QuickFurnoWhatsAppHttpError('invalid-input');
       }
@@ -696,6 +774,12 @@ export function createQuickFurnoWhatsAppMaterialReader(
         conversationId: input.conversationId,
         inboundMessageId: input.inboundMessageId,
         expectedRevision: input.expectedRevision,
+        ...(input.turnPurpose === 'lead_qualification'
+          ? {
+              turnPurpose: 'lead_qualification',
+              qualificationRequestId: input.qualificationRequestId,
+            }
+          : {}),
       });
       const response = await signedPost({
         config,
@@ -721,11 +805,19 @@ export function createQuickFurnoWhatsAppMaterialReader(
       } catch {
         throw new QuickFurnoWhatsAppHttpError('response-invalid');
       }
-      const material = parseMaterial(parsed, requestId);
+      const material = input.turnPurpose === 'lead_qualification'
+        ? parseQualificationMaterial(parsed, requestId)
+        : parseMaterial(parsed, requestId);
       if (
         material?.conversationId !== input.conversationId ||
         material.inboundMessageId !== input.inboundMessageId ||
-        material.revision !== input.expectedRevision
+        material.revision !== input.expectedRevision ||
+        (input.turnPurpose === 'lead_qualification' &&
+          (
+            !('purpose' in material) ||
+            material.purpose !== 'lead_qualification' ||
+            material.qualification.requestId !== input.qualificationRequestId
+          ))
       ) {
         throw new QuickFurnoWhatsAppHttpError('response-invalid');
       }
@@ -808,7 +900,7 @@ export interface QuickFurnoWhatsAppReplyWriter {
   write(input: {
     readonly conversationId: string;
     readonly expectedRevision: number;
-    readonly proposal: QuickFurnoWhatsAppReplyProposal;
+    readonly proposal: QuickFurnoWhatsAppWorkerProposal;
   }): Promise<'queued' | 'stale'>;
 }
 
@@ -820,6 +912,12 @@ function actorHeading(actor: QuickFurnoWhatsAppReplyProposal['actor']): string {
       : 'Aarohi · Growth Concierge';
 }
 
+function isQualificationProposal(
+  proposal: QuickFurnoWhatsAppWorkerProposal,
+): proposal is QuickFurnoQualificationProposal {
+  return 'qualificationRequestId' in proposal;
+}
+
 export function createQuickFurnoWhatsAppReplyWriter(
   config: QuickFurnoWhatsAppHttpConfig,
 ): QuickFurnoWhatsAppReplyWriter {
@@ -828,41 +926,133 @@ export function createQuickFurnoWhatsAppReplyWriter(
     async write(input: {
       readonly conversationId: string;
       readonly expectedRevision: number;
-      readonly proposal: QuickFurnoWhatsAppReplyProposal;
+      readonly proposal: QuickFurnoWhatsAppWorkerProposal;
     }) {
+      const proposal = input.proposal;
       if (
         !UUID.test(input.conversationId) ||
         !Number.isSafeInteger(input.expectedRevision) ||
         input.expectedRevision < 0 ||
-        input.proposal.boundRevision !== input.expectedRevision ||
-        !ID.test(input.proposal.proposalId) ||
-        input.proposal.body.length < 1 ||
-        input.proposal.body.length > 3072
-      )
+        proposal.boundRevision !== input.expectedRevision ||
+        !ID.test(proposal.proposalId)
+      ) {
         throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
       const requestId = config.requestId();
       const issuedAt = config.clock();
       if (
         !UUID.test(requestId) ||
         !INSTANT.test(issuedAt) ||
         !Number.isFinite(Date.parse(issuedAt))
-      )
+      ) {
         throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
+
+      if (isQualificationProposal(proposal)) {
+        const matched = proposal.outcome === 'matched';
+        if (
+          proposal.actor !== 'RIYA' ||
+          !UUID.test(proposal.qualificationRequestId) ||
+          !UUID.test(proposal.inboundMessageId) ||
+          !['budget', 'timeline', 'propertyType'].includes(proposal.target) ||
+          (proposal.outcome !== 'matched' && proposal.outcome !== 'no_match') ||
+          (matched &&
+            (typeof proposal.value !== 'string' ||
+              proposal.value.length < 1 ||
+              proposal.value.length > 128)) ||
+          (!matched && proposal.value !== undefined)
+        ) {
+          throw new QuickFurnoWhatsAppHttpError('invalid-input');
+        }
+        const idempotencyKey = digestHex(
+          [
+            'qfj.whatsapp.reply.v3',
+            input.conversationId,
+            String(input.expectedRevision),
+            proposal.proposalId,
+            proposal.inboundMessageId,
+            proposal.qualificationRequestId,
+            proposal.target,
+            proposal.outcome,
+            proposal.value ?? '',
+          ].join('\n'),
+        );
+        const body = JSON.stringify({
+          protocol: QFJ_WHATSAPP_REPLY_PROTOCOL,
+          version: 3,
+          caller: CALLER,
+          audience: AUDIENCE,
+          requestId,
+          issuedAt,
+          conversationId: input.conversationId,
+          expectedRevision: input.expectedRevision,
+          proposalId: proposal.proposalId,
+          actor: 'RIYA',
+          inboundMessageId: proposal.inboundMessageId,
+          qualificationRequestId: proposal.qualificationRequestId,
+          target: proposal.target,
+          outcome: proposal.outcome,
+          ...(matched ? { value: proposal.value } : {}),
+          idempotencyKey,
+        });
+        const response = await signedPost({
+          config,
+          key,
+          timeoutMs,
+          path: QFJ_WHATSAPP_REPLY_PATH,
+          domain: QFJ_WHATSAPP_REPLY_QUALIFICATION_SIGNING_DOMAIN,
+          requestId,
+          issuedAt,
+          body,
+        });
+        if (response.status === 409) return 'stale';
+        if (response.status !== 202 && response.status !== 200) {
+          throw new QuickFurnoWhatsAppHttpError('request-failed');
+        }
+        const text = await response.text();
+        if (
+          Buffer.byteLength(text, 'utf8') < 2 ||
+          Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES
+        ) {
+          throw new QuickFurnoWhatsAppHttpError('response-invalid');
+        }
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          throw new QuickFurnoWhatsAppHttpError('response-invalid');
+        }
+        if (
+          !isRecord(parsed) ||
+          parsed['protocol'] !== QFJ_WHATSAPP_REPLY_PROTOCOL ||
+          parsed['version'] !== 3 ||
+          parsed['requestId'] !== requestId ||
+          parsed['status'] !== 'applied' ||
+          parsed['qualificationRequestId'] !== proposal.qualificationRequestId
+        ) {
+          throw new QuickFurnoWhatsAppHttpError('response-invalid');
+        }
+        return 'queued';
+      }
+
+      if (proposal.body.length < 1 || proposal.body.length > 3072) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
       const experience = {
         version: 1,
-        actor: input.proposal.actor,
+        actor: proposal.actor,
         kind: 'text',
-        heading: actorHeading(input.proposal.actor),
-        body: input.proposal.body,
+        heading: actorHeading(proposal.actor),
+        body: proposal.body,
       };
       const idempotencyKey = digestHex(
         [
           'qfj.whatsapp.reply.v2',
           input.conversationId,
           String(input.expectedRevision),
-          input.proposal.proposalId,
-          input.proposal.actor,
-          input.proposal.body,
+          proposal.proposalId,
+          proposal.actor,
+          proposal.body,
         ].join('\n'),
       );
       const body = JSON.stringify({
@@ -874,8 +1064,8 @@ export function createQuickFurnoWhatsAppReplyWriter(
         issuedAt,
         conversationId: input.conversationId,
         expectedRevision: input.expectedRevision,
-        proposalId: input.proposal.proposalId,
-        actor: input.proposal.actor,
+        proposalId: proposal.proposalId,
+        actor: proposal.actor,
         experience,
         idempotencyKey,
       });
