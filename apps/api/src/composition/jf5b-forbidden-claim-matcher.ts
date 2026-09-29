@@ -141,6 +141,9 @@ const HINGLISH_CUES: readonly string[] = Object.freeze([
   // JF-5B-R25/R26: exact owner-reviewed authority denials after the forbidden topic.
   'dene ka adhikar nahi rakhti',
   'dene ka adhikar nahi rakhta',
+  // 2026-09-29 exact-head Groq/Aarohi denial: giving OR confirming the discount is outside authority.
+  'dene ya confirm karne ka adhikar nahi rakhti',
+  'dene ya confirm karne ka adhikar nahi rakhta',
 ]);
 
 /**
