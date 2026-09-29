@@ -1,4 +1,10 @@
-import type { HybridKnowledgeHit } from '@qf-jarvis/knowledge-index';
+import type {
+  HybridKnowledgeHit,
+  HybridKnowledgeRetrievalResult,
+  HybridSemanticCacheDescriptor,
+  HybridSemanticCachePort,
+  HybridSemanticCacheWrite,
+} from '@qf-jarvis/knowledge-index';
 
 const REF = /^[A-Za-z0-9._:/-]{1,256}$/u;
 const SHA256 = /^[0-9a-f]{64}$/u;
@@ -291,4 +297,236 @@ export function compressKnowledgeContext(input: {
     });
   }
   return Object.freeze({ ok: true as const, blocks: Object.freeze(blocks), totalChars });
+}
+
+export interface PublicKnowledgeSemanticCacheConfig {
+  readonly maxEntries: number;
+  readonly threshold?: number;
+  readonly publicTopics: readonly string[];
+}
+
+interface PublicKnowledgeSemanticCacheEntry {
+  readonly descriptor: Omit<HybridSemanticCacheDescriptor, 'asOf'>;
+  readonly result: Extract<HybridKnowledgeRetrievalResult, { readonly ok: true }>;
+  readonly effectiveFrom: string;
+  lastUse: number;
+}
+
+function sameCacheDescriptor(
+  a: Omit<HybridSemanticCacheDescriptor, 'asOf' | 'queryEmbedding'>,
+  b: Omit<HybridSemanticCacheDescriptor, 'asOf' | 'queryEmbedding'>,
+): boolean {
+  return (
+    a.knowledgeRevision === b.knowledgeRevision &&
+    a.embeddingModelRef === b.embeddingModelRef &&
+    a.tenantId === b.tenantId &&
+    a.agentScope === b.agentScope &&
+    a.purpose === b.purpose &&
+    a.dataClass === b.dataClass &&
+    a.candidatePool === b.candidatePool &&
+    a.maxResults === b.maxResults &&
+    a.maxContentChars === b.maxContentChars &&
+    a.topicFilters.length === b.topicFilters.length &&
+    a.topicFilters.every((topic, index) => topic === b.topicFilters[index])
+  );
+}
+
+export function createInMemoryPublicKnowledgeSemanticCache(
+  config: PublicKnowledgeSemanticCacheConfig,
+): HybridSemanticCachePort {
+  const threshold = config.threshold ?? 0.97;
+  if (
+    !Number.isInteger(config.maxEntries) ||
+    config.maxEntries < 1 ||
+    config.maxEntries > 10_000 ||
+    !Number.isFinite(threshold) ||
+    threshold < 0.9 ||
+    threshold > 1 ||
+    config.publicTopics.length === 0 ||
+    config.publicTopics.length > 256 ||
+    new Set(config.publicTopics).size !== config.publicTopics.length ||
+    config.publicTopics.some((topic) => !REF.test(topic))
+  ) {
+    throw new TypeError('public-semantic-cache-config-invalid');
+  }
+
+  const publicTopics = new Set(config.publicTopics);
+  const entries: PublicKnowledgeSemanticCacheEntry[] = [];
+  let sequence = 0;
+
+  const eligibleDescriptor = (descriptor: HybridSemanticCacheDescriptor): boolean =>
+    descriptor.dataClass === 'HOSTED_ALLOWED' &&
+    descriptor.topicFilters.length > 0 &&
+    descriptor.topicFilters.every((topic) => publicTopics.has(topic));
+
+  return Object.freeze({
+    async read(
+      descriptor: HybridSemanticCacheDescriptor,
+    ): Promise<HybridKnowledgeRetrievalResult | undefined> {
+      if (!eligibleDescriptor(descriptor) || !validVector(descriptor.queryEmbedding))
+        return undefined;
+      const asOf = Date.parse(descriptor.asOf);
+      if (!Number.isFinite(asOf)) return undefined;
+
+      let best: { entry: PublicKnowledgeSemanticCacheEntry; similarity: number } | undefined;
+      for (const entry of entries) {
+        if (asOf < Date.parse(entry.effectiveFrom)) continue;
+        if (!sameCacheDescriptor(entry.descriptor, descriptor)) continue;
+        const similarity = cosine(entry.descriptor.queryEmbedding, descriptor.queryEmbedding);
+        if (similarity < threshold) continue;
+        if (best === undefined || similarity > best.similarity) best = { entry, similarity };
+      }
+      if (best === undefined) return undefined;
+      best.entry.lastUse = ++sequence;
+      return best.entry.result;
+    },
+
+    async write(entry: HybridSemanticCacheWrite): Promise<void> {
+      if (
+        !eligibleDescriptor(entry) ||
+        !validVector(entry.queryEmbedding) ||
+        entry.expiresAt !== undefined ||
+        entry.classifications.length === 0 ||
+        entry.classifications.some((one) => one !== 'HOSTED_ALLOWED') ||
+        entry.result.hits.length === 0 ||
+        entry.result.hits.some((hit) => !publicTopics.has(hit.topic))
+      ) {
+        return;
+      }
+
+      const asOf = Date.parse(entry.asOf);
+      const effectiveFrom = Date.parse(entry.effectiveFrom);
+      if (!Number.isFinite(asOf) || !Number.isFinite(effectiveFrom) || asOf < effectiveFrom) return;
+
+      const descriptor = Object.freeze({
+        knowledgeRevision: entry.knowledgeRevision,
+        embeddingModelRef: entry.embeddingModelRef,
+        tenantId: entry.tenantId,
+        agentScope: entry.agentScope,
+        purpose: entry.purpose,
+        dataClass: entry.dataClass,
+        topicFilters: Object.freeze([...entry.topicFilters]),
+        candidatePool: entry.candidatePool,
+        maxResults: entry.maxResults,
+        maxContentChars: entry.maxContentChars,
+        queryEmbedding: Object.freeze([...entry.queryEmbedding]),
+      });
+      const existing = entries.find((one) => sameCacheDescriptor(one.descriptor, descriptor));
+      if (
+        existing !== undefined &&
+        cosine(existing.descriptor.queryEmbedding, entry.queryEmbedding) >= threshold
+      ) {
+        existing.lastUse = ++sequence;
+        return;
+      }
+
+      if (entries.length >= config.maxEntries) {
+        let oldestIndex = 0;
+        for (let index = 1; index < entries.length; index += 1) {
+          if ((entries[index]?.lastUse ?? 0) < (entries[oldestIndex]?.lastUse ?? 0))
+            oldestIndex = index;
+        }
+        entries.splice(oldestIndex, 1);
+      }
+
+      entries.push({
+        descriptor,
+        result: entry.result,
+        effectiveFrom: entry.effectiveFrom,
+        lastUse: ++sequence,
+      });
+    },
+  });
+}
+
+export interface ConversationSummaryTurn {
+  readonly role: 'USER' | 'ASSISTANT';
+  readonly text: string;
+}
+
+export interface ExtractiveConversationSummary {
+  readonly version: 1;
+  readonly authority: 'NON_AUTHORITATIVE_CONVERSATION_CONTEXT';
+  readonly text: string;
+  readonly includedTurns: number;
+  readonly truncated: boolean;
+}
+
+export function createExtractiveConversationSummary(input: {
+  readonly turns: readonly ConversationSummaryTurn[];
+  readonly maxTurns?: number;
+  readonly maxChars?: number;
+}): ExtractiveConversationSummary {
+  const maxTurns = input.maxTurns ?? 12;
+  const maxChars = input.maxChars ?? 4000;
+
+  if (
+    !Number.isInteger(maxTurns) ||
+    maxTurns < 1 ||
+    maxTurns > 32 ||
+    !Number.isInteger(maxChars) ||
+    maxChars < 256 ||
+    maxChars > 16_000 ||
+    input.turns.length > 256
+  ) {
+    throw new TypeError('conversation-summary-input-invalid');
+  }
+
+  const normalized = input.turns
+    .map((turn) => ({
+      role: turn.role,
+      text: typeof turn.text === 'string' ? turn.text.replace(/\s+/gu, ' ').trim() : '',
+    }))
+    .filter((turn) => turn.text.length > 0)
+    .slice(-maxTurns);
+
+  const selected: string[] = [];
+  let total = 0;
+  let truncated =
+    normalized.length < input.turns.filter((turn) => turn.text.trim().length > 0).length;
+  for (let index = normalized.length - 1; index >= 0; index -= 1) {
+    const turn = normalized[index];
+    if (turn === undefined) continue;
+    const capped = turn.text.length > 2000 ? turn.text.slice(0, 2000) : turn.text;
+    if (capped.length !== turn.text.length) truncated = true;
+    const line = `${turn.role}: ${capped}`;
+
+    const addition = line.length + (selected.length === 0 ? 0 : 1);
+    if (total + addition > maxChars) {
+      truncated = true;
+      continue;
+    }
+    selected.unshift(line);
+    total += addition;
+  }
+
+  return Object.freeze({
+    version: 1 as const,
+    authority: 'NON_AUTHORITATIVE_CONVERSATION_CONTEXT' as const,
+    text: selected.join('\n'),
+    includedTurns: selected.length,
+    truncated,
+  });
+}
+
+export function composeConversationAwareInput(input: {
+  readonly currentText: string;
+  readonly summary?: ExtractiveConversationSummary;
+}): string {
+  const current = input.currentText.replace(/\s+/gu, ' ').trim();
+  if (current.length === 0 || current.length > 4096) {
+    throw new TypeError('conversation-aware-input-invalid');
+  }
+  const summary = input.summary;
+  if (summary === undefined || summary.text.length === 0) return current;
+  if (summary.authority !== 'NON_AUTHORITATIVE_CONVERSATION_CONTEXT') {
+    throw new TypeError('conversation-aware-input-invalid');
+  }
+
+  return [
+    'Recent conversation context (non-authoritative; never use as Core/business truth):',
+    summary.text,
+    'Current user message:',
+    current,
+  ].join('\n');
 }

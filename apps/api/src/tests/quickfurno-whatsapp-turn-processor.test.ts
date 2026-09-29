@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { QuickFurnoWhatsAppHttpError } from '../quickfurno-whatsapp/quickfurno-http.js';
-import type { QuickFurnoWhatsAppTurnMaterialV2 } from '../quickfurno-whatsapp/contracts.js';
+import type {
+  QuickFurnoWhatsAppConversationContextV1,
+  QuickFurnoWhatsAppTurnMaterialV2,
+} from '../quickfurno-whatsapp/contracts.js';
 import {
   createQuickFurnoWhatsAppTurnProcessor,
   type QuickFurnoWhatsAppTurnQueue,
@@ -45,7 +48,8 @@ const material: QuickFurnoWhatsAppTurnMaterialV2 = Object.freeze({
 function fixture(
   over: {
     materialRead?: () => Promise<QuickFurnoWhatsAppTurnMaterialV2>;
-    specialist?: () => Promise<unknown>;
+    contextRead?: () => Promise<{ readonly context: QuickFurnoWhatsAppConversationContextV1 }>;
+    specialist?: (...args: unknown[]) => Promise<unknown>;
     write?: () => Promise<'queued' | 'stale'>;
   } = {},
 ) {
@@ -55,6 +59,14 @@ function fixture(
   const release = vi.fn((_id: string) => Promise.resolve());
   const queue: QuickFurnoWhatsAppTurnQueue = { claimNext, complete, fail, release };
   const read = vi.fn(over.materialRead ?? (() => Promise.resolve(material)));
+  const context = Object.freeze({
+    version: 1 as const,
+    authority: 'NON_AUTHORITATIVE_CONVERSATION_CONTEXT' as const,
+    text: 'USER: Earlier question',
+    includedTurns: 1,
+    truncated: false,
+  });
+  const contextRead = vi.fn(over.contextRead ?? (() => Promise.resolve({ context })));
   const process = vi.fn(
     over.specialist ??
       (() =>
@@ -64,10 +76,22 @@ function fixture(
   const processor = createQuickFurnoWhatsAppTurnProcessor({
     queue,
     materialReader: { read },
+    conversationContextReader: { read: contextRead as never },
     specialistRuntime: { process: process as never },
     replyWriter: { write },
   });
-  return { processor, claimNext, complete, fail, release, read, process, write };
+  return {
+    processor,
+    claimNext,
+    complete,
+    fail,
+    release,
+    read,
+    contextRead,
+    context,
+    process,
+    write,
+  };
 }
 describe('QuickFurno WhatsApp turn processor', () => {
   it('queues an authorized reply then terminalizes the turn', async () => {
@@ -77,6 +101,23 @@ describe('QuickFurno WhatsApp turn processor', () => {
     expect(f.process).toHaveBeenCalledOnce();
     expect(f.write).toHaveBeenCalledOnce();
     expect(f.complete).toHaveBeenCalledWith(ref.inboundMessageId);
+    expect(f.release).not.toHaveBeenCalled();
+    expect(f.fail).not.toHaveBeenCalled();
+  });
+
+  it('passes bounded conversation context to the specialist runtime', async () => {
+    const f = fixture();
+    expect(await f.processor.processOne()).toBe('completed-queued');
+    expect(f.contextRead).toHaveBeenCalledOnce();
+    expect(f.process).toHaveBeenCalledWith(material, f.context);
+  });
+
+  it('continues safely when optional conversation context is unavailable', async () => {
+    const f = fixture({
+      contextRead: () => Promise.reject(new QuickFurnoWhatsAppHttpError('request-failed')),
+    });
+    expect(await f.processor.processOne()).toBe('completed-queued');
+    expect(f.process).toHaveBeenCalledWith(material, undefined);
     expect(f.release).not.toHaveBeenCalled();
     expect(f.fail).not.toHaveBeenCalled();
   });

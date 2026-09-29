@@ -24,6 +24,9 @@ export type {
   HybridKnowledgeRetrievalResult,
   HybridRetrievalEvent,
   HybridRetrievalObservability,
+  HybridSemanticCacheDescriptor,
+  HybridSemanticCacheWrite,
+  HybridSemanticCachePort,
   HybridKnowledgeRetrieverOptions,
 } from './contracts.js';
 export { createHybridKnowledgeSearchRequest } from './request.js';

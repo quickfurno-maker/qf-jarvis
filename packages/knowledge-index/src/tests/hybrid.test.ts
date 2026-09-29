@@ -136,6 +136,42 @@ describe('hybrid knowledge index', () => {
     expect(result.hits[0]?.content).toContain('Installation scheduling');
   });
 
+  it('short-circuits candidate search when a revision-bound semantic cache serves the request', async () => {
+    let searched = false;
+    const retriever = createHybridKnowledgeRetriever({
+      embedding: createDeterministicTestEmbeddingPort(),
+      store: Object.freeze({
+        knowledgeRevision: 'test.release.v1',
+        search() {
+          searched = true;
+          return Promise.reject(new Error('store-should-not-run-on-cache-hit'));
+        },
+      }),
+      semanticCache: Object.freeze({
+        read(descriptor) {
+          expect(descriptor.knowledgeRevision).toBe('test.release.v1');
+          expect(descriptor.tenantId).toBe('quickfurno');
+          expect(descriptor.agentScope).toBe('CLIENT');
+          expect(descriptor.topicFilters).toEqual(['installation']);
+          return Promise.resolve({
+            ok: true as const,
+            reason: 'hybrid-served' as const,
+            hits: Object.freeze([]),
+          });
+        },
+        write() {
+          return Promise.resolve();
+        },
+      }),
+    });
+    await expect(retriever.retrieve(request())).resolves.toEqual({
+      ok: true,
+      reason: 'hybrid-served',
+      hits: [],
+    });
+    expect(searched).toBe(false);
+  });
+
   it('rejects a candidate when the request tries to cross an agent permission boundary', async () => {
     const chunks = prepareKnowledgeBatch([
       source('doc.client-only', 'Client-only approved material.'),

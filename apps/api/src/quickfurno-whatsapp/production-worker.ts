@@ -37,17 +37,20 @@ import {
 } from '@qf-jarvis/postgres-knowledge-index';
 import { createPromptRegistry } from '@qf-jarvis/prompt-registry';
 import { createFileDurableTurnSpool } from '@qf-jarvis/quickfurno-gateway/durable-turn-spool';
+import { createInMemoryPublicKnowledgeSemanticCache } from '@qf-jarvis/semantic-context-engine';
 import { createJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
 import { RIYA_PRODUCTION_PROMPTS } from '@qf-jarvis/riya-prompts';
 
 import { createFileGroqCredentialBinding } from '../secrets/file-groq-credential-binding.js';
 import {
   createQuickFurnoWhatsAppAuthorityReader,
+  createQuickFurnoWhatsAppConversationContextReader,
   createQuickFurnoWhatsAppMaterialReader,
   createQuickFurnoWhatsAppReplyWriter,
 } from './quickfurno-http.js';
 import { createQuickFurnoWorkerKillSwitch } from './production-kill-switch.js';
 import { quickFurnoWorkerHttpPost } from './production-network.js';
+import { createAdaptiveQuickFurnoWhatsAppSpecialistRuntime } from './adaptive-specialist-runtime.js';
 import { createQuickFurnoWhatsAppAuthorityStatePort } from './authority-state-port.js';
 import { createQuickFurnoWhatsAppParallelScheduler } from './parallel-turn-scheduler.js';
 import { createQuickFurnoWhatsAppSpecialistRuntime } from './specialist-runtime.js';
@@ -246,9 +249,18 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         hybridConfig.embedding.modelRef,
       );
       const knowledgeStore = createPostgresHybridCandidateStore(pool, hybridConfig.revision);
+      const semanticCache =
+        hybridConfig.semanticCache.mode === 'PUBLIC_KNOWLEDGE_ONLY'
+          ? createInMemoryPublicKnowledgeSemanticCache({
+              maxEntries: hybridConfig.semanticCache.maxEntries,
+              threshold: hybridConfig.semanticCache.threshold,
+              publicTopics: hybridConfig.semanticCache.publicTopics,
+            })
+          : undefined;
       const baseHybridKnowledge = createHybridKnowledgeRetriever({
         embedding,
         store: knowledgeStore,
+        ...(semanticCache === undefined ? {} : { semanticCache }),
       });
       const hybridKnowledge = Object.freeze({
         knowledgeRevision: baseHybridKnowledge.knowledgeRevision,
@@ -319,15 +331,47 @@ export async function createQuickFurnoWhatsAppProductionWorker(
     // a second Jarvis-owned client-continuity store remains disabled until its lifecycle policy is
     // separately approved. The specialist runtime therefore executes one governed proposal per
     // QuickFurno-bound turn for RIYA/ANISHA/AAROHI alike.
-    const specialistRuntime = createQuickFurnoWhatsAppSpecialistRuntime({
+    const baseSpecialistRuntime = createQuickFurnoWhatsAppSpecialistRuntime({
       runtimeId: config.runtimeId,
       jarvisRuntime: runtime,
+    });
+    const activeRoute = Object.freeze({
+      releaseId: binding.release.releaseId,
+      runtime: baseSpecialistRuntime,
+    });
+    const specialistRuntime = createAdaptiveQuickFurnoWhatsAppSpecialistRuntime({
+      // Today the exact production seal activates one release, so all three complexity bands route
+      // to the same certified runtime. Luna/Sol can be inserted only after their own exact
+      // compositions are ACTIVE-certified; this wrapper cannot route to an unlisted release.
+      activeReleaseIds: [binding.release.releaseId],
+      routes: {
+        SIMPLE: activeRoute,
+        STANDARD: activeRoute,
+        COMPLEX: activeRoute,
+      },
+      signals: (material) => ({
+        normalizedTextChars:
+          'purpose' in material
+            ? Math.min(
+                4096,
+                material.qualification.questionText.length +
+                  material.qualification.answerText.length,
+              )
+            : (material.normalizedText?.length ?? 0),
+        conversationContextChars: 0,
+        knowledgeHitCount: 0,
+        ambiguitySignals: 0,
+        requiresCoreVerification: false,
+        multiStepReasoning: false,
+        highRisk: false,
+      }),
     });
     const spool = await createFileDurableTurnSpool(config.spoolDirectory);
     await spool.recoverStale(config.staleProcessingMs, Date.now());
     const processor = createQuickFurnoWhatsAppTurnProcessor({
       queue: spool,
       materialReader: createQuickFurnoWhatsAppMaterialReader(httpConfig),
+      conversationContextReader: createQuickFurnoWhatsAppConversationContextReader(httpConfig),
       specialistRuntime,
       replyWriter: createQuickFurnoWhatsAppReplyWriter(httpConfig),
     });

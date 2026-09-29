@@ -2,7 +2,10 @@ import type { HybridKnowledgeHit } from '@qf-jarvis/knowledge-index';
 import { describe, expect, it } from 'vitest';
 
 import {
+  composeConversationAwareInput,
   compressKnowledgeContext,
+  createExtractiveConversationSummary,
+  createInMemoryPublicKnowledgeSemanticCache,
   createSemanticCacheEntry,
   findSemanticCacheHit,
   planAdvancedRetrieval,
@@ -148,5 +151,119 @@ describe('semantic context engine', () => {
       ok: false,
       reason: 'NO_USABLE_CONTEXT',
     });
+  });
+
+  it('reuses only public, non-expiring, revision-and-scope-bound hybrid knowledge', async () => {
+    const cache = createInMemoryPublicKnowledgeSemanticCache({
+      maxEntries: 8,
+      publicTopics: ['payments'],
+    });
+    const result = {
+      ok: true as const,
+      reason: 'hybrid-served' as const,
+      hits: [hit('chunk.cache', 'Approved public payment guidance.')],
+    };
+    await cache.write({
+      knowledgeRevision: 'knowledge.r1',
+      embeddingModelRef: 'embedding.v1',
+      tenantId: 'quickfurno',
+      agentScope: 'CLIENT',
+      purpose: 'CLIENT_RESPONSE',
+      dataClass: 'HOSTED_ALLOWED',
+      asOf: '2026-09-29T09:00:00.000Z',
+      topicFilters: ['payments'],
+      candidatePool: 24,
+      maxResults: 4,
+      maxContentChars: 4096,
+      queryEmbedding: [1, 0, 0],
+      result,
+      effectiveFrom: '2026-09-01T00:00:00.000Z',
+      expiresAt: undefined,
+      classifications: ['HOSTED_ALLOWED'],
+    });
+
+    const base = {
+      knowledgeRevision: 'knowledge.r1',
+      embeddingModelRef: 'embedding.v1',
+      tenantId: 'quickfurno',
+      agentScope: 'CLIENT' as const,
+      purpose: 'CLIENT_RESPONSE' as const,
+      dataClass: 'HOSTED_ALLOWED' as const,
+      asOf: '2026-09-29T10:00:00.000Z',
+      topicFilters: ['payments'],
+      candidatePool: 24,
+      maxResults: 4,
+      maxContentChars: 4096,
+      queryEmbedding: [0.999, 0.01, 0],
+    };
+    expect(await cache.read(base)).toEqual(result);
+    expect(await cache.read({ ...base, knowledgeRevision: 'knowledge.r2' })).toBeUndefined();
+    expect(await cache.read({ ...base, agentScope: 'VENDOR' })).toBeUndefined();
+  });
+
+  it('does not cache expiring or non-public knowledge', async () => {
+    const cache = createInMemoryPublicKnowledgeSemanticCache({
+      maxEntries: 8,
+      publicTopics: ['payments'],
+    });
+    const result = {
+      ok: true as const,
+      reason: 'hybrid-served' as const,
+      hits: [hit('chunk.expiring', 'Temporary approved payment guidance.')],
+    };
+    const write = {
+      knowledgeRevision: 'knowledge.r1',
+      embeddingModelRef: 'embedding.v1',
+      tenantId: 'quickfurno',
+      agentScope: 'CLIENT' as const,
+      purpose: 'CLIENT_RESPONSE' as const,
+      dataClass: 'HOSTED_ALLOWED' as const,
+      asOf: '2026-09-29T09:00:00.000Z',
+      topicFilters: ['payments'],
+      candidatePool: 24,
+      maxResults: 4,
+      maxContentChars: 4096,
+      queryEmbedding: [1, 0],
+      result,
+      effectiveFrom: '2026-09-01T00:00:00.000Z',
+      classifications: ['HOSTED_ALLOWED' as const],
+    };
+    await cache.write({ ...write, expiresAt: '2026-10-01T00:00:00.000Z' });
+    expect(await cache.read({ ...write, asOf: '2026-09-29T10:00:00.000Z' })).toBeUndefined();
+
+    await cache.write({ ...write, topicFilters: ['private-policy'], expiresAt: undefined });
+    expect(
+      await cache.read({
+        ...write,
+        topicFilters: ['private-policy'],
+        asOf: '2026-09-29T10:00:00.000Z',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('creates bounded extractive conversation context and labels it non-authoritative', () => {
+    const summary = createExtractiveConversationSummary({
+      turns: [
+        { role: 'USER', text: 'I need a kitchen renovation.' },
+        { role: 'ASSISTANT', text: 'Which area is the property in?' },
+        { role: 'USER', text: 'Baner, Pune.' },
+      ],
+      maxTurns: 2,
+      maxChars: 500,
+    });
+    expect(summary).toMatchObject({
+      version: 1,
+      authority: 'NON_AUTHORITATIVE_CONVERSATION_CONTEXT',
+      includedTurns: 2,
+      truncated: true,
+    });
+    expect(summary.text).not.toContain('I need a kitchen renovation.');
+    const composed = composeConversationAwareInput({
+      currentText: 'My budget is around five lakh.',
+      summary,
+    });
+    expect(composed).toContain('non-authoritative; never use as Core/business truth');
+    expect(composed).toContain('Current user message:');
+    expect(composed).toContain('My budget is around five lakh.');
   });
 });

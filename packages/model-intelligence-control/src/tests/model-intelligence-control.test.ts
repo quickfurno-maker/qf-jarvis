@@ -9,6 +9,7 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  classifyAdaptiveComplexity,
   createAdaptiveModelRoutingPolicy,
   decideAnswerPosture,
   planCertifiedProviderFallback,
@@ -114,6 +115,58 @@ function verifier(options: { refuse?: readonly string[] } = {}): EvaluationEvide
 }
 
 describe('adaptive model intelligence control', () => {
+  it('classifies bounded turn complexity deterministically without model confidence', () => {
+    expect(
+      classifyAdaptiveComplexity({
+        normalizedTextChars: 80,
+        conversationContextChars: 0,
+        knowledgeHitCount: 0,
+        ambiguitySignals: 0,
+        requiresCoreVerification: false,
+        multiStepReasoning: false,
+        highRisk: false,
+      }),
+    ).toBe('SIMPLE');
+
+    expect(
+      classifyAdaptiveComplexity({
+        normalizedTextChars: 600,
+        conversationContextChars: 300,
+        knowledgeHitCount: 2,
+        ambiguitySignals: 0,
+        requiresCoreVerification: false,
+        multiStepReasoning: false,
+        highRisk: false,
+      }),
+    ).toBe('STANDARD');
+
+    expect(
+      classifyAdaptiveComplexity({
+        normalizedTextChars: 600,
+        conversationContextChars: 300,
+        knowledgeHitCount: 0,
+        ambiguitySignals: 0,
+        requiresCoreVerification: false,
+        multiStepReasoning: true,
+        highRisk: false,
+      }),
+    ).toBe('COMPLEX');
+  });
+
+  it('rejects unbounded complexity signals instead of silently coercing them', () => {
+    expect(() =>
+      classifyAdaptiveComplexity({
+        normalizedTextChars: 4097,
+        conversationContextChars: 0,
+        knowledgeHitCount: 0,
+        ambiguitySignals: 0,
+        requiresCoreVerification: false,
+        multiStepReasoning: false,
+        highRisk: false,
+      }),
+    ).toThrow('adaptive-complexity-signals-invalid');
+  });
+
   it('selects the first verifier-backed ACTIVE-certified capable release', () => {
     const result = selectAdaptiveModelRelease({
       profiles: [profile('fast'), profile('strong')],

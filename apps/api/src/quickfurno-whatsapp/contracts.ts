@@ -4,6 +4,13 @@ export const QFJ_WHATSAPP_TURN_MATERIAL_PATH =
   '/api/internal/jarvis/whatsapp-turn-material' as const;
 export const QFJ_WHATSAPP_TURN_MATERIAL_SIGNING_DOMAIN =
   'qfj.whatsapp.turn-material.http.sig.v2' as const;
+export const QFJ_WHATSAPP_CONVERSATION_CONTEXT_PROTOCOL =
+  'qfj.whatsapp.conversation-context' as const;
+export const QFJ_WHATSAPP_CONVERSATION_CONTEXT_VERSION = 1 as const;
+export const QFJ_WHATSAPP_CONVERSATION_CONTEXT_PATH =
+  '/api/internal/jarvis/whatsapp-conversation-context' as const;
+export const QFJ_WHATSAPP_CONVERSATION_CONTEXT_SIGNING_DOMAIN =
+  'qfj.whatsapp.conversation-context.http.sig.v1' as const;
 export const QFJ_WHATSAPP_MEDIA_CONTENT_PROTOCOL = 'qfj.whatsapp.media-content' as const;
 export const QFJ_WHATSAPP_MEDIA_CONTENT_VERSION = 1 as const;
 export const QFJ_WHATSAPP_MEDIA_CONTENT_PATH =
@@ -116,6 +123,25 @@ export interface QuickFurnoWhatsAppTurnMaterialV2 extends Omit<
   readonly receivedAt: string;
   readonly inbound: QuickFurnoWhatsAppInboundMaterialV1;
   readonly normalizedText?: string;
+}
+
+export interface QuickFurnoWhatsAppConversationContextV1 {
+  readonly version: 1;
+  readonly authority: 'NON_AUTHORITATIVE_CONVERSATION_CONTEXT';
+  readonly text: string;
+  readonly includedTurns: number;
+  readonly truncated: boolean;
+}
+
+export interface QuickFurnoWhatsAppConversationContextEnvelopeV1 {
+  readonly protocol: typeof QFJ_WHATSAPP_CONVERSATION_CONTEXT_PROTOCOL;
+  readonly version: 1;
+  readonly requestId: string;
+  readonly tenantId: 'quickfurno';
+  readonly conversationId: string;
+  readonly revision: number;
+  readonly inboundMessageId: string;
+  readonly context: QuickFurnoWhatsAppConversationContextV1;
 }
 
 export interface QuickFurnoWhatsAppExperienceV1 {

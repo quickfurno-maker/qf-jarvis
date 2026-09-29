@@ -330,6 +330,9 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     // Naming WhatsApp buys no provider-send authority: the worker emits only a signed proposal and
     // QuickFurno re-authorizes it at /whatsapp-reply.
     'src/bin/run-quickfurno-whatsapp-production-worker.ts',
+    // ADR-0174: certified-release selection may name the WhatsApp turn/runtime vocabulary, but
+    // it receives only pre-composed runtimes and holds no provider, send, database or tool authority.
+    'src/quickfurno-whatsapp/adaptive-specialist-runtime.ts',
     'src/quickfurno-whatsapp/authority-state-port.ts',
     'src/quickfurno-whatsapp/production-kill-switch.ts',
     'src/quickfurno-whatsapp/production-network.ts',
@@ -340,6 +343,7 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     // send authority, tool surface, database handle or webhook capability.
     'src/quickfurno-whatsapp/parallel-turn-scheduler.ts',
     'src/tests/quickfurno-whatsapp-parallel-turn-scheduler.test.ts',
+    'src/tests/quickfurno-whatsapp-adaptive-specialist-runtime.test.ts',
     'src/tests/quickfurno-whatsapp-authority-state-port.test.ts',
     'src/tests/quickfurno-whatsapp-production-observation.test.ts',
     'src/tests/quickfurno-whatsapp-deployment-containment.test.ts',

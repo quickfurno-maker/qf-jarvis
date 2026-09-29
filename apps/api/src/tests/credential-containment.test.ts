@@ -714,6 +714,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       '@qf-jarvis/model-evaluation',
       '@qf-jarvis/model-gateway',
       '@qf-jarvis/model-gateway-composition',
+      // ADR-0174: bounded complexity classification and certified-release routing are pure policy
+      // controls. The package holds no provider credential, network client, database or execution port.
+      '@qf-jarvis/model-intelligence-control',
       '@qf-jarvis/model-reply-adapter',
       '@qf-jarvis/openai-compatible-embedding-adapter',
       '@qf-jarvis/postgres-approval-queue',
@@ -734,6 +737,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       '@qf-jarvis/rag-provisioning',
       '@qf-jarvis/riya-prompts',
       '@qf-jarvis/riya-web-conversation-service',
+      // ADR-0174: context compression and the bounded public-knowledge cache are authority-free
+      // transformations. Production persistence and live business truth remain outside this package.
+      '@qf-jarvis/semantic-context-engine',
       // ADR-0159: pure, strict content-free telemetry schema shared by the private worker writer and
       // Jarvis OS reader. It grants no database, provider, transport or business authority.
       '@qf-jarvis/worker-observation-contract',

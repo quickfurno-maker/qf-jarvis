@@ -3,7 +3,7 @@ import {
   createRetrievalRequest,
   retrieveGovernedKnowledge,
 } from '@qf-jarvis/governed-knowledge';
-import type { KnowledgeRetrievalResult } from '@qf-jarvis/governed-knowledge';
+import type { KnowledgeDataClass, KnowledgeRetrievalResult } from '@qf-jarvis/governed-knowledge';
 
 import type {
   FusedKnowledgeCandidate,
@@ -146,6 +146,32 @@ export function createHybridKnowledgeRetriever(options: HybridKnowledgeRetriever
         return failed(request, reason, [0, 0, 0, 0]);
       }
 
+      const cacheDescriptor = Object.freeze({
+        knowledgeRevision: options.store.knowledgeRevision,
+        embeddingModelRef: options.embedding.modelRef,
+        tenantId: request.tenantId,
+        agentScope: request.agentScope,
+        purpose: request.purpose,
+        dataClass: request.dataClass,
+        asOf: request.asOf,
+        topicFilters: Object.freeze([...request.topicFilters]),
+        candidatePool: request.candidatePool,
+        maxResults: request.maxResults,
+        maxContentChars: request.maxContentChars,
+        queryEmbedding: Object.freeze([...queryEmbedding]),
+      });
+      if (options.semanticCache !== undefined) {
+        try {
+          const cached = await options.semanticCache.read(cacheDescriptor);
+          if (cached?.ok) {
+            emit(request, 'hybrid-served', 0, 0, 0, cached.hits.length);
+            return cached;
+          }
+        } catch {
+          // Cache is an optimization only. A cache fault never blocks governed retrieval.
+        }
+      }
+
       let lexical: readonly RankedChunkCandidate[];
       let vector: readonly RankedChunkCandidate[];
       try {
@@ -231,6 +257,9 @@ export function createHybridKnowledgeRetriever(options: HybridKnowledgeRetriever
 
       const hits: HybridKnowledgeHit[] = [];
       let totalChars = 0;
+      let latestEffectiveFrom = '';
+      let earliestExpiresAt: string | undefined;
+      const cacheClassifications = new Set<KnowledgeDataClass>();
       for (const candidate of canonicalReranked) {
         if (hits.length >= request.maxResults) break;
 
@@ -253,6 +282,21 @@ export function createHybridKnowledgeRetriever(options: HybridKnowledgeRetriever
         }
         totalChars += next.content.length;
         hits.push(next);
+        const record = candidate.chunk.record;
+        if (
+          latestEffectiveFrom === '' ||
+          Date.parse(record.effectiveFrom) > Date.parse(latestEffectiveFrom)
+        ) {
+          latestEffectiveFrom = record.effectiveFrom;
+        }
+        if (
+          record.expiresAt !== undefined &&
+          (earliestExpiresAt === undefined ||
+            Date.parse(record.expiresAt) < Date.parse(earliestExpiresAt))
+        ) {
+          earliestExpiresAt = record.expiresAt;
+        }
+        cacheClassifications.add(record.classification);
       }
 
       if (hits.length === 0) {
@@ -264,12 +308,26 @@ export function createHybridKnowledgeRetriever(options: HybridKnowledgeRetriever
         ]);
       }
 
-      emit(request, 'hybrid-served', lexical.length, vector.length, fused.length, hits.length);
-      return Object.freeze({
+      const served = Object.freeze({
         ok: true as const,
         reason: 'hybrid-served' as const,
         hits: Object.freeze(hits),
       });
+      if (options.semanticCache !== undefined && latestEffectiveFrom !== '') {
+        try {
+          await options.semanticCache.write({
+            ...cacheDescriptor,
+            result: served,
+            effectiveFrom: latestEffectiveFrom,
+            expiresAt: earliestExpiresAt,
+            classifications: Object.freeze([...cacheClassifications]),
+          });
+        } catch {
+          // Cache write failure never changes the authoritative retrieval result.
+        }
+      }
+      emit(request, 'hybrid-served', lexical.length, vector.length, fused.length, hits.length);
+      return served;
     },
   });
 }

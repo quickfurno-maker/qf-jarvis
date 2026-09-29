@@ -2,11 +2,14 @@ import { createHash, generateKeyPairSync, verify } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createQuickFurnoWhatsAppAuthorityReader,
+  createQuickFurnoWhatsAppConversationContextReader,
   createQuickFurnoWhatsAppMaterialReader,
   createQuickFurnoWhatsAppReplyWriter,
   type QuickFurnoWhatsAppHttpPost,
 } from '../quickfurno-whatsapp/quickfurno-http.js';
 import {
+  QFJ_WHATSAPP_CONVERSATION_CONTEXT_PATH,
+  QFJ_WHATSAPP_CONVERSATION_CONTEXT_SIGNING_DOMAIN,
   QFJ_WHATSAPP_REPLY_PATH,
   QFJ_WHATSAPP_REPLY_QUALIFICATION_SIGNING_DOMAIN,
   QFJ_WHATSAPP_REPLY_SIGNING_DOMAIN,
@@ -145,6 +148,66 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
       replyContext: { providerMessageId: 'wamid.parent' },
     });
     expect(post).toHaveBeenCalledOnce();
+  });
+
+  it('conversation context reader signs the exact request and accepts only bounded non-authoritative context', async () => {
+    const post = vi.fn<QuickFurnoWhatsAppHttpPost>((_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      const signature = init.headers['x-qfj-signature'];
+      if (signature === undefined) throw new Error('signature missing in test request');
+      expect(
+        verify(
+          null,
+          Buffer.from(
+            signingInput(
+              QFJ_WHATSAPP_CONVERSATION_CONTEXT_SIGNING_DOMAIN,
+              QFJ_WHATSAPP_CONVERSATION_CONTEXT_PATH,
+              String(request['requestId']),
+              String(request['issuedAt']),
+              init.body,
+            ),
+            'utf8',
+          ),
+          keys.publicKey,
+          Buffer.from(signature, 'base64url'),
+        ),
+      ).toBe(true);
+      return Promise.resolve({
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              protocol: 'qfj.whatsapp.conversation-context',
+              version: 1,
+              requestId: request['requestId'],
+              tenantId: 'quickfurno',
+              conversationId: request['conversationId'],
+              revision: request['expectedRevision'],
+              inboundMessageId: request['inboundMessageId'],
+              context: {
+                version: 1,
+                authority: 'NON_AUTHORITATIVE_CONVERSATION_CONTEXT',
+                text: 'USER: Earlier message',
+                includedTurns: 1,
+                truncated: false,
+              },
+            }),
+          ),
+      });
+    });
+    const reader = createQuickFurnoWhatsAppConversationContextReader(config(post));
+    const result = await reader.read({
+      conversationId: '22222222-2222-4222-8222-222222222222',
+      inboundMessageId: '33333333-3333-4333-8333-333333333333',
+      expectedRevision: 7,
+    });
+    expect(result.context).toEqual({
+      version: 1,
+      authority: 'NON_AUTHORITATIVE_CONVERSATION_CONTEXT',
+      text: 'USER: Earlier message',
+      includedTurns: 1,
+      truncated: false,
+    });
   });
 
   it('authority reader performs a signed content-free v2 read', async () => {

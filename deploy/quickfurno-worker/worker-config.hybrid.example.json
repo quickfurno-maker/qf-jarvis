@@ -33,6 +33,9 @@
       "maxBatchItems": 64,
       "maxInputChars": 64000
     },
+    "semanticCache": {
+      "mode": "DISABLED"
+    },
     "agents": {
       "RIYA": {
         "topicFilters": [],

@@ -14,12 +14,14 @@ inside Jarvis; the worker does not compose the separate Riya continuity or logic
 
 ## Parallel chat capacity
 
-The reviewed single-owner worker admits up to **60 simultaneous chat turns**: 20 Riya, 20 Anisha
-and 20 Aarohi. Agent lanes are round-robin and a conversation may have only one in-flight turn.
-Provider concurrency is deliberately separate: the example config allows 20 simultaneous model
-calls plus 40 bounded waiters, so provider limits can be tuned without changing chat isolation.
+The reviewed single-owner worker admits up to **200 simultaneous chat turns**. Each Riya, Anisha or
+Aarohi lane may use the full global capacity when traffic is skewed to one actor, while the combined
+total remains capped at 200. A conversation may have only one in-flight turn.
 
-Do not activate the 60-turn envelope until the production provider project has enough verified
+Provider concurrency is deliberately separate: the example config allows 50 simultaneous model calls
+plus 150 bounded waiters, so provider limits can be tuned without changing chat isolation.
+
+Do not activate the 200-turn envelope until the production provider project has enough verified
 RPM/TPM capacity. A provider rate-limit failure remains fail-closed; this worker does not create an
 unbounded retry loop.
 
@@ -62,6 +64,17 @@ HYBRID knowledge is a separately governed capability. Use
 
 Switching from DISABLED to HYBRID creates a new certification lineage; it is not a configuration-only
 activation.
+
+HYBRID semantic caching remains **DISABLED by default**. `PUBLIC_KNOWLEDGE_ONLY` may be enabled only
+with an explicit allowlist of approved public topic identifiers. The cache is process-local, bounded,
+revision/model/scope-bound and admits only non-expiring `HOSTED_ALLOWED` knowledge. Core-owned live
+state, expiring records, LOCAL_ONLY/HUMAN_ONLY material and unapproved topics are never cache entries.
+A cache miss or cache fault falls through to normal governed retrieval.
+
+Conversation history is also not stored by this worker. When the matching QuickFurno context endpoint
+is available, the worker may consume its separately signed, revision-bound extractive context. That
+context is best-effort and explicitly non-authoritative; QuickFurno remains the durable transcript
+owner and Core remains the source of current business truth.
 
 ## TypeSafe Jev decision shadow
 

@@ -1,10 +1,12 @@
 import { createInboundEnvelope } from '@qf-jarvis/agent-runtime';
 import type { ProposedReplyJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
+import { composeConversationAwareInput } from '@qf-jarvis/semantic-context-engine';
 import { runCustomerTurnWorkflow } from '../riya-customer-orchestration/mastra-customer-turn-runner.js';
 import type {
   QuickFurnoLeadQualificationMaterialV1,
   QuickFurnoQualificationProposal,
   QuickFurnoWhatsAppAgent,
+  QuickFurnoWhatsAppConversationContextV1,
   QuickFurnoWhatsAppReplyProposal,
   QuickFurnoWhatsAppTurnMaterialV2,
   QuickFurnoWhatsAppWorkerMaterial,
@@ -14,6 +16,7 @@ import type {
 export interface QuickFurnoWhatsAppSpecialistRuntime {
   process(
     material: QuickFurnoWhatsAppWorkerMaterial,
+    conversationContext?: QuickFurnoWhatsAppConversationContextV1,
   ): Promise<QuickFurnoWhatsAppWorkerProposal | null>;
 }
 
@@ -103,7 +106,10 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
   }
 
   return Object.freeze({
-    async process(material: QuickFurnoWhatsAppWorkerMaterial) {
+    async process(
+      material: QuickFurnoWhatsAppWorkerMaterial,
+      conversationContext?: QuickFurnoWhatsAppConversationContextV1,
+    ) {
       if (isQualificationMaterial(material)) {
         const envelope = createInboundEnvelope({
           runtimeId: config.runtimeId,
@@ -153,7 +159,13 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         providerMessageRef: `qf.inbound:${material.inboundMessageId}`,
         dataClass: material.dataClass,
         ...(material.subjectRef === undefined ? {} : { subjectRef: material.subjectRef }),
-        normalizedText: material.normalizedText,
+        normalizedText:
+          conversationContext === undefined
+            ? material.normalizedText
+            : composeConversationAwareInput({
+                currentText: material.normalizedText,
+                summary: conversationContext,
+              }),
       });
       const result = await runCustomerTurnWorkflow(
         () => config.jarvisRuntime.processInboundForProposedReply(envelope),
