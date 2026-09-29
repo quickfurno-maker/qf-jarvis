@@ -110,12 +110,12 @@ export function parseWhatsAppTurn(value: unknown): WhatsAppTurnV1 | null {
     return null;
   const purpose = turnPurpose === undefined ? 'conversation' : turnPurpose;
   if (purpose !== 'conversation' && purpose !== 'lead_qualification') return null;
+  const validatedQualificationRequestId =
+    typeof qualificationRequestId === 'string' && UUID.test(qualificationRequestId)
+      ? qualificationRequestId
+      : null;
   if (purpose === 'lead_qualification') {
-    if (
-      assignedActor !== 'RIYA' ||
-      typeof qualificationRequestId !== 'string' ||
-      !UUID.test(qualificationRequestId)
-    ) return null;
+    if (assignedActor !== 'RIYA' || validatedQualificationRequestId === null) return null;
   } else if (qualificationRequestId !== undefined) {
     return null;
   }
@@ -139,9 +139,9 @@ export function parseWhatsAppTurn(value: unknown): WhatsAppTurnV1 | null {
     assignedActor: assignedActor as WhatsAppTurnV1['assignedActor'],
     subjectType: subjectType as WhatsAppTurnV1['subjectType'],
     ...(purpose === 'conversation' ? {} : { turnPurpose: purpose }),
-    ...(purpose === 'lead_qualification'
-      ? { qualificationRequestId: qualificationRequestId as string }
-      : {}),
+    ...(validatedQualificationRequestId === null
+      ? {}
+      : { qualificationRequestId: validatedQualificationRequestId }),
     ...(normalizedText === undefined ? {} : { normalizedText }),
   });
 }

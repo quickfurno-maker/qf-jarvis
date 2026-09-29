@@ -662,8 +662,18 @@ function parseQualificationMaterial(
 ): QuickFurnoLeadQualificationMaterialV1 | null {
   if (!isRecord(value)) return null;
   const expected = [
-    'protocol','version','requestId','tenantId','conversationId','revision',
-    'purpose','assignedActor','inboundMessageId','receivedAt','dataClass','qualification',
+    'protocol',
+    'version',
+    'requestId',
+    'tenantId',
+    'conversationId',
+    'revision',
+    'purpose',
+    'assignedActor',
+    'inboundMessageId',
+    'receivedAt',
+    'dataClass',
+    'qualification',
   ];
   if (!onlyKeys(value, expected) || !expected.every((key) => key in value)) return null;
   if (
@@ -674,31 +684,51 @@ function parseQualificationMaterial(
     value['purpose'] !== 'lead_qualification' ||
     value['assignedActor'] !== 'RIYA' ||
     value['dataClass'] !== 'HOSTED_ALLOWED'
-  ) return null;
+  )
+    return null;
   const conversationId = value['conversationId'];
   const revision = value['revision'];
   const inboundMessageId = value['inboundMessageId'];
   const receivedAt = value['receivedAt'];
   if (
-    typeof conversationId !== 'string' || !UUID.test(conversationId) ||
-    typeof inboundMessageId !== 'string' || !UUID.test(inboundMessageId) ||
-    typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0 ||
-    typeof receivedAt !== 'string' || !INSTANT.test(receivedAt) || !Number.isFinite(Date.parse(receivedAt))
-  ) return null;
+    typeof conversationId !== 'string' ||
+    !UUID.test(conversationId) ||
+    typeof inboundMessageId !== 'string' ||
+    !UUID.test(inboundMessageId) ||
+    typeof revision !== 'number' ||
+    !Number.isSafeInteger(revision) ||
+    revision < 0 ||
+    typeof receivedAt !== 'string' ||
+    !INSTANT.test(receivedAt) ||
+    !Number.isFinite(Date.parse(receivedAt))
+  )
+    return null;
   const q = value['qualification'];
-  if (!isRecord(q) || !onlyKeys(q, ['requestId','target','questionText','allowedOptions','answerText'])) return null;
+  if (
+    !isRecord(q) ||
+    !onlyKeys(q, ['requestId', 'target', 'questionText', 'allowedOptions', 'answerText'])
+  )
+    return null;
   const qualificationRequestId = q['requestId'];
   const target = q['target'];
   const questionText = boundedString(q['questionText'], 512);
   const answerText = boundedString(q['answerText'], 512);
   const allowedOptions = q['allowedOptions'];
   if (
-    typeof qualificationRequestId !== 'string' || !UUID.test(qualificationRequestId) ||
-    typeof target !== 'string' || !['budget','timeline','propertyType'].includes(target) ||
-    !questionText || !answerText ||
-    !Array.isArray(allowedOptions) || allowedOptions.length < 2 || allowedOptions.length > 12 ||
-    allowedOptions.some((option) => typeof option !== 'string' || option.length < 1 || option.length > 128)
-  ) return null;
+    typeof qualificationRequestId !== 'string' ||
+    !UUID.test(qualificationRequestId) ||
+    typeof target !== 'string' ||
+    !['budget', 'timeline', 'propertyType'].includes(target) ||
+    !questionText ||
+    !answerText ||
+    !Array.isArray(allowedOptions) ||
+    allowedOptions.length < 2 ||
+    allowedOptions.length > 12 ||
+    allowedOptions.some(
+      (option) => typeof option !== 'string' || option.length < 1 || option.length > 128,
+    )
+  )
+    return null;
   return Object.freeze({
     protocol: QFJ_WHATSAPP_TURN_MATERIAL_PROTOCOL,
     version: 2,
@@ -715,7 +745,7 @@ function parseQualificationMaterial(
       requestId: qualificationRequestId,
       target: target as QuickFurnoLeadQualificationMaterialV1['qualification']['target'],
       questionText,
-      allowedOptions: Object.freeze([...allowedOptions]) as readonly string[],
+      allowedOptions: Object.freeze(allowedOptions.map((option) => String(option))),
       answerText,
     }),
   });
@@ -805,19 +835,17 @@ export function createQuickFurnoWhatsAppMaterialReader(
       } catch {
         throw new QuickFurnoWhatsAppHttpError('response-invalid');
       }
-      const material = input.turnPurpose === 'lead_qualification'
-        ? parseQualificationMaterial(parsed, requestId)
-        : parseMaterial(parsed, requestId);
+      const material =
+        input.turnPurpose === 'lead_qualification'
+          ? parseQualificationMaterial(parsed, requestId)
+          : parseMaterial(parsed, requestId);
       if (
         material?.conversationId !== input.conversationId ||
         material.inboundMessageId !== input.inboundMessageId ||
         material.revision !== input.expectedRevision ||
         (input.turnPurpose === 'lead_qualification' &&
-          (
-            !('purpose' in material) ||
-            material.purpose !== 'lead_qualification' ||
-            material.qualification.requestId !== input.qualificationRequestId
-          ))
+          (!('purpose' in material) ||
+            material.qualification.requestId !== input.qualificationRequestId))
       ) {
         throw new QuickFurnoWhatsAppHttpError('response-invalid');
       }
@@ -951,11 +979,9 @@ export function createQuickFurnoWhatsAppReplyWriter(
       if (isQualificationProposal(proposal)) {
         const matched = proposal.outcome === 'matched';
         if (
-          proposal.actor !== 'RIYA' ||
           !UUID.test(proposal.qualificationRequestId) ||
           !UUID.test(proposal.inboundMessageId) ||
           !['budget', 'timeline', 'propertyType'].includes(proposal.target) ||
-          (proposal.outcome !== 'matched' && proposal.outcome !== 'no_match') ||
           (matched &&
             (typeof proposal.value !== 'string' ||
               proposal.value.length < 1 ||

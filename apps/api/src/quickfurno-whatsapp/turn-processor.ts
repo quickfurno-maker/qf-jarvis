@@ -68,7 +68,8 @@ function materialMatches(
     material.revision !== ref.conversationRevision ||
     material.inboundMessageId !== ref.inboundMessageId ||
     material.assignedActor !== ref.assignedActor
-  ) return false;
+  )
+    return false;
   if (ref.turnPurpose === 'lead_qualification') {
     return (
       material.purpose === 'lead_qualification' &&

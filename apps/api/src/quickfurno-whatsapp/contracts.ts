@@ -167,9 +167,7 @@ export interface QuickFurnoQualificationProposal {
 }
 
 export type QuickFurnoWhatsAppWorkerMaterial =
-  | QuickFurnoWhatsAppTurnMaterialV2
-  | QuickFurnoLeadQualificationMaterialV1;
+  QuickFurnoWhatsAppTurnMaterialV2 | QuickFurnoLeadQualificationMaterialV1;
 
 export type QuickFurnoWhatsAppWorkerProposal =
-  | QuickFurnoWhatsAppReplyProposal
-  | QuickFurnoQualificationProposal;
+  QuickFurnoWhatsAppReplyProposal | QuickFurnoQualificationProposal;

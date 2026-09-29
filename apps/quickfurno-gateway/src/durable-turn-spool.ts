@@ -135,13 +135,12 @@ function parseRecord(value: unknown): DurableTurnRecordV1 | null {
     return null;
   if (
     turnPurpose !== undefined &&
-    (
-      turnPurpose !== 'lead_qualification' ||
+    (turnPurpose !== 'lead_qualification' ||
       assignedActor !== 'RIYA' ||
       typeof qualificationRequestId !== 'string' ||
-      !UUID.test(qualificationRequestId)
-    )
-  ) return null;
+      !UUID.test(qualificationRequestId))
+  )
+    return null;
   if (turnPurpose === undefined && qualificationRequestId !== undefined) return null;
   return Object.freeze({
     version: 1,

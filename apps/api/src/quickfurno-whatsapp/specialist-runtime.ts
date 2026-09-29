@@ -12,7 +12,9 @@ import type {
 } from './contracts.js';
 
 export interface QuickFurnoWhatsAppSpecialistRuntime {
-  process(material: QuickFurnoWhatsAppWorkerMaterial): Promise<QuickFurnoWhatsAppWorkerProposal | null>;
+  process(
+    material: QuickFurnoWhatsAppWorkerMaterial,
+  ): Promise<QuickFurnoWhatsAppWorkerProposal | null>;
 }
 
 export interface QuickFurnoWhatsAppSpecialistRuntimeConfig {
@@ -23,7 +25,7 @@ export interface QuickFurnoWhatsAppSpecialistRuntimeConfig {
 function isQualificationMaterial(
   material: QuickFurnoWhatsAppWorkerMaterial,
 ): material is QuickFurnoLeadQualificationMaterialV1 {
-  return 'purpose' in material && material.purpose === 'lead_qualification';
+  return 'purpose' in material;
 }
 
 const expectedSubjectByActor: Readonly<
@@ -61,11 +63,11 @@ function qualificationResult(
       }
     | undefined,
 ): QuickFurnoQualificationProposal {
+  const candidate =
+    proposal?.boundRevision === material.revision ? proposal.replyBody.trim() : null;
   const exact =
-    proposal !== undefined &&
-    proposal.boundRevision === material.revision &&
-    material.qualification.allowedOptions.includes(proposal.replyBody.trim())
-      ? proposal.replyBody.trim()
+    candidate !== null && material.qualification.allowedOptions.includes(candidate)
+      ? candidate
       : null;
   return Object.freeze({
     actor: 'RIYA',
@@ -131,7 +133,8 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
       }
 
       if (expectedSubjectByActor[material.assignedActor] !== material.subjectType) return null;
-      if (material.dataClass !== 'HOSTED_ALLOWED' || material.normalizedText === undefined) return null;
+      if (material.dataClass !== 'HOSTED_ALLOWED' || material.normalizedText === undefined)
+        return null;
 
       const envelope = createInboundEnvelope({
         runtimeId: config.runtimeId,
