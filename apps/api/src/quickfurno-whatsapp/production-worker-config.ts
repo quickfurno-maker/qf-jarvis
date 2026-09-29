@@ -76,18 +76,18 @@ const databaseSchema = z
 
 const concurrencySchema = z
   .object({
-    globalMaxConcurrentTurns: z.number().int().min(1).max(60),
+    globalMaxConcurrentTurns: z.number().int().min(1).max(200),
     maxConcurrentByAgent: z
       .object({
-        RIYA: z.number().int().min(1).max(20),
-        ANISHA: z.number().int().min(1).max(20),
-        AAROHI: z.number().int().min(1).max(20),
+        RIYA: z.number().int().min(1).max(200),
+        ANISHA: z.number().int().min(1).max(200),
+        AAROHI: z.number().int().min(1).max(200),
       })
       .strict(),
     modelGateway: z
       .object({
-        maxConcurrent: z.number().int().min(1).max(60),
-        maxQueue: z.number().int().min(0).max(120),
+        maxConcurrent: z.number().int().min(1).max(200),
+        maxQueue: z.number().int().min(0).max(400),
       })
       .strict(),
   })

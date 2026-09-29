@@ -95,9 +95,9 @@ function validConfig(root: string) {
       },
     },
     concurrency: {
-      globalMaxConcurrentTurns: 60,
-      maxConcurrentByAgent: { RIYA: 20, ANISHA: 20, AAROHI: 20 },
-      modelGateway: { maxConcurrent: 20, maxQueue: 40 },
+      globalMaxConcurrentTurns: 200,
+      maxConcurrentByAgent: { RIYA: 200, ANISHA: 200, AAROHI: 200 },
+      modelGateway: { maxConcurrent: 50, maxQueue: 150 },
     },
     spoolDirectory: spool,
     killSwitchFile: kill,
@@ -125,9 +125,9 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     );
     expect(config.database?.applicationName).toBe('qf-jarvis-whatsapp-worker');
     expect(config.concurrency).toEqual({
-      globalMaxConcurrentTurns: 60,
-      maxConcurrentByAgent: { RIYA: 20, ANISHA: 20, AAROHI: 20 },
-      modelGateway: { maxConcurrent: 20, maxQueue: 40 },
+      globalMaxConcurrentTurns: 200,
+      maxConcurrentByAgent: { RIYA: 200, ANISHA: 200, AAROHI: 200 },
+      modelGateway: { maxConcurrent: 50, maxQueue: 150 },
     });
     expect(config.seal).toEqual({});
   });
@@ -274,7 +274,7 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     );
   });
 
-  it('refuses concurrency that exceeds a 20-turn agent lane or cannot absorb all admitted turns', () => {
+  it('refuses concurrency that exceeds a 200-turn agent lane or cannot absorb all admitted turns', () => {
     const root = tempRoot();
     const path = join(root, 'worker.json');
     const config = validConfig(root);
@@ -284,7 +284,7 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
         ...config,
         concurrency: {
           ...config.concurrency,
-          maxConcurrentByAgent: { RIYA: 21, ANISHA: 20, AAROHI: 20 },
+          maxConcurrentByAgent: { RIYA: 201, ANISHA: 200, AAROHI: 200 },
         },
       }),
     );
@@ -298,7 +298,7 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
         ...config,
         concurrency: {
           ...config.concurrency,
-          modelGateway: { maxConcurrent: 10, maxQueue: 10 },
+          modelGateway: { maxConcurrent: 20, maxQueue: 20 },
         },
       }),
     );

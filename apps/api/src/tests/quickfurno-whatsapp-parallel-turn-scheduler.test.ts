@@ -41,12 +41,8 @@ async function until(predicate: () => boolean, timeoutMs = 2_000): Promise<void>
 }
 
 describe('QuickFurno WhatsApp parallel turn scheduler', () => {
-  it('admits exactly 20 turns per agent and 60 total without conversation overlap', async () => {
-    const pending = [
-      ...Array.from({ length: 25 }, (_, i) => ref('RIYA', i)),
-      ...Array.from({ length: 25 }, (_, i) => ref('ANISHA', 100 + i)),
-      ...Array.from({ length: 25 }, (_, i) => ref('AAROHI', 200 + i)),
-    ];
+  it('admits 200 simultaneous conversations and lets one agent use the full global capacity', async () => {
+    const pending = Array.from({ length: 205 }, (_, i) => ref('RIYA', i));
     const gates = new Map<string, ReturnType<typeof deferred>>();
     const started: QuickFurnoWhatsAppTurnReference[] = [];
 
@@ -74,8 +70,8 @@ describe('QuickFurno WhatsApp parallel turn scheduler', () => {
       queue,
       processor,
       parallelism: {
-        globalMaxConcurrentTurns: 60,
-        maxConcurrentByAgent: { RIYA: 20, ANISHA: 20, AAROHI: 20 },
+        globalMaxConcurrentTurns: 200,
+        maxConcurrentByAgent: { RIYA: 200, ANISHA: 200, AAROHI: 200 },
       },
       idlePollMs: 2,
       canClaim: () => true,
@@ -83,20 +79,20 @@ describe('QuickFurno WhatsApp parallel turn scheduler', () => {
     });
 
     const running = scheduler.run(controller.signal);
-    await until(() => started.length === 60);
+    await until(() => started.length === 200);
 
     expect(scheduler.snapshot()).toEqual({
-      totalInFlight: 60,
-      activeByAgent: { RIYA: 20, ANISHA: 20, AAROHI: 20 },
-      activeConversationCount: 60,
+      totalInFlight: 200,
+      activeByAgent: { RIYA: 200, ANISHA: 0, AAROHI: 0 },
+      activeConversationCount: 200,
     });
-    expect(new Set(started.map((item) => item.conversationId)).size).toBe(60);
+    expect(new Set(started.map((item) => item.conversationId)).size).toBe(200);
+    expect(pending).toHaveLength(5);
 
     controller.abort();
     for (const gate of gates.values()) gate.resolve();
     await running;
   });
-
   it('serializes two turns from the same conversation even when the RIYA lane has capacity', async () => {
     const first = ref('RIYA', 0, 0);
     const second = Object.freeze({
@@ -132,8 +128,8 @@ describe('QuickFurno WhatsApp parallel turn scheduler', () => {
       queue,
       processor,
       parallelism: {
-        globalMaxConcurrentTurns: 60,
-        maxConcurrentByAgent: { RIYA: 20, ANISHA: 20, AAROHI: 20 },
+        globalMaxConcurrentTurns: 200,
+        maxConcurrentByAgent: { RIYA: 200, ANISHA: 200, AAROHI: 200 },
       },
       idlePollMs: 2,
       canClaim: () => true,

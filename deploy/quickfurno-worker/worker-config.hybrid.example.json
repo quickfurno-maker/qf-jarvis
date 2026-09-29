@@ -55,15 +55,15 @@
     }
   },
   "concurrency": {
-    "globalMaxConcurrentTurns": 60,
+    "globalMaxConcurrentTurns": 200,
     "maxConcurrentByAgent": {
-      "RIYA": 20,
-      "ANISHA": 20,
-      "AAROHI": 20
+      "RIYA": 200,
+      "ANISHA": 200,
+      "AAROHI": 200
     },
     "modelGateway": {
-      "maxConcurrent": 20,
-      "maxQueue": 40
+      "maxConcurrent": 50,
+      "maxQueue": 150
     }
   },
   "spoolDirectory": "/var/lib/qfj-turns",
