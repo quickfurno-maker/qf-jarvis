@@ -41,6 +41,14 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(compose).not.toContain('qf-jarvis-gateway.json');
   });
 
+  it('repairs legacy shared-spool permissions before the unprivileged worker starts', () => {
+    expect(deploy).toContain('for spool_dir in pending processing completed failed');
+    expect(deploy).toContain('chown 10002:10002 "$SPOOL/$spool_dir"');
+    expect(deploy).toContain('chmod 0770 "$SPOOL/$spool_dir"');
+    expect(deploy).toContain("-name '*.json' -exec chgrp 10002 {} + -exec chmod 0660 {} +");
+    expect(deploy).toContain('does not grant the shared group read/write/traverse');
+  });
+
   it('mounts only explicit worker evidence/credential/config/control inputs', () => {
     for (const source of [
       '/srv/qf-jarvis/secrets/qf-jarvis-whatsapp-worker.json',

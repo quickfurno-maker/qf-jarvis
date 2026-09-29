@@ -1,4 +1,4 @@
-import { open, mkdir, readFile, readdir, rename, stat } from 'node:fs/promises';
+import { chmod, open, mkdir, readFile, readdir, rename, stat } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import type { WhatsAppTurnV1 } from './whatsapp-turn-protocol.js';
 
@@ -46,7 +46,14 @@ export interface DurableTurnSpool {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const SHARED_DIRECTORY_MODE = 0o770;
+const SHARED_RECORD_MODE = 0o660;
 const fileName = (id: string): string => `${id}.json`;
+
+async function ensureSharedDirectory(path: string): Promise<void> {
+  const created = await mkdir(path, { recursive: true, mode: SHARED_DIRECTORY_MODE });
+  if (created !== undefined) await chmod(path, SHARED_DIRECTORY_MODE);
+}
 function stableRecord(turn: WhatsAppTurnV1, acceptedAt: string): DurableTurnRecordV1 {
   return Object.freeze({
     version: 1,
@@ -174,10 +181,10 @@ export async function createFileDurableTurnSpool(root: string): Promise<DurableT
   const processing = join(root, 'processing');
   const completed = join(root, 'completed');
   const failed = join(root, 'failed');
-  await mkdir(pending, { recursive: true, mode: 0o700 });
-  await mkdir(processing, { recursive: true, mode: 0o700 });
-  await mkdir(completed, { recursive: true, mode: 0o700 });
-  await mkdir(failed, { recursive: true, mode: 0o700 });
+  await ensureSharedDirectory(pending);
+  await ensureSharedDirectory(processing);
+  await ensureSharedDirectory(completed);
+  await ensureSharedDirectory(failed);
 
   const existingRecord = async (id: string): Promise<DurableTurnRecordV1 | null> => {
     for (const dir of [pending, processing, completed, failed]) {
@@ -199,7 +206,8 @@ export async function createFileDurableTurnSpool(root: string): Promise<DurableT
       const path = join(pending, fileName(turn.inboundMessageId));
       let handle;
       try {
-        handle = await open(path, 'wx', 0o600);
+        handle = await open(path, 'wx', SHARED_RECORD_MODE);
+        await handle.chmod(SHARED_RECORD_MODE);
         await handle.writeFile(JSON.stringify(record), 'utf8');
         await handle.sync();
         return { outcome: 'accepted', record };

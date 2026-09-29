@@ -57,6 +57,17 @@ done
 [[ -d "$CONTROL" && ! -L "$CONTROL" ]] || die "$CONTROL must be a real directory."
 [[ -d "$OBSERVABILITY" && ! -L "$OBSERVABILITY" ]] || die "$OBSERVABILITY must be a real directory."
 
+# The gateway (uid 10002) produces durable records and the worker (uid 10003) consumes them through
+# their dedicated shared gid 10002. Repair legacy 0700/0600 spool artifacts before the unprivileged
+# worker starts; otherwise an older gateway-created queue can be mounted successfully but remain
+# unreadable to the worker.
+for spool_dir in pending processing completed failed; do
+  mkdir -p "$SPOOL/$spool_dir"
+  chown 10002:10002 "$SPOOL/$spool_dir"
+  chmod 0770 "$SPOOL/$spool_dir"
+  find "$SPOOL/$spool_dir" -maxdepth 1 -type f -name '*.json' -exec chgrp 10002 {} + -exec chmod 0660 {} +
+done
+
 # Every mounted secret/evidence file is privately readable by the worker uid. Knowledge-only files are
 # checked and mounted only when HYBRID is explicitly requested.
 for file in "${required_files[@]}"; do
@@ -74,15 +85,15 @@ spool_group="$(stat -c '%g' "$SPOOL")"
 [[ "$spool_group" == "10002" ]] || die "$SPOOL gid is $spool_group; expected 10002."
 spool_mode="$(stat -c '%a' "$SPOOL")"
 group_digit="${spool_mode: -2:1}"
-[[ "$group_digit" == "7" || "$group_digit" == "6" ]] ||
-  die "$SPOOL mode $spool_mode does not grant the shared group read/write."
+[[ "$group_digit" == "7" ]] ||
+  die "$SPOOL mode $spool_mode does not grant the shared group read/write/traverse."
 
 obs_group="$(stat -c '%g' "$OBSERVABILITY")"
 [[ "$obs_group" == "10002" ]] || die "$OBSERVABILITY gid is $obs_group; expected 10002."
 obs_mode="$(stat -c '%a' "$OBSERVABILITY")"
 obs_group_digit="${obs_mode: -2:1}"
-[[ "$obs_group_digit" == "7" || "$obs_group_digit" == "6" ]] ||
-  die "$OBSERVABILITY mode $obs_mode does not grant the shared group read/write."
+[[ "$obs_group_digit" == "7" ]] ||
+  die "$OBSERVABILITY mode $obs_mode does not grant the shared group read/write/traverse."
 
 BUILD_CTX="$(mktemp -d)"
 trap 'rm -rf "$BUILD_CTX"' EXIT

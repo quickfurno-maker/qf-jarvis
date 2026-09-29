@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -54,6 +54,27 @@ describe('durable WhatsApp turn spool', () => {
       subjectType: 'client',
     });
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'creates shared-group directories and records despite a restrictive process umask',
+    async () => {
+      const root = await spoolRoot();
+      const priorUmask = process.umask(0o022);
+      try {
+        const spool = await createFileDurableTurnSpool(root);
+        for (const name of ['pending', 'processing', 'completed', 'failed']) {
+          expect((await stat(join(root, name))).mode & 0o777).toBe(0o770);
+        }
+        await spool.accept(turn(), '2026-09-18T12:00:01.000Z');
+        expect(
+          (await stat(join(root, 'pending', '33333333-3333-4333-8333-333333333333.json'))).mode &
+            0o777,
+        ).toBe(0o660);
+      } finally {
+        process.umask(priorUmask);
+      }
+    },
+  );
 
   it('converges a duplicate logical turn and rejects changed identity', async () => {
     const root = await spoolRoot();
