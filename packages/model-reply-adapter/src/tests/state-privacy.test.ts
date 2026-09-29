@@ -14,6 +14,7 @@ import {
   createModelReplyAdapter,
   type ModelReplyAdapterConfig,
 } from '../adapter/create-model-reply-adapter.js';
+import { stateBlockReason } from '../adapter/state-gates.js';
 import type { ModelGatewayInvoker } from '../gateway/model-gateway-invoker.js';
 import {
   clearReplyState,
@@ -101,6 +102,56 @@ describe('pre-gateway state gate', () => {
       expect(invoker.invoked()).toBe(0);
     });
   }
+});
+
+describe('bounded Riya first contact', () => {
+  it('permits in-progress CLIENT/RIYA/HOSTED_ALLOWED only when no subjectRef exists', async () => {
+    const state = clearReplyState({ subjectStatus: 'in-progress' });
+    expect(stateBlockReason(state, replyPlan())).toBeNull();
+
+    const invoker = scriptedGatewayInvoker(structuredReply());
+    const result = await makeAdapter(scriptedReplyStateReader(state), invoker).draftReplyDetailed(
+      replyPlan(),
+    );
+    expect(result.ok).toBe(true);
+    expect(invoker.invoked()).toBe(1);
+  });
+
+  it.each([
+    [
+      'linked client subject',
+      clearReplyState({ subjectStatus: 'in-progress', subjectRef: 'subject.1' }),
+      replyPlan(),
+    ],
+    [
+      'vendor',
+      clearReplyState({
+        subjectStatus: 'in-progress',
+        partyType: 'VENDOR',
+        assignedActor: 'ANISHA',
+      }),
+      replyPlan({ partyType: 'VENDOR', assignedActor: 'ANISHA' }),
+    ],
+    [
+      'prospect',
+      clearReplyState({
+        subjectStatus: 'in-progress',
+        partyType: 'PROSPECT',
+        assignedActor: 'AAROHI',
+      }),
+      replyPlan({ partyType: 'PROSPECT', assignedActor: 'AAROHI' }),
+    ],
+    [
+      'local-only client',
+      clearReplyState({ subjectStatus: 'in-progress', dataClass: 'LOCAL_ONLY' }),
+      replyPlan({ dataClass: 'LOCAL_ONLY' }),
+    ],
+    ['erased client', clearReplyState({ subjectStatus: 'erased' }), replyPlan()],
+    ['anonymised client', clearReplyState({ subjectStatus: 'anonymised' }), replyPlan()],
+    ['tombstoned client', clearReplyState({ subjectStatus: 'tombstoned' }), replyPlan()],
+  ])('blocks adjacent non-onboarding state: %s', (_label, state, plan) => {
+    expect(stateBlockReason(state, plan)).toBe('model-state-blocked');
+  });
 });
 
 describe('post-gateway state gate', () => {

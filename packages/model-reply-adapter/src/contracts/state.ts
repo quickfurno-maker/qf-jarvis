@@ -24,8 +24,10 @@ export interface ReplyState {
   readonly humanTakeover: boolean;
   readonly aiPaused: boolean;
   readonly cancelled: boolean;
-  /** The subject privacy status; `clear` permits drafting, any other status blocks it. */
+  /** The subject privacy status; only clear, or the bounded no-subject Riya onboarding case, may draft. */
   readonly subjectStatus: RuntimeSubjectStatus;
+  /** Optional opaque subject reference; never subject content. */
+  readonly subjectRef?: string;
 }
 
 /** Supplies the current content-free conversation state. Awaited at the pre- and post-gateway gates. */
