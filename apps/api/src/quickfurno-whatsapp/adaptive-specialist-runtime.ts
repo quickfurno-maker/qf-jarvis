@@ -41,7 +41,7 @@ export function createAdaptiveQuickFurnoWhatsAppSpecialistRuntime(
     if (
       !RELEASE_REF.test(route.releaseId) ||
       !active.has(route.releaseId) ||
-      typeof route.runtime?.process !== 'function'
+      typeof route.runtime.process !== 'function'
     ) {
       throw new TypeError('adaptive-specialist-route-invalid');
     }

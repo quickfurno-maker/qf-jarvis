@@ -30,12 +30,14 @@ function material(text = 'Hello'): QuickFurnoWhatsAppTurnMaterialV2 {
 }
 
 function service(label: string) {
-  const process = vi.fn(async () => ({
-    actor: 'RIYA' as const,
-    proposalId: `proposal.${label}`,
-    boundRevision: 9,
-    body: label,
-  }));
+  const process = vi.fn(() =>
+    Promise.resolve({
+      actor: 'RIYA' as const,
+      proposalId: `proposal.${label}`,
+      boundRevision: 9,
+      body: label,
+    }),
+  );
   return { runtime: { process }, process };
 }
 
@@ -51,7 +53,7 @@ describe('QuickFurno adaptive specialist runtime', () => {
         COMPLEX: { releaseId: 'release.strong', runtime: strong.runtime },
       },
       signals: (turn) => ({
-        normalizedTextChars: 'normalizedText' in turn ? (turn.normalizedText?.length ?? 0) : 0,
+        normalizedTextChars: 'normalizedText' in turn ? turn.normalizedText.length : 0,
         conversationContextChars: 0,
         knowledgeHitCount: 0,
         ambiguitySignals: 0,

@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 import type { KnowledgeSourceDocumentInput } from '@qf-jarvis/knowledge-ingestion';
 import { prepareKnowledgeBatch } from '@qf-jarvis/knowledge-ingestion';
 
-import type { HybridCandidateStore, RankedChunkCandidate } from '../contracts.js';
+import type {
+  HybridCandidateStore,
+  HybridSemanticCacheDescriptor,
+  HybridSemanticCachePort,
+  RankedChunkCandidate,
+} from '../contracts.js';
 import { embedPreparedKnowledgeBatch } from '../embedding.js';
 import { fuseHybridCandidates } from '../fusion.js';
 import { createHybridKnowledgeRetriever } from '../retriever.js';
@@ -138,6 +143,22 @@ describe('hybrid knowledge index', () => {
 
   it('short-circuits candidate search when a revision-bound semantic cache serves the request', async () => {
     let searched = false;
+    const semanticCache: HybridSemanticCachePort = Object.freeze({
+      read(descriptor: HybridSemanticCacheDescriptor) {
+        expect(descriptor.knowledgeRevision).toBe('test.release.v1');
+        expect(descriptor.tenantId).toBe('quickfurno');
+        expect(descriptor.agentScope).toBe('CLIENT');
+        expect(descriptor.topicFilters).toEqual(['installation']);
+        return Promise.resolve({
+          ok: true as const,
+          reason: 'hybrid-served' as const,
+          hits: Object.freeze([]),
+        });
+      },
+      write() {
+        return Promise.resolve();
+      },
+    });
     const retriever = createHybridKnowledgeRetriever({
       embedding: createDeterministicTestEmbeddingPort(),
       store: Object.freeze({
@@ -147,22 +168,7 @@ describe('hybrid knowledge index', () => {
           return Promise.reject(new Error('store-should-not-run-on-cache-hit'));
         },
       }),
-      semanticCache: Object.freeze({
-        read(descriptor) {
-          expect(descriptor.knowledgeRevision).toBe('test.release.v1');
-          expect(descriptor.tenantId).toBe('quickfurno');
-          expect(descriptor.agentScope).toBe('CLIENT');
-          expect(descriptor.topicFilters).toEqual(['installation']);
-          return Promise.resolve({
-            ok: true as const,
-            reason: 'hybrid-served' as const,
-            hits: Object.freeze([]),
-          });
-        },
-        write() {
-          return Promise.resolve();
-        },
-      }),
+      semanticCache,
     });
     await expect(retriever.retrieve(request())).resolves.toEqual({
       ok: true,

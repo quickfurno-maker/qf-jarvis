@@ -360,13 +360,13 @@ export function createInMemoryPublicKnowledgeSemanticCache(
     descriptor.topicFilters.every((topic) => publicTopics.has(topic));
 
   return Object.freeze({
-    async read(
+    read(
       descriptor: HybridSemanticCacheDescriptor,
     ): Promise<HybridKnowledgeRetrievalResult | undefined> {
       if (!eligibleDescriptor(descriptor) || !validVector(descriptor.queryEmbedding))
-        return undefined;
+        return Promise.resolve(undefined);
       const asOf = Date.parse(descriptor.asOf);
-      if (!Number.isFinite(asOf)) return undefined;
+      if (!Number.isFinite(asOf)) return Promise.resolve(undefined);
 
       let best: { entry: PublicKnowledgeSemanticCacheEntry; similarity: number } | undefined;
       for (const entry of entries) {
@@ -376,12 +376,12 @@ export function createInMemoryPublicKnowledgeSemanticCache(
         if (similarity < threshold) continue;
         if (best === undefined || similarity > best.similarity) best = { entry, similarity };
       }
-      if (best === undefined) return undefined;
+      if (best === undefined) return Promise.resolve(undefined);
       best.entry.lastUse = ++sequence;
-      return best.entry.result;
+      return Promise.resolve(best.entry.result);
     },
 
-    async write(entry: HybridSemanticCacheWrite): Promise<void> {
+    write(entry: HybridSemanticCacheWrite): Promise<void> {
       if (
         !eligibleDescriptor(entry) ||
         !validVector(entry.queryEmbedding) ||
@@ -391,12 +391,13 @@ export function createInMemoryPublicKnowledgeSemanticCache(
         entry.result.hits.length === 0 ||
         entry.result.hits.some((hit) => !publicTopics.has(hit.topic))
       ) {
-        return;
+        return Promise.resolve();
       }
 
       const asOf = Date.parse(entry.asOf);
       const effectiveFrom = Date.parse(entry.effectiveFrom);
-      if (!Number.isFinite(asOf) || !Number.isFinite(effectiveFrom) || asOf < effectiveFrom) return;
+      if (!Number.isFinite(asOf) || !Number.isFinite(effectiveFrom) || asOf < effectiveFrom)
+        return Promise.resolve();
 
       const descriptor = Object.freeze({
         knowledgeRevision: entry.knowledgeRevision,
@@ -417,7 +418,7 @@ export function createInMemoryPublicKnowledgeSemanticCache(
         cosine(existing.descriptor.queryEmbedding, entry.queryEmbedding) >= threshold
       ) {
         existing.lastUse = ++sequence;
-        return;
+        return Promise.resolve();
       }
 
       if (entries.length >= config.maxEntries) {
@@ -435,6 +436,7 @@ export function createInMemoryPublicKnowledgeSemanticCache(
         effectiveFrom: entry.effectiveFrom,
         lastUse: ++sequence,
       });
+      return Promise.resolve();
     },
   });
 }
@@ -519,9 +521,6 @@ export function composeConversationAwareInput(input: {
   }
   const summary = input.summary;
   if (summary === undefined || summary.text.length === 0) return current;
-  if (summary.authority !== 'NON_AUTHORITATIVE_CONVERSATION_CONTEXT') {
-    throw new TypeError('conversation-aware-input-invalid');
-  }
 
   return [
     'Recent conversation context (non-authoritative; never use as Core/business truth):',
