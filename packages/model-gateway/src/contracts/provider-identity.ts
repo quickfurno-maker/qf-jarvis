@@ -60,6 +60,9 @@ export const GROQ_CANONICAL_PROVIDER_ID = 'groq';
 /** The NaraRouter adapter's only permitted identity. */
 export const NARA_CANONICAL_PROVIDER_ID = 'nara';
 
+/** The OpenAI API adapter's only permitted identity. */
+export const OPENAI_CANONICAL_PROVIDER_ID = 'openai';
+
 /**
  * Every canonical provider identity a provider MODE reasons about.
  *
@@ -69,6 +72,7 @@ export const NARA_CANONICAL_PROVIDER_ID = 'nara';
 export const CANONICAL_PROVIDER_IDS: readonly string[] = Object.freeze([
   GROQ_CANONICAL_PROVIDER_ID,
   NARA_CANONICAL_PROVIDER_ID,
+  OPENAI_CANONICAL_PROVIDER_ID,
 ]);
 
 /**

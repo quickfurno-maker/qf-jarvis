@@ -155,7 +155,7 @@ describe('(36, 37, 38) existing Groq HTTP mappings are unchanged', () => {
 });
 
 describe('(41, 42) package-root runtime API locks', () => {
-  it('(41) @qf-jarvis/model-gateway root runtime API is exactly 95', async () => {
+  it('(41) @qf-jarvis/model-gateway root runtime API is exactly 101', async () => {
     // JF-2A (ADR-0146): 80 -> 93 for the NaraRouter hosted provider (6) and the provider-selection
     // mode (7). The reasoning is recorded once, in that package's own containment spec; this lock
     // only tracks the count. Nothing about this composition changes: it stays OFF-only.
@@ -181,7 +181,9 @@ describe('(41, 42) package-root runtime API locks', () => {
     // behaviour. Authenticated `/v1/models` discovery added a caller outside this package that must
     // refuse a router alias BEFORE it can build a config to be refused by, and the alternative was a
     // second alias list in the operator. An EXACT count, narrowed with a note rather than relaxed.
-    expect(Object.keys(barrel)).toHaveLength(95);
+    // Phase 1 OpenAI (ADR-0172): 95 -> 101 for six composition-only OpenAI provider symbols. The
+    // existing composition remains unchanged and no provider is activated by this API-surface lock.
+    expect(Object.keys(barrel)).toHaveLength(101);
   });
 
   it('(42) @qf-jarvis/model-gateway-composition root runtime API is exactly 2', async () => {

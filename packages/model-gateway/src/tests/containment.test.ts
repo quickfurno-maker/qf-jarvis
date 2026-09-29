@@ -103,7 +103,7 @@ describe('model-gateway package containment', () => {
    * the imported barrel counts runtime exports only — `export type` produces no runtime binding — so
    * adding a type costs nothing and adding a value is a deliberate, reviewed change.
    */
-  it('freezes the package-root runtime API at exactly 95 symbols', async () => {
+  it('freezes the package-root runtime API at the reviewed symbol count', async () => {
     // JF-2A (ADR-0146): 80 -> 93. Thirteen symbols, in two groups, both deliberate.
     //
     // Six are the NaraRouter hosted provider, mirroring the Groq six exactly: the provider, the key
@@ -170,12 +170,13 @@ describe('model-gateway package containment', () => {
     // schemas, and "the production schema projects into the documented subset" has to be asserted
     // against the real schema rather than a replica.
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
-    // JF-5B (ADR-0152): 93 -> 95. The Nara ALIAS GUARD and its frozen refusal list become
+    // JF-5B (ADR-0152): 93 -> 95. Phase 1 OpenAI adds six narrow composition symbols: 95 -> 101.
+    // The Nara ALIAS GUARD and its frozen refusal list become
     // reachable, and only those: a pure predicate over a string with no key, no transport and no
     // behaviour. Authenticated `/v1/models` discovery added a caller outside this package that must
     // refuse a router alias BEFORE it can build a config to be refused by, and the alternative was a
     // second alias list in the operator. An EXACT count, narrowed with a note rather than relaxed.
-    expect(Object.keys(barrel)).toHaveLength(95);
+    expect(Object.keys(barrel)).toHaveLength(101);
   });
 
   it('does not export FakeModelProvider from the production root', () => {
@@ -189,8 +190,8 @@ describe('model-gateway package containment', () => {
     walkSource(fileURLToPath(new URL('src', PKG_DIR))).filter(
       (f) => !f.replace(/\\/g, '/').includes('/tests/'),
     );
-  // The ONLY designated network-egress files: the Groq hosted transport, the NaraRouter hosted
-  // transport (JF-2A, ADR-0146) and the local transport.
+  // The ONLY designated network-egress files: Groq, NaraRouter, OpenAI Responses, and the local
+  // OpenAI-compatible transport.
   //
   // An AUTHORISED ADDITION, not a relaxation. The rule still refuses `fetch` in every other
   // production file, and the Nara transport earns its place on the same terms the other two do: it
@@ -202,6 +203,7 @@ describe('model-gateway package containment', () => {
     return (
       p.endsWith('/providers/groq/groq-transport.ts') ||
       p.endsWith('/providers/nara/nara-transport.ts') ||
+      p.endsWith('/providers/openai/openai-transport.ts') ||
       p.endsWith('/providers/local-openai-compatible/local-transport.ts')
     );
   };
@@ -218,7 +220,7 @@ describe('model-gateway package containment', () => {
     }
   });
 
-  it('uses fetch ONLY in the two designated transport boundaries', () => {
+  it('uses fetch ONLY in the designated transport boundaries', () => {
     for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
       if (isDesignatedTransport(file)) {
@@ -232,8 +234,8 @@ describe('model-gateway package containment', () => {
     for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
       expect(text).not.toMatch(/kimi/i);
-      // Groq (hosted) and the local OpenAI-compatible adapter are authorized; a direct hosted OpenAI
-      // SaaS adapter and any other-vendor SDK adapter are not.
+      // Groq, Nara and OpenAI hosted adapters plus the local OpenAI-compatible adapter are authorized.
+      // Any other-vendor SDK adapter remains forbidden.
       expect(text).not.toMatch(/class\s+OpenAIProvider\b|class\s+AnthropicProvider\b/);
     }
   });
