@@ -93,7 +93,7 @@ describe('Riya v2 conversation quality', () => {
   it('handles objections without invented claims or pressure', () => {
     expect(lower).toContain('price, trust, quality or timing');
     expect(lower).toContain('do not argue, pressure, guilt');
-    expect(lower).toContain('no approved figure in front of you');
+    expect(lower).toContain('do not have an approved figure in front of you');
   });
 });
 
