@@ -235,6 +235,76 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
     expect(post).toHaveBeenCalledOnce();
   });
 
+  it('accepts only the bounded Riya first-contact authority state', async () => {
+    const post = vi.fn<QuickFurnoWhatsAppHttpPost>((_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      return Promise.resolve({
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify(
+              authorityResponse(request, {
+                assignedActor: 'RIYA',
+                subjectType: 'client',
+                partyType: 'CLIENT',
+                dataClass: 'HOSTED_ALLOWED',
+                subjectStatus: 'in-progress',
+                subjectRef: undefined,
+              }),
+            ),
+          ),
+      });
+    });
+    const reader = createQuickFurnoWhatsAppAuthorityReader(config(post));
+    const authority = await reader.read({
+      tenantId: 'quickfurno',
+      conversationId: '22222222-2222-4222-8222-222222222222',
+    });
+    expect(authority).toMatchObject({
+      assignedActor: 'RIYA',
+      subjectType: 'client',
+      partyType: 'CLIENT',
+      jarvisAllowed: true,
+      dataClass: 'HOSTED_ALLOWED',
+      subjectStatus: 'in-progress',
+    });
+    expect(authority).not.toHaveProperty('subjectRef');
+  });
+
+  it.each([
+    ['vendor', 'ANISHA', 'VENDOR'],
+    ['prospect', 'AAROHI', 'PROSPECT'],
+  ])(
+    'rejects first-contact authority without a durable subject for %s/%s',
+    async (subjectType, assignedActor, partyType) => {
+      const post: QuickFurnoWhatsAppHttpPost = (_url, init) => {
+        const request = JSON.parse(init.body) as Record<string, unknown>;
+        return Promise.resolve({
+          status: 200,
+          text: () =>
+            Promise.resolve(
+              JSON.stringify(
+                authorityResponse(request, {
+                  subjectType,
+                  assignedActor,
+                  partyType,
+                  subjectStatus: 'in-progress',
+                  subjectRef: undefined,
+                }),
+              ),
+            ),
+        });
+      };
+      const reader = createQuickFurnoWhatsAppAuthorityReader(config(post));
+      await expect(
+        reader.read({
+          tenantId: 'quickfurno',
+          conversationId: '22222222-2222-4222-8222-222222222222',
+        }),
+      ).rejects.toMatchObject({ code: 'response-invalid' });
+    },
+  );
+
   it.each([
     ['client', 'ANISHA', 'CLIENT'],
     ['client', 'AAROHI', 'CLIENT'],
