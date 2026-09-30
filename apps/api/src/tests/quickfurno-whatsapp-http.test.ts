@@ -319,6 +319,97 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
     });
   });
 
+
+  it('accepts a coherent Core vendor-journey summary bound to matching state', async () => {
+    const post: QuickFurnoWhatsAppHttpPost = (_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      return Promise.resolve({
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              ...authorityResponse(request),
+              inboundMessageId: request['inboundMessageId'],
+              receivedAt: '2026-09-30T04:00:00.000Z',
+              inbound: {
+                version: 1,
+                messageType: 'text',
+                normalizedText: 'One vendor has not contacted me',
+              },
+              normalizedText: 'One vendor has not contacted me',
+              clientJourney: {
+                version: 1,
+                profileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                profileRevision: 5,
+                profileStatus: 'known',
+                isFirstContact: false,
+                name: 'Rahul',
+                missing: [],
+                activeRequirement: {
+                  requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  revision: 7,
+                  status: 'ready_for_lead',
+                  phase: 'SUMMARY',
+                  summaryConfirmed: true,
+                  provenance: {
+                    serviceInterest: 'user_stated',
+                    location: 'user_stated',
+                  },
+                  serviceInterest: 'INTERIOR_DESIGN',
+                  location: 'BANER',
+                },
+              },
+              clientMatchDecision: {
+                version: 1,
+                state: 'MATCHED',
+                requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                requirementRevision: 7,
+                leadId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                assignmentCount: 3,
+                missingFields: [],
+                reasonCode: 'MATCH_BATCH_RELEASED',
+                coreReady: false,
+                executionAuthorized: false,
+              },
+              clientVendorJourney: {
+                version: 1,
+                requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                requirementRevision: 7,
+                vendorsReleased: 3,
+                vendorNoContactCount: 1,
+                allReleasedVendorsContacted: false,
+                satisfactionState: 'UNKNOWN',
+                serviceRecoveryNeeded: false,
+                reassignmentState: 'NONE',
+                followUpDue: false,
+              },
+              coreAvailability: {
+                version: 1,
+                snapshotRef: 'availability.1',
+                taxonomyVersion: 1,
+                cities: [{ ref: 'BANER', displayName: 'Baner' }],
+                services: [{ ref: 'INTERIOR_DESIGN', displayName: 'Interior Design' }],
+                availability: [{ serviceRef: 'INTERIOR_DESIGN', cityRefs: ['BANER'] }],
+              },
+            }),
+          ),
+      });
+    };
+
+    const result = await createQuickFurnoWhatsAppMaterialReader(config(post)).read({
+      conversationId: '22222222-2222-4222-8222-222222222222',
+      inboundMessageId: '33333333-3333-4333-8333-333333333333',
+      expectedRevision: 7,
+    });
+    if ('purpose' in result) throw new Error('expected-conversation-material');
+    expect(result.clientVendorJourney).toMatchObject({
+      vendorsReleased: 3,
+      vendorNoContactCount: 1,
+      allReleasedVendorsContacted: false,
+      satisfactionState: 'UNKNOWN',
+    });
+  });
+
   it('rejects a Core match decision bound to a stale requirement revision', async () => {
     const post: QuickFurnoWhatsAppHttpPost = (_url, init) => {
       const request = JSON.parse(init.body) as Record<string, unknown>;

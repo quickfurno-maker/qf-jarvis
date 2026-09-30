@@ -216,6 +216,31 @@ export interface QuickFurnoClientMatchDecisionV1 {
   readonly executionAuthorized: false;
 }
 
+export type QuickFurnoClientVendorSatisfactionState =
+  | 'UNKNOWN'
+  | 'SATISFIED'
+  | 'DISSATISFIED'
+  | 'COMPLAINT';
+
+export type QuickFurnoClientVendorReassignmentState =
+  | 'NONE'
+  | 'REQUESTED'
+  | 'AUTHORIZED'
+  | 'REJECTED';
+
+export interface QuickFurnoClientVendorJourneyV1 {
+  readonly version: 1;
+  readonly requirementId: string;
+  readonly requirementRevision: number;
+  readonly vendorsReleased: number;
+  readonly vendorNoContactCount: number;
+  readonly allReleasedVendorsContacted: boolean;
+  readonly satisfactionState: QuickFurnoClientVendorSatisfactionState;
+  readonly serviceRecoveryNeeded: boolean;
+  readonly reassignmentState: QuickFurnoClientVendorReassignmentState;
+  readonly followUpDue: boolean;
+}
+
 export interface QuickFurnoCoreAvailabilitySnapshotV1 {
   readonly version: 1;
   readonly snapshotRef: string;
@@ -242,6 +267,8 @@ export interface QuickFurnoWhatsAppTurnMaterialV2 extends Omit<
   readonly clientJourney?: QuickFurnoClientJourneySnapshot;
   /** Current QuickFurno Core decision about whether the active requirement may enter matching. */
   readonly clientMatchDecision?: QuickFurnoClientMatchDecisionV1;
+  /** Core-owned vendor-contact/satisfaction summary for the active requirement. */
+  readonly clientVendorJourney?: QuickFurnoClientVendorJourneyV1;
   /** Current QuickFurno Core service/city authority captured for the same Riya turn. */
   readonly coreAvailability?: QuickFurnoCoreAvailabilitySnapshotV1;
 }

@@ -220,6 +220,113 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
     });
   });
 
+
+  it('prioritizes vendor no-contact recovery from Core-owned vendor journey state', () => {
+    const snapshot = buildWhatsAppClientIntelligence(
+      material({
+        clientVendorJourney: {
+          version: 1,
+          requirementId: 'requirement.1',
+          requirementRevision: 7,
+          vendorsReleased: 3,
+          vendorNoContactCount: 1,
+          allReleasedVendorsContacted: false,
+          satisfactionState: 'UNKNOWN',
+          serviceRecoveryNeeded: false,
+          reassignmentState: 'NONE',
+          followUpDue: false,
+        },
+      }),
+    );
+
+    expect(snapshot?.journey).toMatchObject({
+      vendorsReleased: 3,
+      vendorNoContactCount: 1,
+      allReleasedVendorsContacted: false,
+    });
+    expect(snapshot?.nextBestAction).toMatchObject({
+      action: 'CHECK_VENDOR_CONTACT',
+      reasonCode: 'VENDOR_CONTACT_GAP',
+      requiresCoreDecision: true,
+    });
+  });
+
+  it('asks for satisfaction after all released vendors contacted the client', () => {
+    const snapshot = buildWhatsAppClientIntelligence(
+      material({
+        clientVendorJourney: {
+          version: 1,
+          requirementId: 'requirement.1',
+          requirementRevision: 7,
+          vendorsReleased: 3,
+          vendorNoContactCount: 0,
+          allReleasedVendorsContacted: true,
+          satisfactionState: 'UNKNOWN',
+          serviceRecoveryNeeded: false,
+          reassignmentState: 'NONE',
+          followUpDue: false,
+        },
+      }),
+    );
+
+    expect(snapshot?.nextBestAction).toMatchObject({
+      action: 'ASK_SATISFACTION',
+      reasonCode: 'VENDOR_BATCH_FEEDBACK_MISSING',
+      requiresCoreDecision: false,
+    });
+  });
+
+  it('prioritizes service recovery over nurture when Core reports dissatisfaction', () => {
+    const registry = createServiceBlueprintRegistry([
+      {
+        version: 1,
+        serviceRef: 'INTERIOR_DESIGN',
+        coreCategoryRef: 'INTERIOR_DESIGN',
+        qualification: { mandatoryFieldRefs: [], optionalFieldRefs: [] },
+        relatedServices: [
+          { targetServiceRef: 'PAINTING', relevance: 'HIGH', timing: { sourceState: 'ACTIVE' } },
+        ],
+      },
+      {
+        version: 1,
+        serviceRef: 'PAINTING',
+        coreCategoryRef: 'PAINTING',
+        qualification: { mandatoryFieldRefs: [], optionalFieldRefs: [] },
+        relatedServices: [],
+      },
+    ]);
+    const snapshot = buildWhatsAppClientIntelligence(
+      material({
+        clientJourney: {
+          ...material().clientJourney!,
+          activeRequirement: {
+            ...material().clientJourney!.activeRequirement,
+            serviceInterest: 'INTERIOR_DESIGN',
+          },
+        },
+        clientVendorJourney: {
+          version: 1,
+          requirementId: 'requirement.1',
+          requirementRevision: 7,
+          vendorsReleased: 3,
+          vendorNoContactCount: 0,
+          allReleasedVendorsContacted: true,
+          satisfactionState: 'DISSATISFIED',
+          serviceRecoveryNeeded: true,
+          reassignmentState: 'NONE',
+          followUpDue: false,
+        },
+      }),
+      { serviceBlueprintRegistry: registry },
+    );
+
+    expect(snapshot?.opportunities).toStrictEqual([]);
+    expect(snapshot?.nextBestAction).toMatchObject({
+      action: 'SERVICE_RECOVERY',
+      reasonCode: 'UNRESOLVED_SERVICE_ISSUE',
+    });
+  });
+
   it('does not create Client OS context when Core supplies no client journey', () => {
     expect(buildWhatsAppClientIntelligence(material({ clientJourney: undefined }))).toBeUndefined();
   });

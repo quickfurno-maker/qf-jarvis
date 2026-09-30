@@ -57,7 +57,7 @@ function opportunityContext(
       ? {}
       : { propertyStageRef: currentProperty.projectStage }),
     ...(possessionDays === undefined ? {} : { daysToPossession: possessionDays }),
-    hasUnresolvedServiceIssue: false,
+    hasUnresolvedServiceIssue: material.clientVendorJourney?.serviceRecoveryNeeded ?? false,
   });
 }
 
@@ -105,16 +105,17 @@ export function buildWhatsAppClientIntelligence(
   const matchRequested = explicitMatchRequested(material.normalizedText);
   const matchDecision = material.clientMatchDecision;
   const missingMandatoryFieldRefs = matchRequested ? missingFields(material) : Object.freeze([]);
-  const vendorsReleased = matchDecision?.assignmentCount ?? 0;
+  const vendorJourney = material.clientVendorJourney;
+  const vendorsReleased = vendorJourney?.vendorsReleased ?? matchDecision?.assignmentCount ?? 0;
   const journeyState: ClientIntelligenceSnapshotV1['journey'] = Object.freeze({
-    followUpDue: false,
-    satisfactionState: 'UNKNOWN',
-    serviceRecoveryNeeded: false,
-    reassignmentState: 'NONE',
+    followUpDue: vendorJourney?.followUpDue ?? false,
+    satisfactionState: vendorJourney?.satisfactionState ?? 'UNKNOWN',
+    serviceRecoveryNeeded: vendorJourney?.serviceRecoveryNeeded ?? false,
+    reassignmentState: vendorJourney?.reassignmentState ?? 'NONE',
     lifecycleState: lifecycleState(journey.activeRequirement.status),
     vendorsReleased,
-    vendorNoContactCount: 0,
-    allReleasedVendorsContacted: false,
+    vendorNoContactCount: vendorJourney?.vendorNoContactCount ?? 0,
+    allReleasedVendorsContacted: vendorJourney?.allReleasedVendorsContacted ?? false,
   });
 
   const decision = Object.freeze({
@@ -141,12 +142,12 @@ export function buildWhatsAppClientIntelligence(
 
   const nextBestAction = planClientNextBestAction({
     ...decision,
-    unresolvedServiceIssue: false,
+    unresolvedServiceIssue: journeyState.serviceRecoveryNeeded,
     vendorsReleased,
-    vendorNoContactCount: 0,
-    allReleasedVendorsContacted: false,
-    satisfactionKnown: false,
-    followUpDue: false,
+    vendorNoContactCount: journeyState.vendorNoContactCount,
+    allReleasedVendorsContacted: journeyState.allReleasedVendorsContacted,
+    satisfactionKnown: journeyState.satisfactionState !== 'UNKNOWN',
+    followUpDue: journeyState.followUpDue,
     opportunities: Object.freeze([]),
   });
 
