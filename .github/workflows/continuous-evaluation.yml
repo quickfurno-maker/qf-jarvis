@@ -73,6 +73,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Format preview for knowledge activation files
+        run: |
+          pnpm exec prettier --write \
+            apps/api/src/knowledge-production/quickfurno-production-corpus.ts \
+            apps/api/src/tests/credential-containment.test.ts \
+            apps/api/src/tests/quickfurno-production-knowledge.test.ts \
+            apps/api/src/tests/shadow-containment.test.ts
+          git diff --no-ext-diff --unified=120 -- \
+            apps/api/src/knowledge-production/quickfurno-production-corpus.ts \
+            apps/api/src/tests/credential-containment.test.ts \
+            apps/api/src/tests/quickfurno-production-knowledge.test.ts \
+            apps/api/src/tests/shadow-containment.test.ts
+          git checkout -- \
+            apps/api/src/knowledge-production/quickfurno-production-corpus.ts \
+            apps/api/src/tests/credential-containment.test.ts \
+            apps/api/src/tests/quickfurno-production-knowledge.test.ts \
+            apps/api/src/tests/shadow-containment.test.ts
       - name: Build workspace packages
         run: pnpm build
 
