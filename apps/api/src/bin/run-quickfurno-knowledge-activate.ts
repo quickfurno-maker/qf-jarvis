@@ -21,8 +21,9 @@ async function main(): Promise<void> {
   let pool: ReturnType<typeof createDatabasePool> | undefined;
   try {
     const config = loadQuickFurnoKnowledgeCandidateConfig(configPathOf(process.argv.slice(2)));
-    pool = createDatabasePool(config.database);
-    const writer = createPostgresKnowledgeIndexWriter(pool);
+    const activePool = createDatabasePool(config.database);
+    pool = activePool;
+    const writer = createPostgresKnowledgeIndexWriter(activePool);
 
     const revision = await activateQuickFurnoKnowledgeRelease({
       approval: config.approval,
@@ -30,7 +31,7 @@ async function main(): Promise<void> {
       activator: {
         activate: (candidateRevision) => writer.activateRelease(candidateRevision),
         assertReady: (candidateRevision, embeddingModelRef) =>
-          assertPostgresKnowledgeReleaseReady(pool!, candidateRevision, embeddingModelRef),
+          assertPostgresKnowledgeReleaseReady(activePool, candidateRevision, embeddingModelRef),
       },
     });
 
