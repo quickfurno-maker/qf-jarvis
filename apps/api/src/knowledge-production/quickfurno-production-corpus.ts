@@ -5,7 +5,9 @@ import {
   type KnowledgeSourceDocumentInput,
 } from '@qf-jarvis/knowledge-ingestion';
 
-import {\n  KNOWLEDGE_FRESHNESS_SOURCE_MANIFEST_PROTOCOL,\n} from '../knowledge-freshness/create-manifest-source-port.js';
+import {
+  KNOWLEDGE_FRESHNESS_SOURCE_MANIFEST_PROTOCOL,
+} from '../knowledge-freshness/create-manifest-source-port.js';
 
 /**
  * First curated QuickFurno production knowledge corpus.
@@ -257,7 +259,10 @@ function expiryFrom(instant: string): string {
   return new Date(ms).toISOString();
 }
 
-function approvedDocument(\n  candidate: Candidate,\n  approval: QuickFurnoKnowledgeApproval,\n): KnowledgeSourceDocumentInput {
+function approvedDocument(
+  candidate: Candidate,
+  approval: QuickFurnoKnowledgeApproval,
+): KnowledgeSourceDocumentInput {
   const approvedAt = approvalInstant(approval.approvedAt);
   return Object.freeze({
     ...candidate,
@@ -333,7 +338,9 @@ export function deriveQuickFurnoKnowledgeReleaseRevision(
       [...document.permissions.allowedPurposes],
     ]);
 
-  const digest = createHash('sha256')\n    .update(JSON.stringify(canonical), 'utf8')\n    .digest('hex');
+  const digest = createHash('sha256')
+    .update(JSON.stringify(canonical), 'utf8')
+    .digest('hex');
   return 'qfkb.sha256.' + digest;
 }
 
