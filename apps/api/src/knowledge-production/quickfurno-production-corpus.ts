@@ -52,7 +52,7 @@ const candidates: readonly Candidate[] = Object.freeze([
         'Client enquiries are free. Matching uses the service required and the client city and area. ' +
         'Any agreement, pricing and work scope is between the client and the vendor.',
     },
-    sourceRef: 'github://quickfurno-marketplace/app/terms/page.tsx',
+    sourceRef: 'github://quickfurno-marketplace/app/terms/page.tsx#marketplace-overview',
     sourceRevision: QUICKFURNO_KNOWLEDGE_SOURCE_REVISION,
     owner: SOURCE_OWNER,
     classification: 'HOSTED_ALLOWED',
@@ -77,7 +77,7 @@ const candidates: readonly Candidate[] = Object.freeze([
         'If those vendors are unavailable, non-responsive or unable to serve the requirement, QuickFurno may manually connect the client with additional eligible vendors. ' +
         'Vendors contact the client directly with quotes. Submitting an enquiry does not obligate the client to hire a vendor.',
     },
-    sourceRef: 'github://quickfurno-marketplace/app/terms/page.tsx',
+    sourceRef: 'github://quickfurno-marketplace/app/terms/page.tsx#matching-process',
     sourceRevision: QUICKFURNO_KNOWLEDGE_SOURCE_REVISION,
     owner: SOURCE_OWNER,
     classification: 'HOSTED_ALLOWED',
@@ -103,7 +103,7 @@ const candidates: readonly Candidate[] = Object.freeze([
         'Pending, rejected, suspended or hidden profiles are not shown as active public vendors. ' +
         'Vendors remain responsible for the accuracy of their business details, the quality of their work and their conduct with clients.',
     },
-    sourceRef: 'github://quickfurno-marketplace/app/terms/page.tsx',
+    sourceRef: 'github://quickfurno-marketplace/app/terms/page.tsx#vendor-listing-policy',
     sourceRevision: QUICKFURNO_KNOWLEDGE_SOURCE_REVISION,
     owner: SOURCE_OWNER,
     classification: 'HOSTED_ALLOWED',
@@ -130,7 +130,7 @@ const candidates: readonly Candidate[] = Object.freeze([
         'If those vendors cannot serve the request, QuickFurno may manually connect additional eligible vendors. ' +
         'QuickFurno states that it does not sell client details or list them on an open marketplace.',
     },
-    sourceRef: 'github://quickfurno-marketplace/app/privacy/page.tsx',
+    sourceRef: 'github://quickfurno-marketplace/app/privacy/page.tsx#lead-sharing-privacy',
     sourceRevision: QUICKFURNO_KNOWLEDGE_SOURCE_REVISION,
     owner: SOURCE_OWNER,
     classification: 'HOSTED_ALLOWED',
@@ -154,7 +154,7 @@ const candidates: readonly Candidate[] = Object.freeze([
         'QuickFurno currently exposes these Pune marketplace categories: Interior Designers, Carpenters, Modular Factory, Premium Interiors, Sofa, Painter, Civil Work and False Ceiling. ' +
         'Category availability for a particular enquiry still depends on current marketplace supply and eligibility.',
     },
-    sourceRef: 'github://quickfurno-marketplace/lib/quickfurno-data.ts',
+    sourceRef: 'github://quickfurno-marketplace/lib/quickfurno-data.ts#service-categories',
     sourceRevision: QUICKFURNO_KNOWLEDGE_SOURCE_REVISION,
     owner: SOURCE_OWNER,
     classification: 'HOSTED_ALLOWED',
@@ -178,7 +178,7 @@ const candidates: readonly Candidate[] = Object.freeze([
         'QuickFurno is currently launched in Pune and PCMC. Common locality options shown by the launch surface include Kharadi, Viman Nagar, Koregaon Park, Baner, Wakad, Hinjewadi, Magarpatta, Kothrud, Aundh, Hadapsar, Pimpri-Chinchwad, Kalyani Nagar, Wagholi, Pimple Saudagar, Bavdhan, Warje, Sinhagad Road, Undri, NIBM and Ravet. ' +
         'A listed locality is not a guarantee that matching supply is available. A client may still submit an enquiry when a locality is not listed.',
     },
-    sourceRef: 'github://quickfurno-marketplace/lib/homepage-content.ts',
+    sourceRef: 'github://quickfurno-marketplace/lib/homepage-content.ts#pune-service-areas',
     sourceRevision: QUICKFURNO_KNOWLEDGE_SOURCE_REVISION,
     owner: SOURCE_OWNER,
     classification: 'HOSTED_ALLOWED',
@@ -203,7 +203,7 @@ const candidates: readonly Candidate[] = Object.freeze([
         'An approved vendor can receive relevant homeowner enquiries when the vendor is eligible for the requirement. ' +
         'QuickFurno does not promise a fixed lead volume merely because a vendor applies or is listed.',
     },
-    sourceRef: 'github://quickfurno-marketplace/components/home/LaunchSections.tsx',
+    sourceRef: 'github://quickfurno-marketplace/components/home/LaunchSections.tsx#vendor-join-overview',
     sourceRevision: QUICKFURNO_KNOWLEDGE_SOURCE_REVISION,
     owner: SOURCE_OWNER,
     classification: 'HOSTED_ALLOWED',
