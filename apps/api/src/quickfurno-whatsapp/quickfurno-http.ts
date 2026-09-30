@@ -7,11 +7,13 @@ import {
   QFJ_WHATSAPP_REPLY_PATH,
   QFJ_WHATSAPP_REPLY_PROTOCOL,
   QFJ_WHATSAPP_REPLY_QUALIFICATION_SIGNING_DOMAIN,
+  QFJ_WHATSAPP_REPLY_JOURNEY_SIGNING_DOMAIN,
   QFJ_WHATSAPP_REPLY_SIGNING_DOMAIN,
   QFJ_WHATSAPP_TURN_MATERIAL_PATH,
   QFJ_WHATSAPP_TURN_MATERIAL_PROTOCOL,
   QFJ_WHATSAPP_TURN_MATERIAL_SIGNING_DOMAIN,
   type QuickFurnoClientJourneyField,
+  type QuickFurnoClientJourneyProposalV1,
   type QuickFurnoClientJourneySnapshotV1,
   type QuickFurnoCoreAvailabilitySnapshotV1,
   type QuickFurnoLeadQualificationMaterialV1,
@@ -1311,6 +1313,49 @@ function isQualificationProposal(
   return 'qualificationRequestId' in proposal;
 }
 
+function validClientJourneyProposal(proposal: QuickFurnoClientJourneyProposalV1): boolean {
+  if (
+    proposal.version !== 1 ||
+    !UUID.test(proposal.profileId) ||
+    !Number.isSafeInteger(proposal.profileRevision) ||
+    proposal.profileRevision < 0 ||
+    !UUID.test(proposal.requirementId) ||
+    !Number.isSafeInteger(proposal.requirementRevision) ||
+    proposal.requirementRevision < 0 ||
+    !(CLIENT_JOURNEY_PHASES as readonly string[]).includes(proposal.nextPhase) ||
+    typeof proposal.summaryConfirmed !== 'boolean' ||
+    proposal.sets.length > CLIENT_JOURNEY_FIELDS.length ||
+    proposal.clears.length > CLIENT_JOURNEY_FIELDS.length
+  ) return false;
+  if (
+    proposal.name !== undefined &&
+    (proposal.name.provenance !== 'user_stated' ||
+      proposal.name.value.trim().length < 1 ||
+      proposal.name.value.trim().length > 120)
+  ) return false;
+  const seen = new Set<QuickFurnoClientJourneyField>();
+  for (const item of proposal.sets) {
+    if (
+      !(CLIENT_JOURNEY_FIELDS as readonly string[]).includes(item.field) ||
+      seen.has(item.field) ||
+      (item.provenance !== 'user_stated' && item.provenance !== 'model_inferred')
+    ) return false;
+    const max =
+      item.field === 'scope' ? 2048 : item.field === 'budget' || item.field === 'timeline' ? 512 : 128;
+    if (item.value.trim().length < 1 || item.value.trim().length > max) return false;
+    seen.add(item.field);
+  }
+  for (const item of proposal.clears) {
+    if (
+      !(CLIENT_JOURNEY_FIELDS as readonly string[]).includes(item.field) ||
+      seen.has(item.field) ||
+      item.provenance !== 'user_stated'
+    ) return false;
+    seen.add(item.field);
+  }
+  return true;
+}
+
 export function createQuickFurnoWhatsAppReplyWriter(
   config: QuickFurnoWhatsAppHttpConfig,
 ): QuickFurnoWhatsAppReplyWriter {
@@ -1436,6 +1481,85 @@ export function createQuickFurnoWhatsAppReplyWriter(
         heading: actorHeading(proposal.actor),
         body: proposal.body,
       };
+      const journeyProposal = proposal.clientJourneyProposal;
+      if (journeyProposal !== undefined) {
+        if (proposal.actor !== 'RIYA' || !validClientJourneyProposal(journeyProposal)) {
+          throw new QuickFurnoWhatsAppHttpError('invalid-input');
+        }
+        const journeyJson = JSON.stringify(journeyProposal);
+        const idempotencyKey = digestHex(
+          [
+            'qfj.whatsapp.reply.v4',
+            input.conversationId,
+            String(input.expectedRevision),
+            proposal.proposalId,
+            proposal.actor,
+            proposal.body,
+            journeyJson,
+          ].join('\n'),
+        );
+        const body = JSON.stringify({
+          protocol: QFJ_WHATSAPP_REPLY_PROTOCOL,
+          version: 4,
+          caller: CALLER,
+          audience: AUDIENCE,
+          requestId,
+          issuedAt,
+          conversationId: input.conversationId,
+          expectedRevision: input.expectedRevision,
+          proposalId: proposal.proposalId,
+          actor: 'RIYA',
+          experience,
+          clientJourneyProposal: journeyProposal,
+          idempotencyKey,
+        });
+        const response = await signedPost({
+          config,
+          key,
+          timeoutMs,
+          path: QFJ_WHATSAPP_REPLY_PATH,
+          domain: QFJ_WHATSAPP_REPLY_JOURNEY_SIGNING_DOMAIN,
+          requestId,
+          issuedAt,
+          body,
+        });
+        if (response.status === 409) return 'stale';
+        if (response.status !== 202 && response.status !== 200) {
+          throw new QuickFurnoWhatsAppHttpError('request-failed');
+        }
+        const text = await response.text();
+        if (
+          Buffer.byteLength(text, 'utf8') < 2 ||
+          Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES
+        ) {
+          throw new QuickFurnoWhatsAppHttpError('response-invalid');
+        }
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          throw new QuickFurnoWhatsAppHttpError('response-invalid');
+        }
+        const journey =
+          isRecord(parsed) && isRecord(parsed['clientJourney']) ? parsed['clientJourney'] : null;
+        if (
+          !isRecord(parsed) ||
+          parsed['protocol'] !== QFJ_WHATSAPP_REPLY_PROTOCOL ||
+          parsed['version'] !== 4 ||
+          parsed['requestId'] !== requestId ||
+          parsed['status'] !== 'queued' ||
+          journey === null ||
+          typeof journey['profileRevision'] !== 'number' ||
+          !Number.isSafeInteger(journey['profileRevision']) ||
+          journey['profileRevision'] < 0 ||
+          typeof journey['requirementRevision'] !== 'number' ||
+          !Number.isSafeInteger(journey['requirementRevision']) ||
+          journey['requirementRevision'] < 0
+        ) {
+          throw new QuickFurnoWhatsAppHttpError('response-invalid');
+        }
+        return 'queued';
+      }
       const idempotencyKey = digestHex(
         [
           'qfj.whatsapp.reply.v2',

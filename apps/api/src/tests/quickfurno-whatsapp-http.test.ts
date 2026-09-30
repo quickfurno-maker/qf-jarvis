@@ -12,6 +12,7 @@ import {
   QFJ_WHATSAPP_CONVERSATION_CONTEXT_SIGNING_DOMAIN,
   QFJ_WHATSAPP_REPLY_PATH,
   QFJ_WHATSAPP_REPLY_QUALIFICATION_SIGNING_DOMAIN,
+  QFJ_WHATSAPP_REPLY_JOURNEY_SIGNING_DOMAIN,
   QFJ_WHATSAPP_REPLY_SIGNING_DOMAIN,
   QFJ_WHATSAPP_TURN_MATERIAL_PATH,
   QFJ_WHATSAPP_TURN_MATERIAL_SIGNING_DOMAIN,
@@ -487,6 +488,110 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
     });
     expect(captured).not.toHaveProperty('experience');
     expect(captured).not.toHaveProperty('body');
+  });
+
+  it('reply writer signs V4 when Riya carries a client journey proposal', async () => {
+    let captured: Record<string, unknown> | undefined;
+    const post = vi.fn<QuickFurnoWhatsAppHttpPost>((_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      captured = request;
+      const signature = init.headers['x-qfj-signature'];
+      if (signature === undefined) throw new Error('signature missing in test request');
+      expect(
+        verify(
+          null,
+          Buffer.from(
+            signingInput(
+              QFJ_WHATSAPP_REPLY_JOURNEY_SIGNING_DOMAIN,
+              QFJ_WHATSAPP_REPLY_PATH,
+              String(request['requestId']),
+              String(request['issuedAt']),
+              init.body,
+            ),
+            'utf8',
+          ),
+          keys.publicKey,
+          Buffer.from(signature, 'base64url'),
+        ),
+      ).toBe(true);
+      return Promise.resolve({
+        status: 202,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              protocol: 'qfj.whatsapp.reply',
+              version: 4,
+              requestId: request['requestId'],
+              status: 'queued',
+              outboxId: 'outbox.1',
+              clientJourney: { profileRevision: 3, requirementRevision: 6 },
+            }),
+          ),
+      });
+    });
+    const writer = createQuickFurnoWhatsAppReplyWriter(config(post));
+    const outcome = await writer.write({
+      conversationId: '22222222-2222-4222-8222-222222222222',
+      expectedRevision: 7,
+      proposal: {
+        actor: 'RIYA',
+        proposalId: 'prop.riya.memory.1',
+        boundRevision: 7,
+        body: 'Which area is the property in?',
+        clientJourneyProposal: {
+          version: 1,
+          profileId: '66666666-6666-4666-8666-666666666666',
+          profileRevision: 2,
+          requirementId: '77777777-7777-4777-8777-777777777777',
+          requirementRevision: 5,
+          nextPhase: 'LOCATION',
+          summaryConfirmed: false,
+          name: { value: 'Rahul', provenance: 'user_stated' },
+          sets: [{ field: 'serviceInterest', value: 'INTERIOR_DESIGN', provenance: 'user_stated' }],
+          clears: [],
+        },
+      },
+    });
+    expect(outcome).toBe('queued');
+    expect(captured).toMatchObject({
+      version: 4,
+      actor: 'RIYA',
+      clientJourneyProposal: {
+        profileRevision: 2,
+        requirementRevision: 5,
+        nextPhase: 'LOCATION',
+      },
+    });
+    expect(String(captured?.['idempotencyKey'])).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it('reply writer rejects a journey proposal from a non-Riya actor before network I/O', async () => {
+    const post = vi.fn<QuickFurnoWhatsAppHttpPost>();
+    const writer = createQuickFurnoWhatsAppReplyWriter(config(post));
+    await expect(
+      writer.write({
+        conversationId: '22222222-2222-4222-8222-222222222222',
+        expectedRevision: 7,
+        proposal: {
+          actor: 'ANISHA',
+          proposalId: 'prop.invalid.memory',
+          boundRevision: 7,
+          body: 'Invalid',
+          clientJourneyProposal: {
+            version: 1,
+            profileId: '66666666-6666-4666-8666-666666666666',
+            profileRevision: 2,
+            requirementId: '77777777-7777-4777-8777-777777777777',
+            requirementRevision: 5,
+            nextPhase: 'LOCATION',
+            summaryConfirmed: false,
+            sets: [],
+            clears: [],
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'invalid-input' });
+    expect(post).not.toHaveBeenCalled();
   });
 
   it('maps a QuickFurno revision conflict to a terminal stale result', async () => {

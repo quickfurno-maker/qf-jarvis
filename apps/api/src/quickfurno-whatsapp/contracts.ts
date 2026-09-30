@@ -27,10 +27,13 @@ export const QFJ_WHATSAPP_MEDIA_SHA256_HEADER = 'x-qfj-media-sha256' as const;
 export const QFJ_WHATSAPP_REPLY_PROTOCOL = 'qfj.whatsapp.reply' as const;
 export const QFJ_WHATSAPP_REPLY_VERSION = 2 as const;
 export const QFJ_WHATSAPP_REPLY_QUALIFICATION_VERSION = 3 as const;
+export const QFJ_WHATSAPP_REPLY_JOURNEY_VERSION = 4 as const;
 export const QFJ_WHATSAPP_REPLY_PATH = '/api/internal/jarvis/whatsapp-reply' as const;
 export const QFJ_WHATSAPP_REPLY_SIGNING_DOMAIN = 'qfj.whatsapp.reply.http.sig.v2' as const;
 export const QFJ_WHATSAPP_REPLY_QUALIFICATION_SIGNING_DOMAIN =
   'qfj.whatsapp.reply.http.sig.v3' as const;
+export const QFJ_WHATSAPP_REPLY_JOURNEY_SIGNING_DOMAIN =
+  'qfj.whatsapp.reply.http.sig.v4' as const;
 
 export type QuickFurnoWhatsAppAgent = 'AAROHI' | 'ANISHA' | 'RIYA';
 export type QuickFurnoWhatsAppAuthorityActor = QuickFurnoWhatsAppAgent | 'HUMAN' | 'SYSTEM';
