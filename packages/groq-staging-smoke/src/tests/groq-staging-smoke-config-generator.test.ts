@@ -488,6 +488,8 @@ describe('(19, 20, 21, 22, 23, 24) repository invariants and evidence hygiene', 
       '572ba13764cffed600d8580e00b781502ddc85c19126e3621d0a8127e5dc536e',
     '0015_correlation_timeline_projection.sql':
       '31517791c0e8f382f6dff1d0d25f01d8244cc0fabb06c27694246cd1905ba952',
+    '0016_client_lifetime_projection.sql':
+      'e389afa44ef080e3808845ee8900463f94e130448e4beed3d5dbcd243440539e',
   };
 
   it('(19) the model-evaluation package-root API lock is exactly 41', () => {
@@ -533,7 +535,7 @@ describe('(19, 20, 21, 22, 23, 24) repository invariants and evidence hygiene', 
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((name) => name.startsWith('0016'))).toBe(false);
+    expect(sql.some((name) => name.startsWith('0017'))).toBe(false);
   });
 
   it('(23) nothing in this slice references or writes the protected directory', () => {

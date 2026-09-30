@@ -510,12 +510,14 @@ describe('live operator capability remains contained behind reviewed seams', () 
       expect(code, `${label}: node io`).not.toMatch(
         /from ['"]node:(net|http|https|dns|tls|child_process|dgram)['"]/,
       );
-      // Node filesystem access stays closed to the UI. Production may read only auth config and
-      // the one content-free worker observation file; the matching source test may create fixtures.
+      // Node filesystem access stays closed to the UI. Production may read only reviewed,
+      // content-free observation files; matching source tests may create fixtures.
       const fsAllowed = new Set([
         'src/server/auth/config/loader.ts',
         'src/server/control-plane/sources/worker-observation-source.ts',
         'src/server/control-plane/sources/worker-observation-source.test.ts',
+        'src/server/control-plane/sources/agent-flow-trace-source.ts',
+        'src/server/control-plane/sources/agent-flow-trace-source.test.ts',
         'src/server/control-plane/sources/release-assurance-source.ts',
         'src/server/control-plane/sources/release-assurance-source.test.ts',
         'src/server/control-plane/sources/quickfurno-operator-source.test.ts',
@@ -560,6 +562,10 @@ describe('live operator capability remains contained behind reviewed seams', () 
     // The web shell and future mobile app share DTO contracts only. Runtime/database/provider
     // packages remain forbidden from the UI application.
     const ALLOWED = new Set([
+      '@qf-jarvis/agent-flow-governance',
+      '@qf-jarvis/agent-flow-orchestration',
+      '@qf-jarvis/agent-flow-registry',
+      '@qf-jarvis/agent-flow-trace-contract',
       '@qf-jarvis/control-plane-read-contract',
       '@qf-jarvis/operator-api-contract',
       '@qf-jarvis/operator-client-core',
@@ -601,6 +607,8 @@ describe('live operator capability remains contained behind reviewed seams', () 
       'src/components/shell/NotificationCenter.tsx', // local attention drawer only
       'src/components/shell/OperatorMenu.tsx', // menu toggle + sign-out submit
       'src/components/auth/LoginForm.tsx', // sign-in submit
+      'src/components/agent-flow/AgentFlowCanvas.tsx', // local trace/node selection only; no mutation route
+      'src/components/agent-flow/AgentFlowPhase3Studio.tsx', // local view/filter/trace selection only; no mutation route
       'src/components/operator/OperatorControls.tsx', // versioned commands only; Core authorizes
       'src/components/voice/LiveVoiceConsole.tsx', // voice media/session controls only
       'src/components/voice/VoiceStatusButton.tsx', // start/navigation control only

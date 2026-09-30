@@ -27,11 +27,23 @@
  * verbatim and whose digest is matched. Instructions smuggled into dynamic user content would be an
  * un-evaluated prompt that no gate ever reviewed.
  */
+import {
+  parseClientIntelligenceSnapshotV1,
+  type ClientIntelligenceSnapshotV1,
+} from '@qf-jarvis/client-intelligence';
 import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import { DISCOVERY_FIELDS_FROZEN } from '@qf-jarvis/riya-agent';
 import type { DiscoveryField, NeedDiscovery } from '@qf-jarvis/riya-agent';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 
+import {
+  parseRiyaClientLifetimeContextV1,
+  type RiyaClientLifetimeContextV1,
+} from '../contracts/client-lifetime-context.js';
+import {
+  parseRiyaClientProfileContextV1,
+  type RiyaClientProfileContextV1,
+} from '../contracts/client-profile-context.js';
 import { projectCoreAvailability } from './availability.js';
 import { provenGroundedContext } from './grounded-context.js';
 import type { RiyaGroundedKnowledgeContextV1 } from './grounded-context.js';
@@ -61,13 +73,19 @@ const VALUE_KEY = {
  * `DEFAULT_GATEWAY_REQUEST_BUDGETS` are deliberately untouched, because one agent needing more room
  * is not a reason every agent should get it.
  */
-export const MAX_RIYA_USER_CONTENT_CHARS = 12_288;
+export const MAX_RIYA_USER_CONTENT_CHARS = 16_384;
 
 /** Build the ONE user message. Deterministic: the same inputs give byte-identical output. */
 export function buildRiyaUserContent(args: {
   readonly current: RiyaConversationContinuityStateV1;
   readonly message: string | undefined;
   readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
+  /** QuickFurno-owned client profile memory, minimized before it reaches the model. */
+  readonly clientProfile?: RiyaClientProfileContextV1;
+  /** Rebuildable Jarvis advisory intelligence; never QuickFurno business authority. */
+  readonly clientIntelligence?: ClientIntelligenceSnapshotV1;
+  /** Bounded returning-client context derived from QuickFurno Core, with no contact or entity ids. */
+  readonly clientLifetime?: RiyaClientLifetimeContextV1;
   /**
    * Governed knowledge for a grounded turn (RWC-P7), or absent.
    *
@@ -103,6 +121,15 @@ export function buildRiyaUserContent(args: {
     // business currently sells and where. Folding one into the other would invite the model to treat
     // a catalogue entry as something the client said -- or a client's words as a catalogue fact.
     coreAvailability: projectCoreAvailability(availabilitySnapshot),
+    ...(args.clientProfile === undefined
+      ? {}
+      : { clientProfile: parseRiyaClientProfileContextV1(args.clientProfile) }),
+    ...(args.clientIntelligence === undefined
+      ? {}
+      : { clientIntelligence: parseClientIntelligenceSnapshotV1(args.clientIntelligence) }),
+    ...(args.clientLifetime === undefined
+      ? {}
+      : { clientLifetime: parseRiyaClientLifetimeContextV1(args.clientLifetime) }),
     message: message ?? '',
     // ONE additive sibling, and only when a grounded turn actually retrieved something (RWC-P7,
     // ADR-0103 s8). Structurally separate from `coreAvailability` for the same reason that is separate

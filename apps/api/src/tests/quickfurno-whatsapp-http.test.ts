@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync, verify } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  createQuickFurnoClientMatchRequestWriter,
   createQuickFurnoWhatsAppAuthorityReader,
   createQuickFurnoWhatsAppConversationContextReader,
   createQuickFurnoWhatsAppMaterialReader,
@@ -8,13 +9,17 @@ import {
   type QuickFurnoWhatsAppHttpPost,
 } from '../quickfurno-whatsapp/quickfurno-http.js';
 import {
+  QFJ_CLIENT_MATCH_REQUEST_PATH,
+  QFJ_CLIENT_MATCH_REQUEST_SIGNING_DOMAIN,
   QFJ_WHATSAPP_CONVERSATION_CONTEXT_PATH,
   QFJ_WHATSAPP_CONVERSATION_CONTEXT_SIGNING_DOMAIN,
   QFJ_WHATSAPP_REPLY_PATH,
   QFJ_WHATSAPP_REPLY_QUALIFICATION_SIGNING_DOMAIN,
+  QFJ_WHATSAPP_REPLY_JOURNEY_SIGNING_DOMAIN,
   QFJ_WHATSAPP_REPLY_SIGNING_DOMAIN,
   QFJ_WHATSAPP_TURN_MATERIAL_PATH,
   QFJ_WHATSAPP_TURN_MATERIAL_SIGNING_DOMAIN,
+  type QuickFurnoWhatsAppTurnMaterialV2,
 } from '../quickfurno-whatsapp/contracts.js';
 
 const keys = generateKeyPairSync('ed25519');
@@ -148,6 +153,520 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
       replyContext: { providerMessageId: 'wamid.parent' },
     });
     expect(post).toHaveBeenCalledOnce();
+  });
+
+  it('accepts a bounded returning-client V2 journey without weakening the V1 authority checks', async () => {
+    const post = vi.fn<QuickFurnoWhatsAppHttpPost>((_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      return Promise.resolve({
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              ...authorityResponse(request),
+              inboundMessageId: request['inboundMessageId'],
+              receivedAt: '2026-09-30T04:00:00.000Z',
+              inbound: { version: 1, messageType: 'text', normalizedText: 'Need painting now' },
+              normalizedText: 'Need painting now',
+              clientJourney: {
+                version: 2,
+                profileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                profileRevision: 12,
+                profileStatus: 'known',
+                isFirstContact: false,
+                isReturningClient: true,
+                createdAt: '2025-09-10T05:00:00.000Z',
+                lastSeenAt: '2026-09-30T04:00:00.000Z',
+                name: 'Rahul',
+                preferredLanguage: 'hinglish',
+                missing: [],
+                activeRequirement: {
+                  requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  revision: 4,
+                  status: 'discovering',
+                  phase: 'PROJECT_DETAILS',
+                  summaryConfirmed: false,
+                  provenance: {
+                    serviceInterest: 'user_stated',
+                    location: 'user_stated',
+                    budget: 'user_stated',
+                    timeline: 'user_stated',
+                  },
+                  serviceInterest: 'PAINTING',
+                  location: 'BANER',
+                  budget: 'OPEN',
+                  timeline: 'NOW',
+                },
+                properties: [
+                  {
+                    propertyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                    relation: 'current',
+                    area: 'Baner',
+                    propertyType: 'Apartment',
+                    bhk: '3BHK',
+                    projectStage: 'occupied',
+                  },
+                ],
+                pastRequirements: [
+                  {
+                    requirementId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+                    categoryRef: 'INTERIOR_DESIGN',
+                    propertyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                    status: 'converted',
+                    closedAt: '2025-12-01T10:00:00.000Z',
+                  },
+                ],
+              },
+              coreAvailability: {
+                version: 1,
+                snapshotRef: 'availability.1',
+                taxonomyVersion: 1,
+                cities: [{ ref: 'PUNE', displayName: 'Pune' }],
+                services: [{ ref: 'PAINTING', displayName: 'Painting' }],
+                availability: [{ serviceRef: 'PAINTING', cityRefs: ['PUNE'] }],
+              },
+            }),
+          ),
+      });
+    });
+    const result = await createQuickFurnoWhatsAppMaterialReader(config(post)).read({
+      conversationId: '22222222-2222-4222-8222-222222222222',
+      inboundMessageId: '33333333-3333-4333-8333-333333333333',
+      expectedRevision: 7,
+    });
+    if ('purpose' in result) throw new Error('expected-conversation-material');
+    expect(result.clientJourney).toMatchObject({
+      version: 2,
+      isReturningClient: true,
+      name: 'Rahul',
+      properties: [{ area: 'Baner', bhk: '3BHK' }],
+      pastRequirements: [{ categoryRef: 'INTERIOR_DESIGN', status: 'converted' }],
+    });
+  });
+
+  it('accepts a Core match-readiness decision bound to the active requirement revision', async () => {
+    const post: QuickFurnoWhatsAppHttpPost = (_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      return Promise.resolve({
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              ...authorityResponse(request),
+              inboundMessageId: request['inboundMessageId'],
+              receivedAt: '2026-09-30T04:00:00.000Z',
+              inbound: {
+                version: 1,
+                messageType: 'text',
+                normalizedText: 'Please send me 3 vendors nearby',
+              },
+              normalizedText: 'Please send me 3 vendors nearby',
+              clientJourney: {
+                version: 1,
+                profileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                profileRevision: 5,
+                profileStatus: 'known',
+                isFirstContact: false,
+                name: 'Rahul',
+                missing: [],
+                activeRequirement: {
+                  requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  revision: 7,
+                  status: 'ready_for_lead',
+                  phase: 'SUMMARY',
+                  summaryConfirmed: true,
+                  provenance: {
+                    serviceInterest: 'user_stated',
+                    location: 'user_stated',
+                  },
+                  serviceInterest: 'INTERIOR_DESIGN',
+                  location: 'BANER',
+                },
+              },
+              clientMatchDecision: {
+                version: 1,
+                state: 'READY',
+                requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                requirementRevision: 7,
+                leadId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                assignmentCount: 0,
+                missingFields: [],
+                reasonCode: 'MATCH_READY',
+                coreReady: true,
+                executionAuthorized: false,
+              },
+              coreAvailability: {
+                version: 1,
+                snapshotRef: 'availability.1',
+                taxonomyVersion: 1,
+                cities: [{ ref: 'BANER', displayName: 'Baner' }],
+                services: [{ ref: 'INTERIOR_DESIGN', displayName: 'Interior Design' }],
+                availability: [{ serviceRef: 'INTERIOR_DESIGN', cityRefs: ['BANER'] }],
+              },
+            }),
+          ),
+      });
+    };
+
+    const result = await createQuickFurnoWhatsAppMaterialReader(config(post)).read({
+      conversationId: '22222222-2222-4222-8222-222222222222',
+      inboundMessageId: '33333333-3333-4333-8333-333333333333',
+      expectedRevision: 7,
+    });
+    if ('purpose' in result) throw new Error('expected-conversation-material');
+    expect(result.clientMatchDecision).toMatchObject({
+      state: 'READY',
+      requirementRevision: 7,
+      coreReady: true,
+      assignmentCount: 0,
+    });
+  });
+
+  it('signs a bounded client match request with no vendor selection or count', async () => {
+    let captured: Record<string, unknown> | undefined;
+    const post: QuickFurnoWhatsAppHttpPost = (url, init) => {
+      expect(url).toBe('https://quickfurno.example/api/internal/jarvis/client-match-request');
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      captured = request;
+      const signature = init.headers['x-qfj-signature'];
+      if (signature === undefined) throw new Error('signature missing');
+      expect(
+        verify(
+          null,
+          Buffer.from(
+            signingInput(
+              QFJ_CLIENT_MATCH_REQUEST_SIGNING_DOMAIN,
+              QFJ_CLIENT_MATCH_REQUEST_PATH,
+              String(request['requestId']),
+              String(request['issuedAt']),
+              init.body,
+            ),
+            'utf8',
+          ),
+          keys.publicKey,
+          Buffer.from(signature, 'base64url'),
+        ),
+      ).toBe(true);
+      return Promise.resolve({
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              protocol: 'qfj.client-match.request',
+              version: 1,
+              requestId: request['requestId'],
+              outcome: 'matched',
+              leadId: request['leadId'],
+              assignmentCount: 3,
+              reasonCode: 'STANDARD_VENDOR_BATCH_ALREADY_RELEASED',
+              providerAuthority: 'quickfurno-core',
+            }),
+          ),
+      });
+    };
+
+    const material: QuickFurnoWhatsAppTurnMaterialV2 = {
+      protocol: 'qfj.whatsapp.turn-material',
+      version: 2,
+      requestId: '77777777-7777-4777-8777-777777777777',
+      tenantId: 'quickfurno',
+      conversationId: '22222222-2222-4222-8222-222222222222',
+      revision: 7,
+      assignedActor: 'RIYA',
+      subjectType: 'client',
+      partyType: 'CLIENT',
+      conversationState: 'OPEN',
+      jarvisAllowed: true,
+      dataClass: 'HOSTED_ALLOWED',
+      humanTakeover: false,
+      aiPaused: false,
+      cancelled: false,
+      subjectStatus: 'clear',
+      observedAt: '2026-09-18T12:00:00.000Z',
+      inboundMessageId: '33333333-3333-4333-8333-333333333333',
+      receivedAt: '2026-09-18T12:00:00.000Z',
+      inbound: {
+        version: 1,
+        messageType: 'text',
+        normalizedText: 'Please send me 3 vendors nearby',
+      },
+      normalizedText: 'Please send me 3 vendors nearby',
+      clientJourney: {
+        version: 1,
+        profileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        profileRevision: 5,
+        profileStatus: 'known',
+        isFirstContact: false,
+        name: 'Rahul',
+        missing: [],
+        activeRequirement: {
+          requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          revision: 7,
+          status: 'ready_for_lead',
+          phase: 'SUMMARY',
+          summaryConfirmed: true,
+          provenance: {
+            serviceInterest: 'user_stated',
+            location: 'user_stated',
+          },
+          serviceInterest: 'INTERIOR_DESIGN',
+          location: 'BANER',
+        },
+      },
+      clientMatchDecision: {
+        version: 1,
+        state: 'READY',
+        requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        requirementRevision: 7,
+        leadId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        assignmentCount: 0,
+        missingFields: [],
+        reasonCode: 'CORE_MATCH_READY',
+        coreReady: true,
+        executionAuthorized: false,
+      },
+    };
+
+    const result = await createQuickFurnoClientMatchRequestWriter(config(post)).request({
+      material,
+    });
+    const journey = material.clientJourney;
+    const matchDecision = material.clientMatchDecision;
+    if (journey === undefined || matchDecision === undefined) {
+      throw new Error('test-match-material-missing');
+    }
+    expect(result).toMatchObject({ outcome: 'matched', assignmentCount: 3 });
+    expect(captured).toMatchObject({
+      protocol: 'qfj.client-match.request',
+      version: 1,
+      conversationId: material.conversationId,
+      inboundMessageId: material.inboundMessageId,
+      expectedConversationRevision: 7,
+      profileId: journey.profileId,
+      expectedProfileRevision: 5,
+      requirementId: journey.activeRequirement.requirementId,
+      expectedRequirementRevision: 7,
+      leadId: matchDecision.leadId,
+      reasonCode: 'CLIENT_MATCH_REQUEST_READY',
+    });
+    const serialized = JSON.stringify(captured).toLowerCase();
+    expect(serialized).not.toContain('vendorid');
+    expect(serialized).not.toContain('vendorcount');
+    expect(serialized).not.toContain('requestedvendor');
+  });
+
+  it('accepts a coherent Core vendor-journey summary bound to matching state', async () => {
+    const post: QuickFurnoWhatsAppHttpPost = (_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      return Promise.resolve({
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              ...authorityResponse(request),
+              inboundMessageId: request['inboundMessageId'],
+              receivedAt: '2026-09-30T04:00:00.000Z',
+              inbound: {
+                version: 1,
+                messageType: 'text',
+                normalizedText: 'One vendor has not contacted me',
+              },
+              normalizedText: 'One vendor has not contacted me',
+              clientJourney: {
+                version: 1,
+                profileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                profileRevision: 5,
+                profileStatus: 'known',
+                isFirstContact: false,
+                name: 'Rahul',
+                missing: [],
+                activeRequirement: {
+                  requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  revision: 7,
+                  status: 'ready_for_lead',
+                  phase: 'SUMMARY',
+                  summaryConfirmed: true,
+                  provenance: {
+                    serviceInterest: 'user_stated',
+                    location: 'user_stated',
+                  },
+                  serviceInterest: 'INTERIOR_DESIGN',
+                  location: 'BANER',
+                },
+              },
+              clientMatchDecision: {
+                version: 1,
+                state: 'MATCHED',
+                requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                requirementRevision: 7,
+                leadId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                assignmentCount: 3,
+                missingFields: [],
+                reasonCode: 'MATCH_BATCH_RELEASED',
+                coreReady: false,
+                executionAuthorized: false,
+              },
+              clientVendorJourney: {
+                version: 1,
+                requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                requirementRevision: 7,
+                vendorsReleased: 3,
+                vendorNoContactCount: 1,
+                allReleasedVendorsContacted: false,
+                satisfactionState: 'UNKNOWN',
+                serviceRecoveryNeeded: true,
+                reassignmentState: 'NONE',
+                followUpDue: false,
+              },
+              coreAvailability: {
+                version: 1,
+                snapshotRef: 'availability.1',
+                taxonomyVersion: 1,
+                cities: [{ ref: 'BANER', displayName: 'Baner' }],
+                services: [{ ref: 'INTERIOR_DESIGN', displayName: 'Interior Design' }],
+                availability: [{ serviceRef: 'INTERIOR_DESIGN', cityRefs: ['BANER'] }],
+              },
+            }),
+          ),
+      });
+    };
+
+    const result = await createQuickFurnoWhatsAppMaterialReader(config(post)).read({
+      conversationId: '22222222-2222-4222-8222-222222222222',
+      inboundMessageId: '33333333-3333-4333-8333-333333333333',
+      expectedRevision: 7,
+    });
+    if ('purpose' in result) throw new Error('expected-conversation-material');
+    expect(result.clientVendorJourney).toMatchObject({
+      vendorsReleased: 3,
+      vendorNoContactCount: 1,
+      allReleasedVendorsContacted: false,
+      satisfactionState: 'UNKNOWN',
+    });
+  });
+
+  it('rejects a Core match decision bound to a stale requirement revision', async () => {
+    const post: QuickFurnoWhatsAppHttpPost = (_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      return Promise.resolve({
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              ...authorityResponse(request),
+              inboundMessageId: request['inboundMessageId'],
+              receivedAt: '2026-09-30T04:00:00.000Z',
+              inbound: { version: 1, messageType: 'text', normalizedText: 'Need vendors' },
+              normalizedText: 'Need vendors',
+              clientJourney: {
+                version: 1,
+                profileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                profileRevision: 5,
+                profileStatus: 'known',
+                isFirstContact: false,
+                name: 'Rahul',
+                missing: [],
+                activeRequirement: {
+                  requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  revision: 7,
+                  status: 'ready_for_lead',
+                  phase: 'SUMMARY',
+                  summaryConfirmed: true,
+                  provenance: {
+                    serviceInterest: 'user_stated',
+                    location: 'user_stated',
+                  },
+                  serviceInterest: 'INTERIOR_DESIGN',
+                  location: 'BANER',
+                },
+              },
+              clientMatchDecision: {
+                version: 1,
+                state: 'READY',
+                requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                requirementRevision: 6,
+                leadId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                assignmentCount: 0,
+                missingFields: [],
+                reasonCode: 'MATCH_READY',
+                coreReady: true,
+                executionAuthorized: false,
+              },
+              coreAvailability: {
+                version: 1,
+                snapshotRef: 'availability.1',
+                taxonomyVersion: 1,
+                cities: [{ ref: 'BANER', displayName: 'Baner' }],
+                services: [{ ref: 'INTERIOR_DESIGN', displayName: 'Interior Design' }],
+                availability: [{ serviceRef: 'INTERIOR_DESIGN', cityRefs: ['BANER'] }],
+              },
+            }),
+          ),
+      });
+    };
+
+    await expect(
+      createQuickFurnoWhatsAppMaterialReader(config(post)).read({
+        conversationId: '22222222-2222-4222-8222-222222222222',
+        inboundMessageId: '33333333-3333-4333-8333-333333333333',
+        expectedRevision: 7,
+      }),
+    ).rejects.toMatchObject({ code: 'response-invalid' });
+  });
+
+  it('rejects contradictory V2 returning-client state before it reaches Riya', async () => {
+    const post: QuickFurnoWhatsAppHttpPost = (_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      return Promise.resolve({
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              ...authorityResponse(request),
+              inboundMessageId: request['inboundMessageId'],
+              receivedAt: '2026-09-30T04:00:00.000Z',
+              inbound: { version: 1, messageType: 'text', normalizedText: 'Hi' },
+              normalizedText: 'Hi',
+              clientJourney: {
+                version: 2,
+                profileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                profileRevision: 1,
+                profileStatus: 'known',
+                isFirstContact: true,
+                isReturningClient: true,
+                createdAt: '2025-09-10T05:00:00.000Z',
+                lastSeenAt: '2026-09-30T04:00:00.000Z',
+                missing: ['name', 'serviceInterest', 'location', 'budget', 'timeline'],
+                activeRequirement: {
+                  requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  revision: 0,
+                  status: 'discovering',
+                  phase: 'INTRO',
+                  summaryConfirmed: false,
+                  provenance: {},
+                },
+                properties: [],
+                pastRequirements: [],
+              },
+              coreAvailability: {
+                version: 1,
+                snapshotRef: 'availability.1',
+                taxonomyVersion: 1,
+                cities: [],
+                services: [],
+                availability: [],
+              },
+            }),
+          ),
+      });
+    };
+    await expect(
+      createQuickFurnoWhatsAppMaterialReader(config(post)).read({
+        conversationId: '22222222-2222-4222-8222-222222222222',
+        inboundMessageId: '33333333-3333-4333-8333-333333333333',
+        expectedRevision: 7,
+      }),
+    ).rejects.toMatchObject({ code: 'response-invalid' });
   });
 
   it('conversation context reader signs the exact request and accepts only bounded non-authoritative context', async () => {
@@ -487,6 +1006,110 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
     });
     expect(captured).not.toHaveProperty('experience');
     expect(captured).not.toHaveProperty('body');
+  });
+
+  it('reply writer signs V4 when Riya carries a client journey proposal', async () => {
+    let captured: Record<string, unknown> | undefined;
+    const post = vi.fn<QuickFurnoWhatsAppHttpPost>((_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      captured = request;
+      const signature = init.headers['x-qfj-signature'];
+      if (signature === undefined) throw new Error('signature missing in test request');
+      expect(
+        verify(
+          null,
+          Buffer.from(
+            signingInput(
+              QFJ_WHATSAPP_REPLY_JOURNEY_SIGNING_DOMAIN,
+              QFJ_WHATSAPP_REPLY_PATH,
+              String(request['requestId']),
+              String(request['issuedAt']),
+              init.body,
+            ),
+            'utf8',
+          ),
+          keys.publicKey,
+          Buffer.from(signature, 'base64url'),
+        ),
+      ).toBe(true);
+      return Promise.resolve({
+        status: 202,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              protocol: 'qfj.whatsapp.reply',
+              version: 4,
+              requestId: request['requestId'],
+              status: 'queued',
+              outboxId: 'outbox.1',
+              clientJourney: { profileRevision: 3, requirementRevision: 6 },
+            }),
+          ),
+      });
+    });
+    const writer = createQuickFurnoWhatsAppReplyWriter(config(post));
+    const outcome = await writer.write({
+      conversationId: '22222222-2222-4222-8222-222222222222',
+      expectedRevision: 7,
+      proposal: {
+        actor: 'RIYA',
+        proposalId: 'prop.riya.memory.1',
+        boundRevision: 7,
+        body: 'Which area is the property in?',
+        clientJourneyProposal: {
+          version: 1,
+          profileId: '66666666-6666-4666-8666-666666666666',
+          profileRevision: 2,
+          requirementId: '77777777-7777-4777-8777-777777777777',
+          requirementRevision: 5,
+          nextPhase: 'LOCATION',
+          summaryConfirmed: false,
+          name: { value: 'Rahul', provenance: 'user_stated' },
+          sets: [{ field: 'serviceInterest', value: 'INTERIOR_DESIGN', provenance: 'user_stated' }],
+          clears: [],
+        },
+      },
+    });
+    expect(outcome).toBe('queued');
+    expect(captured).toMatchObject({
+      version: 4,
+      actor: 'RIYA',
+      clientJourneyProposal: {
+        profileRevision: 2,
+        requirementRevision: 5,
+        nextPhase: 'LOCATION',
+      },
+    });
+    expect(String(captured?.['idempotencyKey'])).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it('reply writer rejects a journey proposal from a non-Riya actor before network I/O', async () => {
+    const post = vi.fn<QuickFurnoWhatsAppHttpPost>();
+    const writer = createQuickFurnoWhatsAppReplyWriter(config(post));
+    await expect(
+      writer.write({
+        conversationId: '22222222-2222-4222-8222-222222222222',
+        expectedRevision: 7,
+        proposal: {
+          actor: 'ANISHA',
+          proposalId: 'prop.invalid.memory',
+          boundRevision: 7,
+          body: 'Invalid',
+          clientJourneyProposal: {
+            version: 1,
+            profileId: '66666666-6666-4666-8666-666666666666',
+            profileRevision: 2,
+            requirementId: '77777777-7777-4777-8777-777777777777',
+            requirementRevision: 5,
+            nextPhase: 'LOCATION',
+            summaryConfirmed: false,
+            sets: [],
+            clears: [],
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'invalid-input' });
+    expect(post).not.toHaveBeenCalled();
   });
 
   it('maps a QuickFurno revision conflict to a terminal stale result', async () => {

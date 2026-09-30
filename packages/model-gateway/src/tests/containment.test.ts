@@ -4,7 +4,7 @@
  * Prove the slice stays within its envelope: the new package depends only on zod (no network/provider
  * SDK/database/env); it exposes only the root and the `./testing` subpath; the FakeModelProvider is not
  * a production-root export; there is no real provider adapter; the event-backbone root API remains 39
- * and its barrel is untouched; migrations 0001–0012 are exact and there is no 0016; and Kimi appears
+ * and its barrel is untouched; migrations 0001–0012 are exact and there is no 0017; and Kimi appears
  * nowhere in the package. No database is used.
  */
 import { createHash } from 'node:crypto';
@@ -70,6 +70,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     '572ba13764cffed600d8580e00b781502ddc85c19126e3621d0a8127e5dc536e',
   '0015_correlation_timeline_projection.sql':
     '31517791c0e8f382f6dff1d0d25f01d8244cc0fabb06c27694246cd1905ba952',
+  '0016_client_lifetime_projection.sql':
+    'e389afa44ef080e3808845ee8900463f94e130448e4beed3d5dbcd243440539e',
 };
 
 describe('model-gateway package containment', () => {
@@ -247,7 +249,7 @@ describe('cross-package invariants (QFJ-P04.01A must not disturb the event backb
     expect(test).toContain('toHaveLength(38)');
   });
 
-  it('migrations 0001–0014 are byte-exact and there is no 0016', () => {
+  it('migrations 0001–0014 are byte-exact and there is no 0017', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -262,6 +264,6 @@ describe('cross-package invariants (QFJ-P04.01A must not disturb the event backb
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((n) => n.startsWith('0016'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0017'))).toBe(false);
   });
 });

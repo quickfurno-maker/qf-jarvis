@@ -1,0 +1,27 @@
+{
+  "name": "@qf-jarvis/agent-flow-governance",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Pure Agent Flow Studio Phase 2 governance: replay, zero-effect regression, architecture linting, approved configuration profiles, lifecycle gates and version comparison. It grants no business or execution authority.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/agent-flow-registry": "workspace:*",
+    "@qf-jarvis/client-intelligence": "workspace:*",
+    "@qf-jarvis/agent-flow-trace-contract": "workspace:*",
+    "@qf-jarvis/digital-twin-simulation": "workspace:*",
+    "@qf-jarvis/jarvis-v1-production-profile": "workspace:*",
+    "@qf-jarvis/riya-prompts": "workspace:*"
+  }
+}

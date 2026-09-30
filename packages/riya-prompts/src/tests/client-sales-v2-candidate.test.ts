@@ -79,6 +79,15 @@ describe('Riya v2 conversation quality', () => {
     expect(lower).toContain('if the first message already contains a requirement');
   });
 
+  it('uses returning-client lifetime context without treating history as current truth', () => {
+    expect(lower).toContain('"clientlifetime"');
+    expect(lower).toContain('historical context');
+    expect(lower).toContain('avoid blank-slate questions');
+    expect(lower).toContain("do not recite the client's history");
+    expect(lower).toContain('do not expose internal identifiers');
+    expect(lower).toContain('whether this is for that known property or another place');
+  });
+
   it('answers first and minimizes interrogation', () => {
     expect(lower).toContain('answer first, then ask');
     expect(lower).toContain('ask one question by default');
@@ -96,6 +105,29 @@ describe('Riya v2 conversation quality', () => {
   it('supports English, Hindi and natural Hinglish', () => {
     expect(lower).toContain('english, hindi or natural hinglish');
     expect(lower).toContain('follow their language changes');
+  });
+
+  it('acts as a QuickFurno service expert using live Core truth', () => {
+    expect(lower).toContain('quickfurno expert mode');
+    expect(lower).toContain('live service catalogue');
+    expect(lower).toContain('read it before drafting every reply');
+    expect(lower).toContain('recognize ordinary customer language');
+    expect(lower).toContain('quickfurno can help with that requirement');
+    expect(lower).toContain('never name a service that is absent');
+  });
+
+  it('is proactive without turning into a pushy form or menu', () => {
+    expect(lower).toContain('proactive consultation');
+    expect(lower).toContain('be useful before being interrogative');
+    expect(lower).toContain('do not wait for the client to know which quickfurno service name');
+    expect(lower).toContain('keep momentum toward a useful, core-reviewable requirement');
+    expect(lower).toContain('proactive does not mean pushy');
+  });
+
+  it('uses current governed QuickFurno facts over stale conversation assumptions', () => {
+    expect(lower).toContain('freshness matters');
+    expect(lower).toContain('override older conversation assumptions about quickfurno');
+    expect(lower).toContain('do not repeat a superseded value');
   });
 
   it('handles objections without invented claims or pressure', () => {

@@ -85,10 +85,22 @@ const COMMUNICATION_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN = {
     'The trusted communication evidence reader is purpose-bounded (D4, ADR-0140). It has no production consumer in this slice; D5 must open one exact-file exception when it builds the communication-state projection handler. It is not a generic event-payload reader.',
 };
 
+const CLIENT_LIFETIME_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN = {
+  group: [
+    './client-lifetime-evidence-reader.js',
+    './client-lifetime-evidence-reader',
+    '**/client-lifetime-evidence-reader.js',
+    '**/client-lifetime-evidence-reader',
+  ],
+  message:
+    'The client lifetime evidence reader is purpose-bounded (Client Intelligence OS CI-03). Only the client-lifetime projection handler may import it. It is not a generic event-payload reader.',
+};
+
 const ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS = [
   GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
   LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
   COMMUNICATION_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN,
+  CLIENT_LIFETIME_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN,
 ];
 
 const REDUCER_FORBIDDEN_IO_IMPORTS = [
@@ -275,6 +287,7 @@ export default tseslint.config(
             GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
             // Its exception is for the low-level writer alone. It gains no read-side privilege.
             COMMUNICATION_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN,
+            CLIENT_LIFETIME_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN,
           ],
         },
       ],
@@ -296,6 +309,25 @@ export default tseslint.config(
           patterns: [
             GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
             LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+            CLIENT_LIFETIME_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN,
+          ],
+        },
+      ],
+    },
+  },
+
+  // CI-03: the client lifetime evidence reader is not banned from being itself. It retains every
+  // write-authority ban and the independent communication-evidence ban.
+  {
+    files: ['packages/event-backbone/src/projections/client-lifetime-evidence-reader.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+            LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+            COMMUNICATION_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN,
           ],
         },
       ],
@@ -442,8 +474,9 @@ export default tseslint.config(
             },
             // Retained: the bridge may hold the governed writer, never the low-level primitive.
             LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
-            // Retained: the bridge is a WRITE path. It gains no evidence-read privilege from D4.
+            // Retained: the bridge is a WRITE path. It gains no evidence-read privilege.
             COMMUNICATION_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN,
+            CLIENT_LIFETIME_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN,
           ],
         },
       ],
@@ -580,6 +613,36 @@ export default tseslint.config(
             },
             GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
             LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+            CLIENT_LIFETIME_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN,
+          ],
+        },
+      ],
+    },
+  },
+
+  // CI-03: the ONE production-code consumer permitted to read client-lifetime evidence. The projection
+  // is still OFFLINE because it is absent from the production registry; this exception only makes the
+  // code boundary explicit and keeps every reducer-purity/write-authority restriction in force.
+  {
+    files: ['packages/event-backbone/src/projections/handlers/client-lifetime.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [...REDUCER_FORBIDDEN_IO_IMPORTS],
+              message:
+                'A projection reducer is a pure function of the event log. It performs no filesystem, network, process, or crypto I/O; it only writes its read-model table through the borrowed client.',
+            },
+            {
+              group: ['**/projection-subject-reader.js', '**/projection-subject-reader'],
+              message:
+                'Only the subject-activity reducer may resolve the opaque subject (QFJ-P03.09, ADR-0044). Other projections remain subject-blind.',
+            },
+            GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+            LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+            COMMUNICATION_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN,
           ],
         },
       ],

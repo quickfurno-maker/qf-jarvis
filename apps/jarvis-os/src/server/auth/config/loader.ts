@@ -35,6 +35,7 @@ import type { AuthConfigV1 } from './schema';
 /** The only environment variables this application reads. They contain paths or the public release SHA, never secret material. */
 export const AUTH_CONFIG_PATH_VAR = 'QFJ_JOS_AUTH_CONFIG_FILE';
 export const WORKER_OBSERVATION_PATH_VAR = 'QFJ_WORKER_OBSERVATION_FILE';
+export const AGENT_FLOW_TRACE_PATH_VAR = 'QFJ_AGENT_FLOW_TRACE_FILE';
 export const CORE_READ_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_READ_CONFIG_FILE';
 export const CORE_COMMAND_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_COMMAND_CONFIG_FILE';
 export const RELEASE_ASSURANCE_OBSERVATION_PATH_VAR = 'QFJ_RELEASE_ASSURANCE_OBSERVATION_FILE';
@@ -48,6 +49,11 @@ export const RELEASE_SHA_VAR = 'QFJ_JOS_RELEASE_SHA';
  */
 export function readWorkerObservationPathFromEnvironment(): string | undefined {
   const value = process.env[WORKER_OBSERVATION_PATH_VAR];
+  return value === undefined || value.trim() === '' ? undefined : value;
+}
+
+export function readAgentFlowTracePathFromEnvironment(): string | undefined {
+  const value = process.env[AGENT_FLOW_TRACE_PATH_VAR];
   return value === undefined || value.trim() === '' ? undefined : value;
 }
 

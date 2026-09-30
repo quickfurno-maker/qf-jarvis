@@ -115,8 +115,10 @@ describe('the production image', () => {
       expect(DOCKERFILE_CODE, workspace).toContain(
         `COPY packages/${workspace} packages/${workspace}`,
       );
-      expect(DOCKERFILE_CODE, workspace).toContain(`pnpm --filter @qf-jarvis/${workspace} build`);
     }
+    // The trailing ellipsis is pnpm's dependency-closure selector: Jarvis OS and every workspace
+    // dependency copied above are built in topological dependency order from the same frozen lockfile.
+    expect(DOCKERFILE_CODE).toContain('pnpm --filter @qf-jarvis/jarvis-os... build');
   });
 
   it('keeps the release-assurance publisher executable in Git', () => {

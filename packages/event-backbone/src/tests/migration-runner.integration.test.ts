@@ -268,22 +268,39 @@ describe('everything lives in qf_jarvis, and nothing lives in public', () => {
     await withClient(pool, (client) => client.query('DROP TABLE public.not_ours'));
   });
 
-  it('puts every Stage 3.1 table in qf_jarvis and none in any other schema', async () => {
+  it('puts every Stage 3.1 table in qf_jarvis without colliding with other subsystem schemas', async () => {
     await runMigrations(pool, defaultMigrationsDirectory());
 
-    const schemas = await withClient(pool, async (client) => {
+    const stage31Tables = await withClient(pool, async (client) => {
       const result = await client.query<{ table_schema: string; table_name: string }>(
         `SELECT table_schema, table_name
            FROM information_schema.tables
-          WHERE table_name IN ('event', 'schema_migration')`,
+          WHERE table_schema = $1
+            AND table_name IN ('event', 'schema_migration')
+          ORDER BY table_name`,
+        [MIGRATION_SCHEMA],
       );
       return result.rows;
     });
 
-    expect(schemas.length).toBe(2);
-    for (const row of schemas) {
-      expect(row.table_schema).toBe(MIGRATION_SCHEMA);
-    }
+    expect(stage31Tables).toStrictEqual([
+      { table_schema: MIGRATION_SCHEMA, table_name: 'event' },
+      { table_schema: MIGRATION_SCHEMA, table_name: 'schema_migration' },
+    ]);
+
+    // The canonical event log is unique to qf_jarvis. Other isolated subsystems may legitimately
+    // own their own migration-history table under a different schema.
+    const foreignEventTables = await withClient(pool, async (client) => {
+      const result = await client.query<{ table_schema: string }>(
+        `SELECT table_schema
+           FROM information_schema.tables
+          WHERE table_name = 'event'
+            AND table_schema <> $1`,
+        [MIGRATION_SCHEMA],
+      );
+      return result.rows;
+    });
+    expect(foreignEventTables).toStrictEqual([]);
   });
 
   it('puts both mutation-rejection functions in qf_jarvis', async () => {
@@ -419,6 +436,7 @@ describe('the managed provider’s roles are revoked — and re-revoked on every
       '0013_communication_state_projection.sql',
       '0014_conversation_prospect_party_type.sql',
       '0015_correlation_timeline_projection.sql',
+      '0016_client_lifetime_projection.sql',
     ]);
     expect(await tableExists('event')).toBe(true);
   });

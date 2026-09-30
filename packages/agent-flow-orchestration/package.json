@@ -1,0 +1,25 @@
+{
+  "name": "@qf-jarvis/agent-flow-orchestration",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Phase 3 typed soft orchestration for Agent Flow Studio. It compiles safe conditions, waits, retries and handoff proposals while granting no business or provider execution authority.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/agent-flow-registry": "workspace:*",
+    "@qf-jarvis/durable-orchestration-contracts": "workspace:*",
+    "@qf-jarvis/governed-agent-handoff": "workspace:*",
+    "@qf-jarvis/jao-action-registry": "workspace:*"
+  }
+}

@@ -88,6 +88,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     '572ba13764cffed600d8580e00b781502ddc85c19126e3621d0a8127e5dc536e',
   '0015_correlation_timeline_projection.sql':
     '31517791c0e8f382f6dff1d0d25f01d8244cc0fabb06c27694246cd1905ba952',
+  '0016_client_lifetime_projection.sql':
+    'e389afa44ef080e3808845ee8900463f94e130448e4beed3d5dbcd243440539e',
 };
 
 describe('content-free observability', () => {
@@ -237,6 +239,8 @@ describe('public API lock', () => {
       '@qf-jarvis/aarohi-agent',
       '@qf-jarvis/agent-runtime',
       '@qf-jarvis/anisha-agent',
+      // Client OS read-only journey intelligence; no provider, persistence or business authority.
+      '@qf-jarvis/client-intelligence',
       // QFJ-P08-A (ADR-0075): the pure control reducer behind the operator surface. EXACT set match.
       '@qf-jarvis/conversation-control',
       '@qf-jarvis/core-decision-adapter',
@@ -309,7 +313,7 @@ describe('containment', () => {
     expect(buildTsconfig).toMatch(/"exclude"\s*:\s*\[\s*"src\/tests\/\*\*"\s*\]/);
   });
 
-  it('migrations 0001–0014 are byte-exact and there is no 0016', () => {
+  it('migrations 0001–0014 are byte-exact and there is no 0017', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -325,7 +329,7 @@ describe('containment', () => {
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((n) => n.startsWith('0016'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0017'))).toBe(false);
   });
 
   it('the event-backbone public-api lock remains 38', () => {

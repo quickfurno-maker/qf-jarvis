@@ -80,8 +80,9 @@ describe('HELD CONSTANT — the accepted control and the rejected path agree her
       return;
     }
     expect(digest(JSON.stringify(reprojected.schema))).toBe(digest(projectedSchemaJson));
-    // JF-5B-R14 intentionally removed provider-generated evolution.version; pin the new exact wire.
-    expect(utf8Bytes(projectedSchemaJson)).toBe(1835);
+    // JF-5B-R14 removed provider-generated evolution.version; Client OS later added bounded
+    // profile/lifetime context fields. Pin the resulting exact projected provider wire.
+    expect(utf8Bytes(projectedSchemaJson)).toBe(2085);
   });
 
   it('the model, output budget and capability ceiling did not move', () => {

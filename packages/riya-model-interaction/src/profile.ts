@@ -16,6 +16,7 @@
  * the one-call answer can be *checked*; the reducer remains the phase and provenance authority, and
  * a disagreement refuses the whole structured result rather than trusting either side.
  */
+import type { ClientIntelligenceSnapshotV1 } from '@qf-jarvis/client-intelligence';
 import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import type {
   ModelReplyStructuredOutputProfile,
@@ -28,6 +29,8 @@ import {
 } from '@qf-jarvis/riya-conversation-evolution';
 import type { RiyaConversationObservationBatchV1 } from '@qf-jarvis/riya-conversation-evolution';
 
+import type { RiyaClientLifetimeContextV1 } from './contracts/client-lifetime-context.js';
+import type { RiyaClientProfileContextV1 } from './contracts/client-profile-context.js';
 import { isActiveCity, isActiveService, pairAvailable } from './internal/availability.js';
 import {
   everyCitationIsGrounded,
@@ -117,9 +120,15 @@ function assertGroundingMatchesPlan(
  * continuity, no input message, no prompt, no provider response, no reasoning, no citations, no
  * confidence — the detail crosses a boundary whose whole purpose is that content does not.
  */
+export interface RiyaClientProfileObservationV1 {
+  readonly name: string;
+  readonly provenance: 'user_stated';
+}
+
 export interface RiyaModelProfileDetailV1 {
   readonly version: 1;
   readonly observationBatch: RiyaConversationObservationBatchV1;
+  readonly clientProfileObservation?: RiyaClientProfileObservationV1;
 }
 
 /**
@@ -147,10 +156,19 @@ export function parseRiyaModelProfileDetail(value: unknown): RiyaModelProfileDet
     return undefined;
   }
   const keys = Object.keys(value).sort();
-  if (keys.length !== 2 || keys[0] !== 'observationBatch' || keys[1] !== 'version') {
+  const baseKeys = ['observationBatch', 'version'];
+  const extendedKeys = ['clientProfileObservation', 'observationBatch', 'version'];
+  if (
+    (keys.length !== 2 || keys.some((key, index) => key !== baseKeys[index])) &&
+    (keys.length !== 3 || keys.some((key, index) => key !== extendedKeys[index]))
+  ) {
     return undefined;
   }
-  const candidate = value as { readonly version?: unknown; readonly observationBatch?: unknown };
+  const candidate = value as {
+    readonly version?: unknown;
+    readonly observationBatch?: unknown;
+    readonly clientProfileObservation?: unknown;
+  };
   if (candidate.version !== 1) {
     return undefined;
   }
@@ -167,9 +185,40 @@ export function parseRiyaModelProfileDetail(value: unknown): RiyaModelProfileDet
   if (!canonical.observations.every((observation) => isModelProducibleObservation(observation))) {
     return undefined;
   }
+  let clientProfileObservation: RiyaClientProfileObservationV1 | undefined;
+  if (candidate.clientProfileObservation !== undefined) {
+    const profile = candidate.clientProfileObservation;
+    if (
+      typeof profile !== 'object' ||
+      profile === null ||
+      Array.isArray(profile) ||
+      Object.keys(profile).sort().join(',') !== 'name,provenance'
+    ) {
+      return undefined;
+    }
+    const raw = profile as { readonly name?: unknown; readonly provenance?: unknown };
+    if (
+      typeof raw.name !== 'string' ||
+      raw.name.length < 1 ||
+      raw.name.length > 120 ||
+      !/^[\p{L}\p{M}][\p{L}\p{M} .'-]*$/u.test(raw.name) ||
+      raw.provenance !== 'user_stated'
+    ) {
+      return undefined;
+    }
+    clientProfileObservation = Object.freeze({
+      name: raw.name,
+      provenance: 'user_stated' as const,
+    });
+  }
+
   // A FRESH frozen detail around the CANONICAL batch — never the caller's object, which may be a
   // live reference somebody else still holds.
-  return Object.freeze({ version: 1 as const, observationBatch: canonical });
+  return Object.freeze({
+    version: 1 as const,
+    observationBatch: canonical,
+    ...(clientProfileObservation === undefined ? {} : { clientProfileObservation }),
+  });
 }
 
 /**
@@ -184,6 +233,9 @@ export function parseRiyaModelProfileDetail(value: unknown): RiyaModelProfileDet
 export function createRiyaConversationModelProfile(args: {
   readonly current: RiyaConversationContinuityStateV1;
   readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
+  readonly clientProfile?: RiyaClientProfileContextV1;
+  readonly clientIntelligence?: ClientIntelligenceSnapshotV1;
+  readonly clientLifetime?: RiyaClientLifetimeContextV1;
   /**
    * The RWC-P7 grounded knowledge reader, or absent.
    *
@@ -193,6 +245,8 @@ export function createRiyaConversationModelProfile(args: {
   readonly groundedKnowledgeSource?: RiyaGroundedKnowledgeSource;
 }): ModelReplyStructuredOutputProfile {
   const { current, availabilitySnapshot } = args;
+  const clientProfile = args.clientProfile;
+  const clientLifetime = args.clientLifetime;
   const readGrounded = args.groundedKnowledgeSource;
 
   return Object.freeze({
@@ -205,12 +259,23 @@ export function createRiyaConversationModelProfile(args: {
         current,
         message: plan.normalizedText,
         availabilitySnapshot,
+        ...(clientProfile === undefined ? {} : { clientProfile }),
+        ...(args.clientIntelligence === undefined
+          ? {}
+          : { clientIntelligence: args.clientIntelligence }),
+        ...(clientLifetime === undefined ? {} : { clientLifetime }),
         ...(grounded === undefined ? {} : { groundedKnowledge: grounded }),
       });
     },
 
     projectStructuredResult(value: unknown): ModelReplyStructuredProjection | undefined {
       const wire = riyaProviderWireSchema.safeParse(value);
+      if (
+        wire.success &&
+        (wire.data.profile.name === null) !== (wire.data.profile.provenance === null)
+      ) {
+        return undefined;
+      }
       // JF-5B-R30: the live provider wire keeps the evolution envelope but simplifies its unstable
       // scalar/plan encoding. Jarvis injects version 1, maps KEEP/SKIP back to the boolean, rebuilds
       // questionPlan, and re-proves the whole value through the unchanged canonical schema.
@@ -226,6 +291,14 @@ export function createRiyaConversationModelProfile(args: {
                 questionFields: wire.data.evolution.questionFields,
               },
             },
+            ...(wire.data.profile.name === null
+              ? {}
+              : {
+                  profileObservation: {
+                    name: wire.data.profile.name,
+                    provenance: wire.data.profile.provenance,
+                  },
+                }),
           })
         : riyaStructuredOutputSchema.safeParse(value);
       if (!parsed.success) {
@@ -365,6 +438,14 @@ export function createRiyaConversationModelProfile(args: {
       const detail: RiyaModelProfileDetailV1 = Object.freeze({
         version: 1 as const,
         observationBatch: batch,
+        ...(answer.profileObservation === undefined
+          ? {}
+          : {
+              clientProfileObservation: Object.freeze({
+                name: answer.profileObservation.name,
+                provenance: answer.profileObservation.provenance,
+              }),
+            }),
       });
 
       return {
@@ -409,9 +490,14 @@ export function createRiyaConversationModelProfile(args: {
 export function createRiyaGroundedReplyModelProfile(args: {
   readonly current: RiyaConversationContinuityStateV1;
   readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
+  readonly clientProfile?: RiyaClientProfileContextV1;
+  readonly clientIntelligence?: ClientIntelligenceSnapshotV1;
+  readonly clientLifetime?: RiyaClientLifetimeContextV1;
   readonly groundedKnowledgeSource?: RiyaGroundedKnowledgeSource;
 }): ModelReplyStructuredOutputProfile {
   const { current, availabilitySnapshot } = args;
+  const clientProfile = args.clientProfile;
+  const clientLifetime = args.clientLifetime;
   const readGrounded = args.groundedKnowledgeSource;
 
   return Object.freeze({
@@ -424,6 +510,11 @@ export function createRiyaGroundedReplyModelProfile(args: {
         current,
         message: plan.normalizedText,
         availabilitySnapshot,
+        ...(clientProfile === undefined ? {} : { clientProfile }),
+        ...(args.clientIntelligence === undefined
+          ? {}
+          : { clientIntelligence: args.clientIntelligence }),
+        ...(clientLifetime === undefined ? {} : { clientLifetime }),
         ...(grounded === undefined ? {} : { groundedKnowledge: grounded }),
       });
     },

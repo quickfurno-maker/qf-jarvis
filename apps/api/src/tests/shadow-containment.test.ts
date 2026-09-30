@@ -319,6 +319,11 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     // Reviewed QuickFurno transport/processor seam. These files may name the WhatsApp surface,
     // but they acquire no provider send authority, tool capability, raw database handle or webhook.
     'src/quickfurno-whatsapp/contracts.ts',
+    // Client OS + Agent Flow observation adapters are part of the same reviewed private WhatsApp
+    // serving seam. They may name WhatsApp types but cannot send, execute, authorize or own state.
+    'src/quickfurno-whatsapp/agent-flow-trace-observation.ts',
+    'src/quickfurno-whatsapp/client-intelligence-adapter.ts',
+    'src/quickfurno-whatsapp/client-vendor-feedback-adapter.ts',
     'src/quickfurno-whatsapp/quickfurno-http.ts',
     // Reviewed signed media-content reader. It may name the WhatsApp surface, but receives only
     // bounded QuickFurno-owned bytes and acquires no Meta credential or provider-send authority.
@@ -343,6 +348,10 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     // send authority, tool surface, database handle or webhook capability.
     'src/quickfurno-whatsapp/parallel-turn-scheduler.ts',
     'src/tests/quickfurno-whatsapp-parallel-turn-scheduler.test.ts',
+    // Agent Flow / Client OS tests exercise the reviewed private WhatsApp adapters by name only.
+    'src/tests/agent-flow-trace-observation.test.ts',
+    'src/tests/client-intelligence-adapter.test.ts',
+    'src/tests/client-vendor-feedback-adapter.test.ts',
     'src/tests/quickfurno-whatsapp-adaptive-specialist-runtime.test.ts',
     'src/tests/quickfurno-whatsapp-authority-state-port.test.ts',
     'src/tests/quickfurno-whatsapp-production-observation.test.ts',
@@ -545,6 +554,12 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // ADR-0153: the deterministic Action Kernel submission-control boundary. It carries no
       // provider or business authority; this exact-set lock records the reviewed addition.
       'action-kernel',
+      // Agent Flow Studio: registry, governance, orchestration and content-free trace contracts.
+      // All four are framework-neutral control-plane packages and add no provider/business authority.
+      'agent-flow-governance',
+      'agent-flow-orchestration',
+      'agent-flow-registry',
+      'agent-flow-trace-contract',
       'agent-runtime',
       // QFJ-S3-D-A (ADR-0070): the Anisha vendor-journey behaviour package. Still an EXACT set
       // match -- this records an authorised addition, it does not relax the assertion.
@@ -556,6 +571,8 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-P08 (ADR-0080): the approval runtime foundation -- Jarvis asks, Core decides. Still an
       // EXACT set match; it records an authorised addition, it does not relax the assertion.
       'approval-runtime',
+      // Client OS: pure deterministic client-journey intelligence over Core-owned material.
+      'client-intelligence',
       // QFJ-P08 (ADR-0083): the communication authorization correlation runtime -- Core owns consent,
       // this only proves the paperwork. Still an EXACT set match; it records an authorised addition.
       'communication-authorization-runtime',

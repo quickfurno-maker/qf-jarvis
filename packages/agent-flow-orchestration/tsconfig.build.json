@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+  "references": [
+    { "path": "../agent-flow-registry/tsconfig.build.json" },
+    { "path": "../durable-orchestration-contracts/tsconfig.build.json" },
+    { "path": "../governed-agent-handoff/tsconfig.build.json" },
+    { "path": "../jao-action-registry/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

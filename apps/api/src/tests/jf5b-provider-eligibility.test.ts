@@ -337,6 +337,7 @@ function answerFor(body: string): string {
         questionPhase: 'NEED',
         questionFields: [],
       },
+      profile: { name: null, provenance: null },
     });
   }
   return JSON.stringify({

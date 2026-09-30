@@ -249,11 +249,11 @@ describe('RWC-P2D containment', () => {
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(15);
+    expect(sql).toHaveLength(16);
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((n) => n.startsWith('0016'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0017'))).toBe(false);
     // The RWC-P2B hash, unchanged: P2D needs no schema at all.
     expect(
       createHash('sha256')
@@ -591,6 +591,8 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
       // and V1 is served unchanged beside it, because ADR-0086 forbids editing a shipped shape in
       // place. Nine reviewed operator-plane routes, including the command and voice-session boundaries.
       'api/control-plane/v2/snapshot/route.ts',
+      // Agent Flow Phase 2: authenticated GET-only, content-free trace observation.
+      'api/operator/v1/agent-flow-trace/route.ts',
       'api/operator/v1/bootstrap/route.ts',
       'api/operator/v1/commands/route.ts',
       'api/operator/v1/intelligence/route.ts',
@@ -638,6 +640,8 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
         '572ba13764cffed600d8580e00b781502ddc85c19126e3621d0a8127e5dc536e',
       '0015_correlation_timeline_projection.sql':
         '31517791c0e8f382f6dff1d0d25f01d8244cc0fabb06c27694246cd1905ba952',
+      '0016_client_lifetime_projection.sql':
+        'e389afa44ef080e3808845ee8900463f94e130448e4beed3d5dbcd243440539e',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -653,7 +657,7 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
       ).toBe(hash);
     }
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition.
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 15)).toBe(false);
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 16)).toBe(false);
   });
 
   it('(54, 55) the two channel vocabularies are exactly as JRW-0B left them', () => {

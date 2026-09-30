@@ -100,6 +100,17 @@ const riyaReplySchema = z
   .strict();
 
 const OBSERVATION_VALUE = z.string().min(1).max(2048);
+const PROFILE_NAME = z
+  .string()
+  .min(1)
+  .max(120)
+  .regex(/^[\p{L}\p{M}][\p{L}\p{M} .'-]*$/u);
+const profileObservationSchema = z
+  .object({
+    name: PROFILE_NAME,
+    provenance: z.literal('user_stated'),
+  })
+  .strict();
 
 /**
  * The observation payloads, SPLIT BY OPERATION (POST-SDH4).
@@ -236,6 +247,7 @@ export const riyaStructuredOutputSchema = z
   .object({
     reply: riyaReplySchema,
     evolution: evolutionSchema,
+    profileObservation: profileObservationSchema.optional(),
   })
   .strict();
 
@@ -259,6 +271,13 @@ const providerQuestionPhaseSchema = z.enum(
   ) as unknown as [string, ...string[]],
 );
 
+const riyaProviderProfileSchema = z
+  .object({
+    name: PROFILE_NAME.nullable(),
+    provenance: z.literal('user_stated').nullable(),
+  })
+  .strict();
+
 const riyaProviderEvolutionSchema = z
   .object({
     observations: observationsSchema,
@@ -272,6 +291,7 @@ export const riyaProviderWireSchema = z
   .object({
     reply: riyaReplySchema,
     evolution: riyaProviderEvolutionSchema,
+    profile: riyaProviderProfileSchema,
   })
   .strict();
 

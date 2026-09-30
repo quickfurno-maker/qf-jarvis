@@ -1,3 +1,5 @@
+import { RIYA_PHASE2_REGRESSION_SCENARIOS } from '@qf-jarvis/agent-flow-governance';
+
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
 import { StatusPill, Tag } from '@/components/system/StatusPill';
@@ -71,15 +73,19 @@ export default async function SimulationPage() {
           </Panel>
 
           <Panel
-            title="Next connection"
-            subtitle="What is still needed for a production-grade replay center."
+            title="Riya protected regression library"
+            subtitle="Phase 2 scenarios are code-backed and run only through the zero-effect twin."
           >
-            <ul className="space-y-2 text-[11.5px] leading-relaxed text-[var(--color-ink-muted)]">
-              <li>Sanitized recent-case corpus with lineage and privacy controls.</li>
-              <li>Per-release candidate bindings for model, prompt, RAG and routing changes.</li>
-              <li>Comparable quality, safety, latency and cost metrics.</li>
-              <li>Stored evidence digests surfaced in Release & Certification.</li>
-              <li>Automatic HOLD when the candidate regresses a protected dimension.</li>
+            <div className="flex flex-wrap gap-2">
+              <Tag tone="healthy">{`${String(RIYA_PHASE2_REGRESSION_SCENARIOS.length)} scenarios`}</Tag>
+              <Tag tone="healthy">Effects must remain 0</Tag>
+            </div>
+            <ul className="mt-3 grid gap-1.5 text-[10.5px] leading-relaxed text-[var(--color-ink-muted)] sm:grid-cols-2">
+              {RIYA_PHASE2_REGRESSION_SCENARIOS.map((scenario) => (
+                <li key={scenario.scenarioId}>
+                  {scenario.label} · {scenario.expectedDecision}
+                </li>
+              ))}
             </ul>
           </Panel>
         </div>

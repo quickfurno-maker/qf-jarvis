@@ -36,13 +36,37 @@ WORKDIR /build
 
 # Manifests and lockfile first, so a source-only change does not re-resolve the dependency graph.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json tsconfig.json ./
+COPY packages/aarohi-prompts/package.json packages/aarohi-prompts/
+COPY packages/agent-flow-governance/package.json packages/agent-flow-governance/
+COPY packages/agent-flow-orchestration/package.json packages/agent-flow-orchestration/
+COPY packages/agent-flow-registry/package.json packages/agent-flow-registry/
+COPY packages/agent-flow-trace-contract/package.json packages/agent-flow-trace-contract/
+COPY packages/agent-runtime/package.json packages/agent-runtime/
+COPY packages/anisha-prompts/package.json packages/anisha-prompts/
+COPY packages/client-intelligence/package.json packages/client-intelligence/
+COPY packages/contracts/package.json packages/contracts/
 COPY packages/control-plane-read-contract/package.json packages/control-plane-read-contract/
+COPY packages/core-service-availability-read/package.json packages/core-service-availability-read/
+COPY packages/decision-intelligence/package.json packages/decision-intelligence/
+COPY packages/digital-twin-simulation/package.json packages/digital-twin-simulation/
+COPY packages/durable-orchestration-contracts/package.json packages/durable-orchestration-contracts/
+COPY packages/governed-agent-handoff/package.json packages/governed-agent-handoff/
+COPY packages/jao-action-registry/package.json packages/jao-action-registry/
+COPY packages/jarvis-v1-production-profile/package.json packages/jarvis-v1-production-profile/
+COPY packages/model-gateway/package.json packages/model-gateway/
+COPY packages/model-reply-adapter/package.json packages/model-reply-adapter/
 COPY packages/operator-api-contract/package.json packages/operator-api-contract/
 COPY packages/operator-client-core/package.json packages/operator-client-core/
 COPY packages/proactive-intelligence/package.json packages/proactive-intelligence/
+COPY packages/prompt-registry/package.json packages/prompt-registry/
 COPY packages/quickfurno-operator-command-contract/package.json packages/quickfurno-operator-command-contract/
 COPY packages/quickfurno-operator-observation-contract/package.json packages/quickfurno-operator-observation-contract/
 COPY packages/release-assurance-observation-contract/package.json packages/release-assurance-observation-contract/
+COPY packages/riya-agent/package.json packages/riya-agent/
+COPY packages/riya-conversation-continuity/package.json packages/riya-conversation-continuity/
+COPY packages/riya-conversation-evolution/package.json packages/riya-conversation-evolution/
+COPY packages/riya-model-interaction/package.json packages/riya-model-interaction/
+COPY packages/riya-prompts/package.json packages/riya-prompts/
 COPY packages/worker-observation-contract/package.json packages/worker-observation-contract/
 COPY apps/jarvis-os/package.json apps/jarvis-os/
 
@@ -54,27 +78,43 @@ RUN pnpm install --frozen-lockfile --filter @qf-jarvis/jarvis-os... --filter .
 
 # Copy exactly the framework-neutral workspaces Jarvis OS imports. Keep this list explicit:
 # adding a new workspace dependency must update this image boundary and its containment test.
+COPY packages/aarohi-prompts packages/aarohi-prompts
+COPY packages/agent-flow-governance packages/agent-flow-governance
+COPY packages/agent-flow-orchestration packages/agent-flow-orchestration
+COPY packages/agent-flow-registry packages/agent-flow-registry
+COPY packages/agent-flow-trace-contract packages/agent-flow-trace-contract
+COPY packages/agent-runtime packages/agent-runtime
+COPY packages/anisha-prompts packages/anisha-prompts
+COPY packages/client-intelligence packages/client-intelligence
+COPY packages/contracts packages/contracts
 COPY packages/control-plane-read-contract packages/control-plane-read-contract
+COPY packages/core-service-availability-read packages/core-service-availability-read
+COPY packages/decision-intelligence packages/decision-intelligence
+COPY packages/digital-twin-simulation packages/digital-twin-simulation
+COPY packages/durable-orchestration-contracts packages/durable-orchestration-contracts
+COPY packages/governed-agent-handoff packages/governed-agent-handoff
+COPY packages/jao-action-registry packages/jao-action-registry
+COPY packages/jarvis-v1-production-profile packages/jarvis-v1-production-profile
+COPY packages/model-gateway packages/model-gateway
+COPY packages/model-reply-adapter packages/model-reply-adapter
 COPY packages/operator-api-contract packages/operator-api-contract
 COPY packages/operator-client-core packages/operator-client-core
 COPY packages/proactive-intelligence packages/proactive-intelligence
+COPY packages/prompt-registry packages/prompt-registry
 COPY packages/quickfurno-operator-command-contract packages/quickfurno-operator-command-contract
 COPY packages/quickfurno-operator-observation-contract packages/quickfurno-operator-observation-contract
 COPY packages/release-assurance-observation-contract packages/release-assurance-observation-contract
+COPY packages/riya-agent packages/riya-agent
+COPY packages/riya-conversation-continuity packages/riya-conversation-continuity
+COPY packages/riya-conversation-evolution packages/riya-conversation-evolution
+COPY packages/riya-model-interaction packages/riya-model-interaction
+COPY packages/riya-prompts packages/riya-prompts
 COPY packages/worker-observation-contract packages/worker-observation-contract
 COPY apps/jarvis-os apps/jarvis-os
 
 # Workspace packages export built `dist` files, so compile them in dependency order before Next
 # traces the standalone application.
-RUN pnpm --filter @qf-jarvis/control-plane-read-contract build \
- && pnpm --filter @qf-jarvis/operator-api-contract build \
- && pnpm --filter @qf-jarvis/operator-client-core build \
- && pnpm --filter @qf-jarvis/proactive-intelligence build \
- && pnpm --filter @qf-jarvis/quickfurno-operator-command-contract build \
- && pnpm --filter @qf-jarvis/quickfurno-operator-observation-contract build \
- && pnpm --filter @qf-jarvis/release-assurance-observation-contract build \
- && pnpm --filter @qf-jarvis/worker-observation-contract build \
- && pnpm --filter @qf-jarvis/jarvis-os build
+RUN pnpm --filter @qf-jarvis/jarvis-os... build
 
 # ---------------------------------------------------------------------------------------------
 # Runtime

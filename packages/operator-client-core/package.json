@@ -17,6 +17,7 @@
     "typecheck:tests": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@qf-jarvis/agent-flow-trace-contract": "workspace:*",
     "@qf-jarvis/control-plane-read-contract": "workspace:*",
     "@qf-jarvis/operator-api-contract": "workspace:*"
   }

@@ -219,6 +219,8 @@ describe('it stays a leaf', () => {
     // on a package that reaches nothing itself, which is exactly why this one can refuse a ref Core
     // does not list without ever holding a catalogue of its own.
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toStrictEqual([
+      // Client OS: canonical client profile/lifetime read contracts only.
+      '@qf-jarvis/client-intelligence',
       '@qf-jarvis/core-service-availability-read',
       '@qf-jarvis/model-reply-adapter',
       '@qf-jarvis/riya-agent',
@@ -244,7 +246,7 @@ describe('it stays a leaf', () => {
     expect(code).not.toMatch(/@qf-jarvis\/[a-z-]+\/(src|dist|internal)\//u);
   });
 
-  it('exposes exactly the seven runtime values a composition can use', () => {
+  it('exposes exactly the nine runtime values a composition can use', () => {
     // The task class to bind, the profile to hand M4, and the guard to use instead of casting M4's
     // generic `unknown` detail. Nothing else: the schemas, the field map, the input projection, the
     // two bounds and the producer vocabulary are all POLICY this package enforces rather than
@@ -267,6 +269,8 @@ describe('it stays a leaf', () => {
       'RIYA_GROUNDED_REPLY_TASK_CLASS',
       'createRiyaConversationModelProfile',
       'createRiyaGroundedReplyModelProfile',
+      'parseRiyaClientLifetimeContextV1',
+      'parseRiyaClientProfileContextV1',
       'parseRiyaModelProfileDetail',
     ]);
     const b = barrel as Record<string, unknown>;

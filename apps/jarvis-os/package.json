@@ -13,6 +13,10 @@
   },
   "dependencies": {
     "@livekit/protocol": "1.51.0",
+    "@qf-jarvis/agent-flow-registry": "workspace:*",
+    "@qf-jarvis/agent-flow-trace-contract": "workspace:*",
+    "@qf-jarvis/agent-flow-governance": "workspace:*",
+    "@qf-jarvis/agent-flow-orchestration": "workspace:*",
     "@qf-jarvis/control-plane-read-contract": "workspace:*",
     "@qf-jarvis/operator-api-contract": "workspace:*",
     "@qf-jarvis/operator-client-core": "workspace:*",
@@ -21,9 +25,10 @@
     "@qf-jarvis/quickfurno-operator-observation-contract": "workspace:*",
     "@qf-jarvis/release-assurance-observation-contract": "workspace:*",
     "@qf-jarvis/worker-observation-contract": "workspace:*",
+    "@xyflow/react": "12.11.6",
     "livekit-client": "2.22.3",
     "livekit-server-sdk": "2.19.1",
-    "next": "16.2.11",
+    "next": "16.3.7",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "zod": "4.4.3"

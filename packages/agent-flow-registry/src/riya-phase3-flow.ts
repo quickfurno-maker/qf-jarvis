@@ -1,0 +1,171 @@
+import type {
+  AgentFlowEdgeDefinition,
+  AgentFlowGroupDefinition,
+  AgentFlowNodeDefinition,
+} from './contracts.js';
+import { RIYA_WHATSAPP_CLIENT_FLOW_V1 } from './riya-flow.js';
+import { createAgentFlowDefinition } from './validate.js';
+
+const BASELINE = 'qf-jarvis@f663d9b7df64ebc916ce260a8ac00c99ada757f6';
+
+const orchestrationGroup: AgentFlowGroupDefinition = Object.freeze({
+  groupId: 'riya.orchestration',
+  label: 'Controlled soft orchestration',
+  actor: 'RIYA',
+  description: 'Typed branching, bounded wait/resume and governed human escalation.',
+  order: 45,
+});
+
+const orchestrationNodes: readonly AgentFlowNodeDefinition[] = Object.freeze([
+  Object.freeze({
+    nodeId: 'riya.condition.next-step',
+    nodeVersion: 1,
+    label: 'Safe next-step router',
+    actor: 'RIYA',
+    kind: 'ORCHESTRATION',
+    executionRole: 'DECISION',
+    stage: 'DECIDE',
+    authority: 'ORCHESTRATION_CONTROL',
+    effect: 'NONE',
+    status: 'SHADOW',
+    implementationRef: 'packages.agent-flow-orchestration.evaluateAgentFlowRoute',
+    implementationVersionRef: BASELINE,
+    description: 'Evaluates only closed typed conditions over approved signals.',
+    codeLocked: true,
+    canvasEditable: ['conditionRef', 'fallbackNodeId'] as const,
+    groupId: 'riya.orchestration',
+    tags: ['condition', 'phase3'],
+  }),
+  Object.freeze({
+    nodeId: 'riya.wait.durable',
+    nodeVersion: 1,
+    label: 'Bounded durable wait',
+    actor: 'RIYA',
+    kind: 'ORCHESTRATION',
+    executionRole: 'STEP',
+    stage: 'WAIT_CONTINUE_CLOSE',
+    authority: 'ORCHESTRATION_CONTROL',
+    effect: 'NONE',
+    status: 'SHADOW',
+    implementationRef: 'packages.agent-flow-orchestration.createAgentFlowDurableWaitPlan',
+    implementationVersionRef: BASELINE,
+    description:
+      'Compiles a bounded client-success wait onto the existing durable workflow contract.',
+    codeLocked: true,
+    canvasEditable: ['waitPolicyRef', 'fallbackNodeId'] as const,
+    groupId: 'riya.orchestration',
+    tags: ['wait', 'temporal', 'phase3'],
+  }),
+  Object.freeze({
+    nodeId: 'riya.event.resume',
+    nodeVersion: 1,
+    label: 'Resume from governed event',
+    actor: 'RIYA',
+    kind: 'ORCHESTRATION',
+    executionRole: 'STEP',
+    stage: 'WAIT_CONTINUE_CLOSE',
+    authority: 'ORCHESTRATION_CONTROL',
+    effect: 'NONE',
+    status: 'SHADOW',
+    implementationRef: 'packages.agent-flow-orchestration.createAgentFlowResumeSignal',
+    implementationVersionRef: BASELINE,
+    description: 'Creates a content-free wake signal; it cannot fabricate a Core business event.',
+    codeLocked: true,
+    canvasEditable: ['conditionRef', 'fallbackNodeId'] as const,
+    groupId: 'riya.orchestration',
+    tags: ['event', 'resume', 'temporal'],
+  }),
+  Object.freeze({
+    nodeId: 'riya.human.handoff',
+    nodeVersion: 1,
+    label: 'Request human takeover',
+    actor: 'RIYA',
+    kind: 'HUMAN',
+    executionRole: 'CAPABILITY',
+    stage: 'ACT_OR_RESPOND',
+    authority: 'CORE_GOVERNED_ACTION',
+    effect: 'GOVERNED_ACTION',
+    status: 'DISABLED',
+    implementationRef: 'packages.jao-action-registry.request_human_takeover',
+    implementationVersionRef: BASELINE,
+    description:
+      'Human takeover remains an approval/Core-governed proposal and is not enabled by the canvas.',
+    codeLocked: true,
+    canvasEditable: ['fallbackNodeId'] as const,
+    groupId: 'riya.orchestration',
+    tags: ['human', 'handoff', 'core-proposal'],
+  }),
+]);
+
+const originalEdges = RIYA_WHATSAPP_CLIENT_FLOW_V1.edges.filter((edge) => edge.edgeId !== 'e.23');
+const phase3Edges: readonly AgentFlowEdgeDefinition[] = Object.freeze([
+  ...originalEdges,
+  Object.freeze({
+    edgeId: 'riya.p3.e.01',
+    sourceNodeId: 'riya.agent.specialist-runtime',
+    targetNodeId: 'riya.condition.next-step',
+    kind: 'CONTROL',
+  }),
+  Object.freeze({
+    edgeId: 'riya.p3.e.02',
+    sourceNodeId: 'riya.condition.next-step',
+    targetNodeId: 'riya.action.write-reply',
+    kind: 'COMMAND',
+    label: 'reply',
+    conditionRef: 'riya.route.reply',
+  }),
+  Object.freeze({
+    edgeId: 'riya.p3.e.03',
+    sourceNodeId: 'riya.condition.next-step',
+    targetNodeId: 'riya.wait.durable',
+    kind: 'CONTROL',
+    label: 'wait / follow-up',
+    conditionRef: 'riya.route.wait',
+  }),
+  Object.freeze({
+    edgeId: 'riya.p3.e.04',
+    sourceNodeId: 'riya.condition.next-step',
+    targetNodeId: 'riya.human.handoff',
+    kind: 'COMMAND',
+    label: 'human review',
+    conditionRef: 'riya.route.human',
+  }),
+  Object.freeze({
+    edgeId: 'riya.p3.e.05',
+    sourceNodeId: 'riya.wait.durable',
+    targetNodeId: 'riya.event.resume',
+    kind: 'EVENT',
+    label: 'timer / Core event',
+  }),
+  Object.freeze({
+    edgeId: 'riya.p3.e.06',
+    sourceNodeId: 'riya.event.resume',
+    targetNodeId: 'riya.agent.specialist-runtime',
+    kind: 'EVENT',
+    label: 'resume',
+  }),
+  Object.freeze({
+    edgeId: 'riya.p3.e.07',
+    sourceNodeId: 'riya.human.handoff',
+    targetNodeId: 'riya.queue.complete',
+    kind: 'RESULT',
+  }),
+]);
+
+export const RIYA_PHASE3_CONTROLLED_FLOW_V2 = createAgentFlowDefinition({
+  registrySchemaVersion: 1,
+  implementationBaselineRef: BASELINE,
+  verifiedAt: '2026-09-30',
+  readOnly: true,
+  flowId: 'agent-flow.riya.whatsapp-client.v2',
+  flowVersion: 2,
+  label: 'Riya — controlled client journey',
+  actor: 'RIYA',
+  status: 'SHADOW',
+  description:
+    'Phase 3 Riya graph with typed soft orchestration layered over the Phase 2 audited path.',
+  rootNodeId: RIYA_WHATSAPP_CLIENT_FLOW_V1.rootNodeId,
+  groups: Object.freeze([...RIYA_WHATSAPP_CLIENT_FLOW_V1.groups, orchestrationGroup]),
+  nodes: Object.freeze([...RIYA_WHATSAPP_CLIENT_FLOW_V1.nodes, ...orchestrationNodes]),
+  edges: phase3Edges,
+});
