@@ -459,6 +459,30 @@ export {
 } from './assignments/additional-service.js';
 
 export {
+  CLIENT_MATCH_DECISION_CONTRACT_VERSION,
+  CLIENT_MATCH_OUTCOMES,
+  CLIENT_MATCH_REQUEST_CONTRACT_VERSION,
+  clientMatchDecisionV1Schema,
+  clientMatchOutcomeSchema,
+  clientMatchRequestV1Schema,
+  type ClientMatchDecisionV1,
+  type ClientMatchOutcome,
+  type ClientMatchRequestV1,
+} from './assignments/client-match.js';
+
+export {
+  EXTRA_VENDOR_REVIEW_DECISION_CONTRACT_VERSION,
+  EXTRA_VENDOR_REVIEW_OUTCOMES,
+  EXTRA_VENDOR_REVIEW_REQUEST_CONTRACT_VERSION,
+  extraVendorReviewDecisionV1Schema,
+  extraVendorReviewOutcomeSchema,
+  extraVendorReviewRequestV1Schema,
+  type ExtraVendorReviewDecisionV1,
+  type ExtraVendorReviewOutcome,
+  type ExtraVendorReviewRequestV1,
+} from './assignments/extra-vendor-review.js';
+
+export {
   leadIndependenceSchema,
   LINKED_LEAD_CONTRACT_VERSION,
   linkedLeadCreatedV1Schema,
@@ -625,6 +649,14 @@ export {
 } from './validation.js';
 
 import { additionalServiceRequestV1Schema } from './assignments/additional-service.js';
+import {
+  clientMatchDecisionV1Schema,
+  clientMatchRequestV1Schema,
+} from './assignments/client-match.js';
+import {
+  extraVendorReviewDecisionV1Schema,
+  extraVendorReviewRequestV1Schema,
+} from './assignments/extra-vendor-review.js';
 import { agentMemoryRecordV1Schema } from './memory/agent-memory.js';
 import { agentRunRecordV1Schema } from './learning/agent-run.js';
 import { clientConfirmationV1Schema } from './assignments/client-confirmation.js';
@@ -661,6 +693,11 @@ import {
 import { parseWith, safeParseWith, type ContractResult } from './validation.js';
 
 import type { AdditionalServiceRequestV1 } from './assignments/additional-service.js';
+import type { ClientMatchDecisionV1, ClientMatchRequestV1 } from './assignments/client-match.js';
+import type {
+  ExtraVendorReviewDecisionV1,
+  ExtraVendorReviewRequestV1,
+} from './assignments/extra-vendor-review.js';
 import type { AgentMemoryRecordV1 } from './memory/agent-memory.js';
 import type { AgentRunRecordV1 } from './learning/agent-run.js';
 import type { ClientConfirmationV1 } from './assignments/client-confirmation.js';
@@ -855,6 +892,40 @@ export function safeParseAdditionalServiceRequest(
   input: unknown,
 ): ContractResult<AdditionalServiceRequestV1> {
   return safeParseWith('AdditionalServiceRequestV1', additionalServiceRequestV1Schema, input);
+}
+
+/** Parse a client match request. Riya asks; Core owns readiness and assignment. */
+export function parseClientMatchRequest(input: unknown): ClientMatchRequestV1 {
+  return parseWith('ClientMatchRequestV1', clientMatchRequestV1Schema, input);
+}
+export function safeParseClientMatchRequest(input: unknown): ContractResult<ClientMatchRequestV1> {
+  return safeParseWith('ClientMatchRequestV1', clientMatchRequestV1Schema, input);
+}
+export function parseClientMatchDecision(input: unknown): ClientMatchDecisionV1 {
+  return parseWith('ClientMatchDecisionV1', clientMatchDecisionV1Schema, input);
+}
+export function safeParseClientMatchDecision(
+  input: unknown,
+): ContractResult<ClientMatchDecisionV1> {
+  return safeParseWith('ClientMatchDecisionV1', clientMatchDecisionV1Schema, input);
+}
+
+/** Parse an extra-vendor review. It asks Core to decide; it cannot extend exposure itself. */
+export function parseExtraVendorReviewRequest(input: unknown): ExtraVendorReviewRequestV1 {
+  return parseWith('ExtraVendorReviewRequestV1', extraVendorReviewRequestV1Schema, input);
+}
+export function safeParseExtraVendorReviewRequest(
+  input: unknown,
+): ContractResult<ExtraVendorReviewRequestV1> {
+  return safeParseWith('ExtraVendorReviewRequestV1', extraVendorReviewRequestV1Schema, input);
+}
+export function parseExtraVendorReviewDecision(input: unknown): ExtraVendorReviewDecisionV1 {
+  return parseWith('ExtraVendorReviewDecisionV1', extraVendorReviewDecisionV1Schema, input);
+}
+export function safeParseExtraVendorReviewDecision(
+  input: unknown,
+): ContractResult<ExtraVendorReviewDecisionV1> {
+  return safeParseWith('ExtraVendorReviewDecisionV1', extraVendorReviewDecisionV1Schema, input);
 }
 
 /** Parse a linked-lead creation, or throw. Its own identity, always. */

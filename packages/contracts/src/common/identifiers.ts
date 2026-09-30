@@ -93,6 +93,16 @@ export type LinkedLeadId = z.infer<typeof linkedLeadIdSchema>;
 export const clientConfirmationIdSchema = contractUuidSchema;
 export type ClientConfirmationId = z.infer<typeof clientConfirmationIdSchema>;
 
+/** Client OS governed match/review request identities. */
+export const clientMatchRequestIdSchema = contractUuidSchema;
+export type ClientMatchRequestId = z.infer<typeof clientMatchRequestIdSchema>;
+export const clientMatchDecisionIdSchema = contractUuidSchema;
+export type ClientMatchDecisionId = z.infer<typeof clientMatchDecisionIdSchema>;
+export const extraVendorReviewRequestIdSchema = contractUuidSchema;
+export type ExtraVendorReviewRequestId = z.infer<typeof extraVendorReviewRequestIdSchema>;
+export const extraVendorReviewDecisionIdSchema = contractUuidSchema;
+export type ExtraVendorReviewDecisionId = z.infer<typeof extraVendorReviewDecisionIdSchema>;
+
 // --- Learning, evaluation, and memory ---------------------------------------
 
 export const agentRunIdSchema = contractUuidSchema;
