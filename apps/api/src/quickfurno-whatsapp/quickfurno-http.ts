@@ -1,4 +1,5 @@
 import { createHash, createPrivateKey, sign, type KeyObject } from 'node:crypto';
+import { parseCoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import {
   QFJ_WHATSAPP_CONVERSATION_CONTEXT_PATH,
   QFJ_WHATSAPP_CONVERSATION_CONTEXT_PROTOCOL,
@@ -10,6 +11,9 @@ import {
   QFJ_WHATSAPP_TURN_MATERIAL_PATH,
   QFJ_WHATSAPP_TURN_MATERIAL_PROTOCOL,
   QFJ_WHATSAPP_TURN_MATERIAL_SIGNING_DOMAIN,
+  type QuickFurnoClientJourneyField,
+  type QuickFurnoClientJourneySnapshotV1,
+  type QuickFurnoCoreAvailabilitySnapshotV1,
   type QuickFurnoLeadQualificationMaterialV1,
   type QuickFurnoQualificationProposal,
   type QuickFurnoWhatsAppAuthorityStateV2,
@@ -482,6 +486,183 @@ function parseAuthorityState(
   });
 }
 
+const CLIENT_JOURNEY_FIELDS = [
+  'serviceInterest',
+  'location',
+  'propertyType',
+  'scope',
+  'budget',
+  'timeline',
+  'consultationPreference',
+] as const satisfies readonly QuickFurnoClientJourneyField[];
+const CLIENT_JOURNEY_PHASES = [
+  'INTRO',
+  'NEED',
+  'LOCATION',
+  'PROJECT_DETAILS',
+  'BUDGET_TIMELINE',
+  'SUMMARY',
+  'CONTACT',
+  'CONSENT',
+  'COMPLETE',
+] as const;
+
+function parseClientJourney(value: unknown): QuickFurnoClientJourneySnapshotV1 | null {
+  if (!isRecord(value)) return null;
+  const allowed = [
+    'version',
+    'profileId',
+    'profileRevision',
+    'profileStatus',
+    'isFirstContact',
+    'name',
+    'preferredLanguage',
+    'missing',
+    'activeRequirement',
+  ];
+  if (!onlyKeys(value, allowed)) return null;
+  if (
+    value['version'] !== 1 ||
+    typeof value['profileId'] !== 'string' ||
+    !UUID.test(value['profileId']) ||
+    typeof value['profileRevision'] !== 'number' ||
+    !Number.isSafeInteger(value['profileRevision']) ||
+    value['profileRevision'] < 0 ||
+    typeof value['profileStatus'] !== 'string' ||
+    !['discovering', 'known', 'inactive'].includes(value['profileStatus']) ||
+    typeof value['isFirstContact'] !== 'boolean' ||
+    !Array.isArray(value['missing'])
+  ) {
+    return null;
+  }
+  const name =
+    value['name'] === undefined ? undefined : (boundedString(value['name'], 120) ?? undefined);
+  if (value['name'] !== undefined && name === undefined) return null;
+  const preferredLanguage = value['preferredLanguage'];
+  if (
+    preferredLanguage !== undefined &&
+    (typeof preferredLanguage !== 'string' ||
+      !['en', 'hi', 'hinglish', 'other'].includes(preferredLanguage))
+  ) {
+    return null;
+  }
+  const missingAllowed = ['name', ...CLIENT_JOURNEY_FIELDS] as const;
+  const missing = value['missing'];
+  if (
+    missing.length > missingAllowed.length ||
+    missing.some(
+      (item) => typeof item !== 'string' || !(missingAllowed as readonly string[]).includes(item),
+    ) ||
+    new Set(missing).size !== missing.length
+  ) {
+    return null;
+  }
+
+  const raw = value['activeRequirement'];
+  if (!isRecord(raw)) return null;
+  const requirementAllowed = [
+    'requirementId',
+    'revision',
+    'status',
+    'phase',
+    'summaryConfirmed',
+    'provenance',
+    ...CLIENT_JOURNEY_FIELDS,
+  ];
+  if (!onlyKeys(raw, requirementAllowed)) return null;
+  if (
+    typeof raw['requirementId'] !== 'string' ||
+    !UUID.test(raw['requirementId']) ||
+    typeof raw['revision'] !== 'number' ||
+    !Number.isSafeInteger(raw['revision']) ||
+    raw['revision'] < 0 ||
+    typeof raw['status'] !== 'string' ||
+    !['discovering', 'ready_for_lead', 'converted', 'closed', 'cancelled'].includes(raw['status']) ||
+    typeof raw['phase'] !== 'string' ||
+    !(CLIENT_JOURNEY_PHASES as readonly string[]).includes(raw['phase']) ||
+    typeof raw['summaryConfirmed'] !== 'boolean' ||
+    !isRecord(raw['provenance']) ||
+    !onlyKeys(raw['provenance'], CLIENT_JOURNEY_FIELDS)
+  ) {
+    return null;
+  }
+  const provenance: Partial<
+    Record<QuickFurnoClientJourneyField, 'user_stated' | 'model_inferred'>
+  > = {};
+  for (const [field, source] of Object.entries(raw['provenance'])) {
+    if (source !== 'user_stated' && source !== 'model_inferred') return null;
+    provenance[field as QuickFurnoClientJourneyField] = source;
+  }
+
+  const fieldBounds: Readonly<Record<QuickFurnoClientJourneyField, number>> = {
+    serviceInterest: 128,
+    location: 128,
+    propertyType: 128,
+    scope: 2048,
+    budget: 512,
+    timeline: 512,
+    consultationPreference: 128,
+  };
+  const requirementValues: Partial<Record<QuickFurnoClientJourneyField, string>> = {};
+  for (const field of CLIENT_JOURNEY_FIELDS) {
+    if (raw[field] === undefined) continue;
+    const parsed = boundedString(raw[field], fieldBounds[field]);
+    if (!parsed) return null;
+    requirementValues[field] = parsed;
+  }
+
+  const expectedMissing = [
+    ...(name === undefined ? (['name'] as const) : []),
+    ...(requirementValues.serviceInterest === undefined ? (['serviceInterest'] as const) : []),
+    ...(requirementValues.location === undefined ? (['location'] as const) : []),
+    ...(requirementValues.budget === undefined ? (['budget'] as const) : []),
+    ...(requirementValues.timeline === undefined ? (['timeline'] as const) : []),
+  ];
+  if (
+    missing.length !== expectedMissing.length ||
+    missing.some((field, index) => field !== expectedMissing[index])
+  ) {
+    return null;
+  }
+  const firstContact =
+    name === undefined && Object.keys(requirementValues).length === 0;
+  if (value['isFirstContact'] !== firstContact) return null;
+
+  return Object.freeze({
+    version: 1 as const,
+    profileId: value['profileId'],
+    profileRevision: value['profileRevision'],
+    profileStatus: value['profileStatus'] as QuickFurnoClientJourneySnapshotV1['profileStatus'],
+    isFirstContact: firstContact,
+    ...(name === undefined ? {} : { name }),
+    ...(preferredLanguage === undefined
+      ? {}
+      : {
+          preferredLanguage: preferredLanguage as 'en' | 'hi' | 'hinglish' | 'other',
+        }),
+    missing: Object.freeze(
+      [...missing] as QuickFurnoClientJourneySnapshotV1['missing'][number][],
+    ),
+    activeRequirement: Object.freeze({
+      requirementId: raw['requirementId'],
+      revision: raw['revision'],
+      status: raw['status'] as QuickFurnoClientJourneySnapshotV1['activeRequirement']['status'],
+      phase: raw['phase'] as QuickFurnoClientJourneySnapshotV1['activeRequirement']['phase'],
+      summaryConfirmed: raw['summaryConfirmed'],
+      provenance: Object.freeze(provenance),
+      ...requirementValues,
+    }),
+  });
+}
+
+function parseCoreAvailability(value: unknown): QuickFurnoCoreAvailabilitySnapshotV1 | null {
+  try {
+    return parseCoreServiceAvailabilitySnapshotV1(value);
+  } catch {
+    return null;
+  }
+}
+
 function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTurnMaterialV2 | null {
   if (!isRecord(value)) return null;
   const authority = parseAuthorityState(value, requestId);
@@ -538,6 +719,8 @@ function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTur
     'receivedAt',
     'inbound',
     'normalizedText',
+    'clientJourney',
+    'coreAvailability',
   ];
   if (!onlyKeys(value, allowed)) return null;
 
@@ -579,6 +762,26 @@ function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTur
   if (normalizedTextRaw !== undefined && normalizedText === undefined) return null;
   if (normalizedText !== inbound.normalizedText) return null;
 
+  const clientJourney =
+    value['clientJourney'] === undefined ? undefined : parseClientJourney(value['clientJourney']);
+  const coreAvailability =
+    value['coreAvailability'] === undefined
+      ? undefined
+      : parseCoreAvailability(value['coreAvailability']);
+  if (clientJourney === null || coreAvailability === null) {
+    return null;
+  }
+  const hasRiyaContext = clientJourney !== undefined || coreAvailability !== undefined;
+  if (
+    hasRiyaContext &&
+    (parsedAuthority.assignedActor !== 'RIYA' ||
+      parsedAuthority.subjectType !== 'client' ||
+      clientJourney === undefined ||
+      coreAvailability === undefined)
+  ) {
+    return null;
+  }
+
   return Object.freeze({
     ...parsedAuthority,
     assignedActor:
@@ -588,6 +791,8 @@ function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTur
     receivedAt,
     inbound,
     ...(normalizedText === undefined ? {} : { normalizedText }),
+    ...(clientJourney === undefined ? {} : { clientJourney }),
+    ...(coreAvailability === undefined ? {} : { coreAvailability }),
   });
 }
 

@@ -55,6 +55,8 @@
     "@qf-jarvis/prompt-registry": "workspace:*",
     "@qf-jarvis/quickfurno-gateway": "workspace:*",
     "@qf-jarvis/rag-provisioning": "workspace:*",
+    "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "@qf-jarvis/riya-conversation-evolution": "workspace:*",
     "@qf-jarvis/riya-prompts": "workspace:*",
     "@qf-jarvis/riya-web-conversation-service": "workspace:*",
     "@qf-jarvis/semantic-context-engine": "workspace:*",

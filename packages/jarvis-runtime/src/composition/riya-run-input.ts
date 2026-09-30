@@ -17,6 +17,10 @@ import { parseCoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-
 import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import { createRiyaConversationContinuityState } from '@qf-jarvis/riya-conversation-continuity';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
+import {
+  parseRiyaClientProfileContextV1,
+  type RiyaClientProfileContextV1,
+} from '@qf-jarvis/riya-model-interaction';
 
 /** A proved run input, or the identity to report a refusal under. */
 export type ProvenRiyaRunInput =
@@ -25,6 +29,7 @@ export type ProvenRiyaRunInput =
       readonly envelope: InboundEnvelope;
       readonly current: RiyaConversationContinuityStateV1;
       readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
+      readonly clientProfile: RiyaClientProfileContextV1 | undefined;
     }
   | { readonly ok: false; readonly runId: string; readonly conversationId: string };
 
@@ -47,6 +52,7 @@ export function provenRiyaRunInput(input: unknown): ProvenRiyaRunInput {
     readonly envelope?: unknown;
     readonly continuity?: unknown;
     readonly availabilitySnapshot?: unknown;
+    readonly clientProfile?: unknown;
   };
   const envelopeValue = candidate.envelope;
   const continuityValue = candidate.continuity;
@@ -83,6 +89,15 @@ export function provenRiyaRunInput(input: unknown): ProvenRiyaRunInput {
     availabilitySnapshot = parseCoreServiceAvailabilitySnapshotV1(candidate.availabilitySnapshot);
   } catch {
     return failed;
+  }
+
+  let clientProfile: RiyaClientProfileContextV1 | undefined;
+  if (candidate.clientProfile !== undefined) {
+    try {
+      clientProfile = parseRiyaClientProfileContextV1(candidate.clientProfile);
+    } catch {
+      return failed;
+    }
   }
 
   // The CONTINUITY. A hand-assembled state, or a half-applied row a store returned, must not become
@@ -141,5 +156,5 @@ export function provenRiyaRunInput(input: unknown): ProvenRiyaRunInput {
     return failed;
   }
 
-  return { ok: true, envelope, current, availabilitySnapshot };
+  return { ok: true, envelope, current, availabilitySnapshot, clientProfile };
 }

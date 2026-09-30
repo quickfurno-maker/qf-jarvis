@@ -152,6 +152,12 @@ importers:
       '@qf-jarvis/rag-provisioning':
         specifier: workspace:*
         version: link:../../packages/rag-provisioning
+      '@qf-jarvis/riya-conversation-continuity':
+        specifier: workspace:*
+        version: link:../../packages/riya-conversation-continuity
+      '@qf-jarvis/riya-conversation-evolution':
+        specifier: workspace:*
+        version: link:../../packages/riya-conversation-evolution
       '@qf-jarvis/riya-prompts':
         specifier: workspace:*
         version: link:../../packages/riya-prompts

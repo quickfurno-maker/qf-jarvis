@@ -113,6 +113,66 @@ export interface QuickFurnoWhatsAppAuthorityStateV2 {
   readonly observedAt: string;
 }
 
+export type QuickFurnoClientJourneyField =
+  | 'serviceInterest'
+  | 'location'
+  | 'propertyType'
+  | 'scope'
+  | 'budget'
+  | 'timeline'
+  | 'consultationPreference';
+
+export type QuickFurnoClientJourneyPhase =
+  | 'INTRO'
+  | 'NEED'
+  | 'LOCATION'
+  | 'PROJECT_DETAILS'
+  | 'BUDGET_TIMELINE'
+  | 'SUMMARY'
+  | 'CONTACT'
+  | 'CONSENT'
+  | 'COMPLETE';
+
+export interface QuickFurnoClientJourneySnapshotV1 {
+  readonly version: 1;
+  readonly profileId: string;
+  readonly profileRevision: number;
+  readonly profileStatus: 'discovering' | 'known' | 'inactive';
+  readonly isFirstContact: boolean;
+  readonly name?: string;
+  readonly preferredLanguage?: 'en' | 'hi' | 'hinglish' | 'other';
+  readonly missing: readonly ('name' | QuickFurnoClientJourneyField)[];
+  readonly activeRequirement: {
+    readonly requirementId: string;
+    readonly revision: number;
+    readonly status: 'discovering' | 'ready_for_lead' | 'converted' | 'closed' | 'cancelled';
+    readonly phase: QuickFurnoClientJourneyPhase;
+    readonly summaryConfirmed: boolean;
+    readonly provenance: Readonly<
+      Partial<Record<QuickFurnoClientJourneyField, 'user_stated' | 'model_inferred'>>
+    >;
+    readonly serviceInterest?: string;
+    readonly location?: string;
+    readonly propertyType?: string;
+    readonly scope?: string;
+    readonly budget?: string;
+    readonly timeline?: string;
+    readonly consultationPreference?: string;
+  };
+}
+
+export interface QuickFurnoCoreAvailabilitySnapshotV1 {
+  readonly version: 1;
+  readonly snapshotRef: string;
+  readonly taxonomyVersion: number;
+  readonly cities: readonly { readonly ref: string; readonly displayName: string }[];
+  readonly services: readonly { readonly ref: string; readonly displayName: string }[];
+  readonly availability: readonly {
+    readonly serviceRef: string;
+    readonly cityRefs: 'ALL' | readonly string[];
+  }[];
+}
+
 export interface QuickFurnoWhatsAppTurnMaterialV2 extends Omit<
   QuickFurnoWhatsAppAuthorityStateV2,
   'assignedActor' | 'subjectType'
@@ -123,6 +183,10 @@ export interface QuickFurnoWhatsAppTurnMaterialV2 extends Omit<
   readonly receivedAt: string;
   readonly inbound: QuickFurnoWhatsAppInboundMaterialV1;
   readonly normalizedText?: string;
+  /** Present only for the upgraded Riya client-memory lane. */
+  readonly clientJourney?: QuickFurnoClientJourneySnapshotV1;
+  /** Current QuickFurno Core service/city authority captured for the same Riya turn. */
+  readonly coreAvailability?: QuickFurnoCoreAvailabilitySnapshotV1;
 }
 
 export interface QuickFurnoWhatsAppConversationContextV1 {
@@ -151,11 +215,35 @@ export interface QuickFurnoWhatsAppExperienceV1 {
   readonly body: string;
 }
 
+export interface QuickFurnoClientJourneyProposalV1 {
+  readonly version: 1;
+  readonly profileId: string;
+  readonly profileRevision: number;
+  readonly requirementId: string;
+  readonly requirementRevision: number;
+  readonly nextPhase: QuickFurnoClientJourneyPhase;
+  readonly summaryConfirmed: boolean;
+  readonly name?: {
+    readonly value: string;
+    readonly provenance: 'user_stated';
+  };
+  readonly sets: readonly {
+    readonly field: QuickFurnoClientJourneyField;
+    readonly value: string;
+    readonly provenance: 'user_stated' | 'model_inferred';
+  }[];
+  readonly clears: readonly {
+    readonly field: QuickFurnoClientJourneyField;
+    readonly provenance: 'user_stated';
+  }[];
+}
+
 export interface QuickFurnoWhatsAppReplyProposal {
   readonly actor: QuickFurnoWhatsAppAgent;
   readonly proposalId: string;
   readonly boundRevision: number;
   readonly body: string;
+  readonly clientJourneyProposal?: QuickFurnoClientJourneyProposalV1;
 }
 
 export type QuickFurnoQualificationTarget = 'budget' | 'timeline' | 'propertyType';

@@ -174,6 +174,7 @@ function riyaAnswer(
       questionPhase: decided.questionPlan.phase,
       questionFields: [...decided.questionPlan.questionFields],
     },
+    profile: { name: null, provenance: null },
   };
 }
 

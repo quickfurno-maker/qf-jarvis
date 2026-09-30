@@ -59,9 +59,15 @@ export type {
   RiyaGroundedReplyTaskClass,
 } from './contracts/task-class.js';
 
+export { parseRiyaClientProfileContextV1 } from './contracts/client-profile-context.js';
+export type { RiyaClientProfileContextV1 } from './contracts/client-profile-context.js';
+
 export { createRiyaConversationModelProfile, parseRiyaModelProfileDetail } from './profile.js';
 export { createRiyaGroundedReplyModelProfile } from './profile.js';
-export type { RiyaModelProfileDetailV1 } from './profile.js';
+export type {
+  RiyaClientProfileObservationV1,
+  RiyaModelProfileDetailV1,
+} from './profile.js';
 
 // TYPES only. The grounded context is BUILT by the RWC-P7 per-run bridge in `jarvis-runtime`, from a
 // real governed retrieval; exporting a constructor here would let any caller hand this package a

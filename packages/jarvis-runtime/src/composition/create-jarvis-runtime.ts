@@ -302,7 +302,7 @@ export function createJarvisRuntime(
       if (!proven.ok) {
         return refused(proven.runId, proven.conversationId);
       }
-      const { envelope, current, availabilitySnapshot } = proven;
+      const { envelope, current, availabilitySnapshot, clientProfile } = proven;
 
       // RWC-P4A owns INTRO..SUMMARY. CONTACT/CONSENT/COMPLETE are RWC-P6's, and a model call about
       // one of them would be this slice reasoning past its ceiling. RWC-P7 does NOT widen this: the
@@ -336,6 +336,7 @@ export function createJarvisRuntime(
         profile: createRiyaConversationModelProfile({
           current,
           availabilitySnapshot,
+          ...(clientProfile === undefined ? {} : { clientProfile }),
           // A READER, not a value. M2 calls the knowledge port before M4 builds the request, so the
           // capture does not exist yet at this line -- and passing a snapshot of `undefined` would
           // silently produce an ungrounded turn on a grounded deployment.
@@ -359,6 +360,9 @@ export function createJarvisRuntime(
         authorizedReply: run.authorizedReply,
         proposedReply: run.proposedReply,
         observationBatch: detail?.observationBatch,
+        ...(detail?.clientProfileObservation === undefined
+          ? {}
+          : { clientProfileObservation: detail.clientProfileObservation }),
       });
     },
     async processInboundForRiyaGroundedReply(
@@ -375,7 +379,7 @@ export function createJarvisRuntime(
       if (!proven.ok) {
         return refused(proven.runId, proven.conversationId);
       }
-      const { envelope, current, availabilitySnapshot } = proven;
+      const { envelope, current, availabilitySnapshot, clientProfile } = proven;
 
       // The MIRROR of the P4B ceiling. This method owns CONTACT/CONSENT/COMPLETE and nothing else:
       // an INTRO..SUMMARY turn served here would skip the observation extraction the discovery
@@ -406,6 +410,7 @@ export function createJarvisRuntime(
         profile: createRiyaGroundedReplyModelProfile({
           current,
           availabilitySnapshot,
+          ...(clientProfile === undefined ? {} : { clientProfile }),
           groundedKnowledgeSource: () => bridge.readCaptured(),
         }),
         promptBinding: binding,

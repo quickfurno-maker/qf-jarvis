@@ -20,6 +20,10 @@ import type { InboundEnvelope } from '@qf-jarvis/agent-runtime';
 import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 import type { RiyaConversationObservationBatchV1 } from '@qf-jarvis/riya-conversation-evolution';
+import type {
+  RiyaClientProfileContextV1,
+  RiyaClientProfileObservationV1,
+} from '@qf-jarvis/riya-model-interaction';
 
 import type { JarvisCoreAuthorizedReplyV1 } from './core-authorized-reply.js';
 import type { JarvisProposedReplyV1 } from './proposed-reply.js';
@@ -45,12 +49,16 @@ export interface JarvisRiyaConversationEvolutionResult {
    * not unsay it.
    */
   readonly observationBatch: RiyaConversationObservationBatchV1 | undefined;
+  /** User-stated person-level update, separate from the project requirement observations. */
+  readonly clientProfileObservation?: RiyaClientProfileObservationV1;
 }
 
 /** What the Riya-aware method needs: one envelope, the state that turn starts from, and Core's word. */
 export interface JarvisRiyaConversationEvolutionInput {
   readonly envelope: InboundEnvelope;
   readonly continuity: RiyaConversationContinuityStateV1;
+  /** QuickFurno-owned person-level memory minimized for conversational use. */
+  readonly clientProfile?: RiyaClientProfileContextV1;
   /**
    * The CURRENT Core-owned service availability, captured once for this turn (RWC-P5, ADR-0100).
    *
