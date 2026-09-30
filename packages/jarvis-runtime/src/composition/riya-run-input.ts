@@ -127,10 +127,6 @@ export function provenRiyaRunInput(input: unknown): ProvenRiyaRunInput {
       return failed;
     }
   }
-    } catch {
-      return failed;
-    }
-  }
 
   // The CONTINUITY. A hand-assembled state, or a half-applied row a store returned, must not become
   // the context one model call reasons from.
