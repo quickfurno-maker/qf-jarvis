@@ -164,6 +164,35 @@ export interface QuickFurnoClientJourneySnapshotV1 {
   };
 }
 
+export interface QuickFurnoClientJourneySnapshotV2 extends Omit<
+  QuickFurnoClientJourneySnapshotV1,
+  'version'
+> {
+  readonly version: 2;
+  readonly isReturningClient: boolean;
+  readonly createdAt: string;
+  readonly lastSeenAt: string;
+  readonly properties: readonly {
+    readonly propertyId: string;
+    readonly relation: 'current' | 'historical';
+    readonly area?: string;
+    readonly propertyType?: string;
+    readonly bhk?: string;
+    readonly projectStage?: string;
+    readonly possessionDate?: string;
+  }[];
+  readonly pastRequirements: readonly {
+    readonly requirementId: string;
+    readonly categoryRef: string;
+    readonly propertyId?: string;
+    readonly status: 'converted' | 'closed' | 'cancelled';
+    readonly closedAt?: string;
+  }[];
+}
+
+export type QuickFurnoClientJourneySnapshot =
+  QuickFurnoClientJourneySnapshotV1 | QuickFurnoClientJourneySnapshotV2;
+
 export interface QuickFurnoCoreAvailabilitySnapshotV1 {
   readonly version: 1;
   readonly snapshotRef: string;
@@ -187,7 +216,7 @@ export interface QuickFurnoWhatsAppTurnMaterialV2 extends Omit<
   readonly inbound: QuickFurnoWhatsAppInboundMaterialV1;
   readonly normalizedText?: string;
   /** Present only for the upgraded Riya client-memory lane. */
-  readonly clientJourney?: QuickFurnoClientJourneySnapshotV1;
+  readonly clientJourney?: QuickFurnoClientJourneySnapshot;
   /** Current QuickFurno Core service/city authority captured for the same Riya turn. */
   readonly coreAvailability?: QuickFurnoCoreAvailabilitySnapshotV1;
 }

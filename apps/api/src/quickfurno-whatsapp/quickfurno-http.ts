@@ -14,7 +14,9 @@ import {
   QFJ_WHATSAPP_TURN_MATERIAL_SIGNING_DOMAIN,
   type QuickFurnoClientJourneyField,
   type QuickFurnoClientJourneyProposalV1,
+  type QuickFurnoClientJourneySnapshot,
   type QuickFurnoClientJourneySnapshotV1,
+  type QuickFurnoClientJourneySnapshotV2,
   type QuickFurnoCoreAvailabilitySnapshotV1,
   type QuickFurnoLeadQualificationMaterialV1,
   type QuickFurnoQualificationProposal,
@@ -509,7 +511,7 @@ const CLIENT_JOURNEY_PHASES = [
   'COMPLETE',
 ] as const;
 
-function parseClientJourney(value: unknown): QuickFurnoClientJourneySnapshotV1 | null {
+function parseClientJourneyV1(value: unknown): QuickFurnoClientJourneySnapshotV1 | null {
   if (!isRecord(value)) return null;
   const allowed = [
     'version',
@@ -579,7 +581,9 @@ function parseClientJourney(value: unknown): QuickFurnoClientJourneySnapshotV1 |
     !Number.isSafeInteger(raw['revision']) ||
     raw['revision'] < 0 ||
     typeof raw['status'] !== 'string' ||
-    !['discovering', 'ready_for_lead', 'converted', 'closed', 'cancelled'].includes(raw['status']) ||
+    !['discovering', 'ready_for_lead', 'converted', 'closed', 'cancelled'].includes(
+      raw['status'],
+    ) ||
     typeof raw['phase'] !== 'string' ||
     !(CLIENT_JOURNEY_PHASES as readonly string[]).includes(raw['phase']) ||
     typeof raw['summaryConfirmed'] !== 'boolean' ||
@@ -626,8 +630,7 @@ function parseClientJourney(value: unknown): QuickFurnoClientJourneySnapshotV1 |
   ) {
     return null;
   }
-  const firstContact =
-    name === undefined && Object.keys(requirementValues).length === 0;
+  const firstContact = name === undefined && Object.keys(requirementValues).length === 0;
   if (value['isFirstContact'] !== firstContact) return null;
 
   return Object.freeze({
@@ -642,9 +645,7 @@ function parseClientJourney(value: unknown): QuickFurnoClientJourneySnapshotV1 |
       : {
           preferredLanguage: preferredLanguage as 'en' | 'hi' | 'hinglish' | 'other',
         }),
-    missing: Object.freeze(
-      [...missing] as QuickFurnoClientJourneySnapshotV1['missing'][number][],
-    ),
+    missing: Object.freeze([...missing] as QuickFurnoClientJourneySnapshotV1['missing'][number][]),
     activeRequirement: Object.freeze({
       requirementId: raw['requirementId'],
       revision: raw['revision'],
@@ -655,6 +656,165 @@ function parseClientJourney(value: unknown): QuickFurnoClientJourneySnapshotV1 |
       ...requirementValues,
     }),
   });
+}
+
+function validCanonicalInstant(value: unknown): value is string {
+  return typeof value === 'string' && INSTANT.test(value) && Number.isFinite(Date.parse(value));
+}
+
+function parseClientLifetimeProperty(
+  value: unknown,
+): QuickFurnoClientJourneySnapshotV2['properties'][number] | null {
+  if (!isRecord(value)) return null;
+  const allowed = [
+    'propertyId',
+    'relation',
+    'area',
+    'propertyType',
+    'bhk',
+    'projectStage',
+    'possessionDate',
+  ];
+  if (!onlyKeys(value, allowed)) return null;
+  if (
+    typeof value['propertyId'] !== 'string' ||
+    !UUID.test(value['propertyId']) ||
+    (value['relation'] !== 'current' && value['relation'] !== 'historical')
+  ) {
+    return null;
+  }
+  const parsed: Record<string, string> = {};
+  for (const field of ['area', 'propertyType', 'bhk', 'projectStage'] as const) {
+    if (value[field] === undefined) continue;
+    const bounded = boundedString(value[field], 128);
+    if (bounded === null) return null;
+    parsed[field] = bounded;
+  }
+  if (
+    value['possessionDate'] !== undefined &&
+    (typeof value['possessionDate'] !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/u.test(value['possessionDate']))
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    propertyId: value['propertyId'],
+    relation: value['relation'],
+    ...parsed,
+    ...(value['possessionDate'] === undefined ? {} : { possessionDate: value['possessionDate'] }),
+  }) as QuickFurnoClientJourneySnapshotV2['properties'][number];
+}
+
+function parsePastRequirement(
+  value: unknown,
+): QuickFurnoClientJourneySnapshotV2['pastRequirements'][number] | null {
+  if (!isRecord(value)) return null;
+  if (!onlyKeys(value, ['requirementId', 'categoryRef', 'propertyId', 'status', 'closedAt']))
+    return null;
+  if (
+    typeof value['requirementId'] !== 'string' ||
+    !UUID.test(value['requirementId']) ||
+    typeof value['categoryRef'] !== 'string' ||
+    !ID.test(value['categoryRef']) ||
+    !['converted', 'closed', 'cancelled'].includes(String(value['status']))
+  ) {
+    return null;
+  }
+  if (
+    value['propertyId'] !== undefined &&
+    (typeof value['propertyId'] !== 'string' || !UUID.test(value['propertyId']))
+  ) {
+    return null;
+  }
+  if (value['closedAt'] !== undefined && !validCanonicalInstant(value['closedAt'])) return null;
+  return Object.freeze({
+    requirementId: value['requirementId'],
+    categoryRef: value['categoryRef'],
+    ...(value['propertyId'] === undefined ? {} : { propertyId: value['propertyId'] }),
+    status: value['status'] as 'converted' | 'closed' | 'cancelled',
+    ...(value['closedAt'] === undefined ? {} : { closedAt: value['closedAt'] }),
+  });
+}
+
+function parseClientJourneyV2(value: unknown): QuickFurnoClientJourneySnapshotV2 | null {
+  if (!isRecord(value)) return null;
+  const v2Allowed = [
+    'version',
+    'profileId',
+    'profileRevision',
+    'profileStatus',
+    'isFirstContact',
+    'isReturningClient',
+    'createdAt',
+    'lastSeenAt',
+    'name',
+    'preferredLanguage',
+    'missing',
+    'activeRequirement',
+    'properties',
+    'pastRequirements',
+  ];
+  if (!onlyKeys(value, v2Allowed) || value['version'] !== 2) return null;
+  if (
+    typeof value['isReturningClient'] !== 'boolean' ||
+    !validCanonicalInstant(value['createdAt']) ||
+    !validCanonicalInstant(value['lastSeenAt']) ||
+    Date.parse(value['lastSeenAt']) < Date.parse(value['createdAt']) ||
+    !Array.isArray(value['properties']) ||
+    value['properties'].length > 8 ||
+    !Array.isArray(value['pastRequirements']) ||
+    value['pastRequirements'].length > 24
+  ) {
+    return null;
+  }
+
+  const base = parseClientJourneyV1({
+    version: 1,
+    profileId: value['profileId'],
+    profileRevision: value['profileRevision'],
+    profileStatus: value['profileStatus'],
+    isFirstContact: value['isFirstContact'],
+    ...(value['name'] === undefined ? {} : { name: value['name'] }),
+    ...(value['preferredLanguage'] === undefined
+      ? {}
+      : { preferredLanguage: value['preferredLanguage'] }),
+    missing: value['missing'],
+    activeRequirement: value['activeRequirement'],
+  });
+  if (base === null) return null;
+  const properties = value['properties'].map(parseClientLifetimeProperty);
+  const pastRequirements = value['pastRequirements'].map(parsePastRequirement);
+  if (
+    properties.some((entry) => entry === null) ||
+    pastRequirements.some((entry) => entry === null)
+  )
+    return null;
+
+  const propertyIds = properties.map((entry) => entry!.propertyId);
+  const requirementIds = pastRequirements.map((entry) => entry!.requirementId);
+  if (
+    new Set(propertyIds).size !== propertyIds.length ||
+    new Set(requirementIds).size !== requirementIds.length
+  )
+    return null;
+  if (value['isFirstContact'] && value['isReturningClient']) return null;
+
+  return Object.freeze({
+    ...base,
+    version: 2 as const,
+    isReturningClient: value['isReturningClient'],
+    createdAt: value['createdAt'],
+    lastSeenAt: value['lastSeenAt'],
+    properties: Object.freeze(properties as QuickFurnoClientJourneySnapshotV2['properties']),
+    pastRequirements: Object.freeze(
+      pastRequirements as QuickFurnoClientJourneySnapshotV2['pastRequirements'],
+    ),
+  });
+}
+
+function parseClientJourney(value: unknown): QuickFurnoClientJourneySnapshot | null {
+  if (!isRecord(value)) return null;
+  return value['version'] === 2 ? parseClientJourneyV2(value) : parseClientJourneyV1(value);
 }
 
 function parseCoreAvailability(value: unknown): QuickFurnoCoreAvailabilitySnapshotV1 | null {

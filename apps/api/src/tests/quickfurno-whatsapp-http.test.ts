@@ -151,6 +151,150 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
     expect(post).toHaveBeenCalledOnce();
   });
 
+  it('accepts a bounded returning-client V2 journey without weakening the V1 authority checks', async () => {
+    const post = vi.fn<QuickFurnoWhatsAppHttpPost>((_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      return Promise.resolve({
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              ...authorityResponse(request),
+              inboundMessageId: request['inboundMessageId'],
+              receivedAt: '2026-09-30T04:00:00.000Z',
+              inbound: { version: 1, messageType: 'text', normalizedText: 'Need painting now' },
+              normalizedText: 'Need painting now',
+              clientJourney: {
+                version: 2,
+                profileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                profileRevision: 12,
+                profileStatus: 'known',
+                isFirstContact: false,
+                isReturningClient: true,
+                createdAt: '2025-09-10T05:00:00.000Z',
+                lastSeenAt: '2026-09-30T04:00:00.000Z',
+                name: 'Rahul',
+                preferredLanguage: 'hinglish',
+                missing: [],
+                activeRequirement: {
+                  requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  revision: 4,
+                  status: 'discovering',
+                  phase: 'PROJECT_DETAILS',
+                  summaryConfirmed: false,
+                  provenance: {
+                    serviceInterest: 'user_stated',
+                    location: 'user_stated',
+                    budget: 'user_stated',
+                    timeline: 'user_stated',
+                  },
+                  serviceInterest: 'PAINTING',
+                  location: 'BANER',
+                  budget: 'OPEN',
+                  timeline: 'NOW',
+                },
+                properties: [
+                  {
+                    propertyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                    relation: 'current',
+                    area: 'Baner',
+                    propertyType: 'Apartment',
+                    bhk: '3BHK',
+                    projectStage: 'occupied',
+                  },
+                ],
+                pastRequirements: [
+                  {
+                    requirementId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+                    categoryRef: 'INTERIOR_DESIGN',
+                    propertyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                    status: 'converted',
+                    closedAt: '2025-12-01T10:00:00.000Z',
+                  },
+                ],
+              },
+              coreAvailability: {
+                version: 1,
+                snapshotRef: 'availability.1',
+                taxonomyVersion: 1,
+                cities: [{ ref: 'PUNE', displayName: 'Pune' }],
+                services: [{ ref: 'PAINTING', displayName: 'Painting' }],
+                availability: [{ serviceRef: 'PAINTING', cityRefs: ['PUNE'] }],
+              },
+            }),
+          ),
+      });
+    });
+    const result = await createQuickFurnoWhatsAppMaterialReader(config(post)).read({
+      conversationId: '22222222-2222-4222-8222-222222222222',
+      inboundMessageId: '33333333-3333-4333-8333-333333333333',
+      expectedRevision: 7,
+    });
+    if ('purpose' in result) throw new Error('expected-conversation-material');
+    expect(result.clientJourney).toMatchObject({
+      version: 2,
+      isReturningClient: true,
+      name: 'Rahul',
+      properties: [{ area: 'Baner', bhk: '3BHK' }],
+      pastRequirements: [{ categoryRef: 'INTERIOR_DESIGN', status: 'converted' }],
+    });
+  });
+
+  it('rejects contradictory V2 returning-client state before it reaches Riya', async () => {
+    const post: QuickFurnoWhatsAppHttpPost = (_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      return Promise.resolve({
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              ...authorityResponse(request),
+              inboundMessageId: request['inboundMessageId'],
+              receivedAt: '2026-09-30T04:00:00.000Z',
+              inbound: { version: 1, messageType: 'text', normalizedText: 'Hi' },
+              normalizedText: 'Hi',
+              clientJourney: {
+                version: 2,
+                profileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                profileRevision: 1,
+                profileStatus: 'known',
+                isFirstContact: true,
+                isReturningClient: true,
+                createdAt: '2025-09-10T05:00:00.000Z',
+                lastSeenAt: '2026-09-30T04:00:00.000Z',
+                missing: ['name', 'serviceInterest', 'location', 'budget', 'timeline'],
+                activeRequirement: {
+                  requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  revision: 0,
+                  status: 'discovering',
+                  phase: 'INTRO',
+                  summaryConfirmed: false,
+                  provenance: {},
+                },
+                properties: [],
+                pastRequirements: [],
+              },
+              coreAvailability: {
+                version: 1,
+                snapshotRef: 'availability.1',
+                taxonomyVersion: 1,
+                cities: [],
+                services: [],
+                availability: [],
+              },
+            }),
+          ),
+      });
+    };
+    await expect(
+      createQuickFurnoWhatsAppMaterialReader(config(post)).read({
+        conversationId: '22222222-2222-4222-8222-222222222222',
+        inboundMessageId: '33333333-3333-4333-8333-333333333333',
+        expectedRevision: 7,
+      }),
+    ).rejects.toMatchObject({ code: 'response-invalid' });
+  });
+
   it('conversation context reader signs the exact request and accepts only bounded non-authoritative context', async () => {
     const post = vi.fn<QuickFurnoWhatsAppHttpPost>((_url, init) => {
       const request = JSON.parse(init.body) as Record<string, unknown>;
