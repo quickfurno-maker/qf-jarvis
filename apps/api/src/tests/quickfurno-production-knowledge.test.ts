@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createKnowledgeFreshnessManifestSourcePort } from '../knowledge-freshness/create-manifest-source-port.js';
+import {\n  createKnowledgeFreshnessManifestSourcePort,\n} from '../knowledge-freshness/create-manifest-source-port.js';
 import {
   QUICKFURNO_KNOWLEDGE_CANDIDATE_COUNT,
   QUICKFURNO_KNOWLEDGE_SOURCE_REVISION,
