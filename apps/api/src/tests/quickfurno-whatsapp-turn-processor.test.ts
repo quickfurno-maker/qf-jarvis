@@ -12,6 +12,7 @@ import type {
 import {
   createQuickFurnoWhatsAppTurnProcessor,
   type QuickFurnoWhatsAppTurnQueue,
+  type QuickFurnoWhatsAppTurnReference,
 } from '../quickfurno-whatsapp/turn-processor.js';
 
 const ref = Object.freeze({
@@ -160,9 +161,11 @@ function fixture(
     write?: () => Promise<'queued' | 'stale'>;
     traceRecord?: (event: AgentFlowTraceEvent) => void;
     traceClock?: () => string;
+    turnRef?: QuickFurnoWhatsAppTurnReference;
   } = {},
 ) {
-  const claimNext = vi.fn(() => Promise.resolve(ref));
+  const claimedRef = over.turnRef ?? ref;
+  const claimNext = vi.fn(() => Promise.resolve(claimedRef));
   const complete = vi.fn((_id: string) => Promise.resolve());
   const fail = vi.fn((_id: string) => Promise.resolve());
   const release = vi.fn((_id: string) => Promise.resolve());
@@ -298,6 +301,63 @@ describe('QuickFurno WhatsApp turn processor', () => {
     expect(serialized).not.toContain('"normalizedText":"hello"');
     expect(serialized).not.toContain('Earlier question');
     expect(serialized).not.toContain('"body":"reply"');
+  });
+
+  it.each([
+    {
+      actor: 'ANISHA' as const,
+      subjectType: 'vendor' as const,
+      partyType: 'VENDOR' as const,
+      flowId: 'agent-flow.anisha.whatsapp-vendor.v1',
+      prefix: 'anisha',
+    },
+    {
+      actor: 'AAROHI' as const,
+      subjectType: 'prospect' as const,
+      partyType: 'PROSPECT' as const,
+      flowId: 'agent-flow.aarohi.whatsapp-prospect.v1',
+      prefix: 'aarohi',
+    },
+  ])('emits content-free $actor trace metadata on the shared runtime', async (row) => {
+    const turnRef: QuickFurnoWhatsAppTurnReference = Object.freeze({
+      ...ref,
+      assignedActor: row.actor,
+      subjectType: row.subjectType,
+    });
+    const actorMaterial: QuickFurnoWhatsAppTurnMaterialV2 = Object.freeze({
+      ...material,
+      assignedActor: row.actor,
+      subjectType: row.subjectType,
+      partyType: row.partyType,
+    });
+    const f = fixture({
+      turnRef,
+      materialRead: () => Promise.resolve(actorMaterial),
+    });
+
+    expect(await f.processor.processOne()).toBe('completed-queued');
+    expect(f.traceEvents[0]).toMatchObject({
+      kind: 'RUN_STARTED',
+      actor: row.actor,
+      flowId: row.flowId,
+    });
+    const traced = new Set(
+      f.traceEvents.flatMap((event) => (event.nodeId === undefined ? [] : [event.nodeId])),
+    );
+    for (const suffix of [
+      'trigger.whatsapp-inbound',
+      'queue.claim-turn',
+      'context.turn-material',
+      'context.conversation',
+      'context.authority-scope',
+      'intelligence.domain',
+      'agent.specialist-runtime',
+      'action.write-reply',
+      'queue.complete',
+    ]) {
+      expect(traced.has(`${row.prefix}.${suffix}`)).toBe(true);
+    }
+    expect(JSON.stringify(f.traceEvents)).not.toContain('Earlier question');
   });
 
   it('cannot let a broken trace sink alter the customer turn', async () => {

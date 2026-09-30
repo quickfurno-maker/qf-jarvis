@@ -73,6 +73,7 @@
     { "path": "./packages/agent-flow-registry/tsconfig.build.json" },
     { "path": "./packages/agent-flow-trace-contract/tsconfig.build.json" },
     { "path": "./packages/agent-flow-governance/tsconfig.build.json" },
+    { "path": "./packages/agent-flow-orchestration/tsconfig.build.json" },
     { "path": "./packages/governed-memory-foundation/tsconfig.build.json" },
     { "path": "./packages/knowledge-freshness/tsconfig.build.json" },
     { "path": "./packages/decision-intelligence/tsconfig.build.json" },

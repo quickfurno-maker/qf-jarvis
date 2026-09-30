@@ -107,13 +107,23 @@ export function createQuickFurnoWhatsAppTurnProcessor(
     ref: QuickFurnoWhatsAppTurnReference,
   ): Promise<QuickFurnoWhatsAppProcessorOutcome> => {
     let traceSequence = 0;
+    const traceActor = ref.assignedActor;
+    const tracePrefix =
+      traceActor === 'RIYA' ? 'riya' : traceActor === 'ANISHA' ? 'anisha' : 'aarohi';
+    const traceFlow =
+      traceActor === 'RIYA'
+        ? { flowId: 'agent-flow.riya.whatsapp-client.v1', flowVersion: 1 }
+        : traceActor === 'ANISHA'
+          ? { flowId: 'agent-flow.anisha.whatsapp-vendor.v1', flowVersion: 1 }
+          : { flowId: 'agent-flow.aarohi.whatsapp-prospect.v1', flowVersion: 1 };
+    const traceNodeId = (suffix: string): string => `${tracePrefix}.${suffix}`;
     const emitTrace = (
       kind: AgentFlowTraceEventKind,
       status: AgentFlowTraceStatus,
       nodeId?: string,
       resultCode?: string,
     ): void => {
-      if (config.traceSink === undefined || ref.assignedActor !== 'RIYA') return;
+      if (config.traceSink === undefined) return;
       const sequence = traceSequence;
       traceSequence += 1;
       try {
@@ -121,9 +131,9 @@ export function createQuickFurnoWhatsAppTurnProcessor(
           parseAgentFlowTraceEvent({
             protocol: AGENT_FLOW_TRACE_PROTOCOL,
             traceId: ref.inboundMessageId,
-            flowId: 'agent-flow.riya.whatsapp-client.v1',
-            flowVersion: 1,
-            actor: 'RIYA',
+            flowId: traceFlow.flowId,
+            flowVersion: traceFlow.flowVersion,
+            actor: traceActor,
             conversationId: ref.conversationId,
             inboundMessageId: ref.inboundMessageId,
             sequence,
@@ -185,14 +195,14 @@ export function createQuickFurnoWhatsAppTurnProcessor(
     };
     const completeTurn = () =>
       traceNode(
-        'riya.queue.complete',
+        traceNodeId('queue.complete'),
         () => config.queue.complete(ref.inboundMessageId),
         () => 'completed',
       );
 
     emitTrace('RUN_STARTED', 'RUNNING');
-    observeNode('riya.trigger.whatsapp-inbound', 'admitted-before-worker');
-    observeNode('riya.queue.claim-turn', 'claimed');
+    observeNode(traceNodeId('trigger.whatsapp-inbound'), 'admitted-before-worker');
+    observeNode(traceNodeId('queue.claim-turn'), 'claimed');
 
     let material: QuickFurnoWhatsAppWorkerMaterial;
     let conversationContext;
@@ -202,7 +212,7 @@ export function createQuickFurnoWhatsAppTurnProcessor(
         ref.turnPurpose === 'lead_qualification' || contextReader === undefined
           ? Promise.resolve(undefined)
           : traceNode(
-              'riya.context.conversation',
+              traceNodeId('context.conversation'),
               () =>
                 contextReader.read({
                     conversationId: ref.conversationId,
@@ -214,7 +224,7 @@ export function createQuickFurnoWhatsAppTurnProcessor(
             ).catch(() => undefined);
       [material, conversationContext] = await Promise.all([
         traceNode(
-          'riya.context.turn-material',
+          traceNodeId('context.turn-material'),
           () =>
             config.materialReader.read({
               conversationId: ref.conversationId,
@@ -248,10 +258,15 @@ export function createQuickFurnoWhatsAppTurnProcessor(
       await config.queue.fail(ref.inboundMessageId);
       return finish('failed-indeterminate');
     }
-    observeNode('riya.memory.client-journey', 'material-projection');
-    observeNode('riya.memory.lifetime', 'material-projection');
-    observeNode('riya.memory.vendor-journey', 'material-projection');
-    observeNode('riya.context.core-availability', 'material-projection');
+    if (traceActor === 'RIYA') {
+      observeNode('riya.memory.client-journey', 'material-projection');
+      observeNode('riya.memory.lifetime', 'material-projection');
+      observeNode('riya.memory.vendor-journey', 'material-projection');
+      observeNode('riya.context.core-availability', 'material-projection');
+    } else {
+      observeNode(traceNodeId('context.authority-scope'), 'core-authority-projection');
+      observeNode(traceNodeId('intelligence.domain'), 'domain-input-ready');
+    }
 
     const vendorFeedbackWriter = config.clientVendorFeedbackWriter;
     if (
@@ -420,7 +435,7 @@ export function createQuickFurnoWhatsAppTurnProcessor(
                 emitTrace(
                   'NODE_OBSERVED',
                   'OBSERVED',
-                  'riya.agent.specialist-runtime',
+                  traceNodeId('agent.specialist-runtime'),
                   `model-route:${observation.complexity}:${observation.releaseId}`,
                 );
               }),
@@ -437,7 +452,7 @@ export function createQuickFurnoWhatsAppTurnProcessor(
 
     try {
       const outcome = await traceNode(
-        'riya.action.write-reply',
+        traceNodeId('action.write-reply'),
         () =>
           config.replyWriter.write({
             conversationId: ref.conversationId,

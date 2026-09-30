@@ -563,6 +563,7 @@ describe('live operator capability remains contained behind reviewed seams', () 
     // packages remain forbidden from the UI application.
     const ALLOWED = new Set([
       '@qf-jarvis/agent-flow-governance',
+      '@qf-jarvis/agent-flow-orchestration',
       '@qf-jarvis/agent-flow-registry',
       '@qf-jarvis/agent-flow-trace-contract',
       '@qf-jarvis/control-plane-read-contract',
@@ -607,6 +608,7 @@ describe('live operator capability remains contained behind reviewed seams', () 
       'src/components/shell/OperatorMenu.tsx', // menu toggle + sign-out submit
       'src/components/auth/LoginForm.tsx', // sign-in submit
       'src/components/agent-flow/AgentFlowCanvas.tsx', // local trace/node selection only; no mutation route
+      'src/components/agent-flow/AgentFlowPhase3Studio.tsx', // local view/filter/trace selection only; no mutation route
       'src/components/operator/OperatorControls.tsx', // versioned commands only; Core authorizes
       'src/components/voice/LiveVoiceConsole.tsx', // voice media/session controls only
       'src/components/voice/VoiceStatusButton.tsx', // start/navigation control only

@@ -5,6 +5,9 @@ import {
   AGENT_FLOW_EVENT_CATALOG_V1,
   AGENT_FLOW_REGISTRY_SCHEMA_VERSION,
   AGENT_FLOW_TRIGGER_CATALOG_V1,
+  AAROHI_ACQUISITION_FLOW_V1,
+  ANISHA_VENDOR_FLOW_V1,
+  RIYA_PHASE3_CONTROLLED_FLOW_V2,
   RIYA_WHATSAPP_CLIENT_FLOW_V1,
   createAgentFlowDefinition,
   type AgentFlowDefinition,
@@ -137,6 +140,53 @@ describe('agent-flow-registry', () => {
       'riya.intelligence',
       'riya.response',
     ]);
+  });
+
+  it('publishes the Phase 3 Riya graph with controlled orchestration still shadowed', () => {
+    expect(RIYA_PHASE3_CONTROLLED_FLOW_V2.actor).toBe('RIYA');
+    expect(RIYA_PHASE3_CONTROLLED_FLOW_V2.status).toBe('SHADOW');
+    expect(RIYA_PHASE3_CONTROLLED_FLOW_V2.nodes).toHaveLength(22);
+    expect(RIYA_PHASE3_CONTROLLED_FLOW_V2.groups.map((group) => group.groupId)).toContain(
+      'riya.orchestration',
+    );
+    expect(
+      RIYA_PHASE3_CONTROLLED_FLOW_V2.nodes
+        .filter((node) => node.groupId === 'riya.orchestration')
+        .map((node) => node.status),
+    ).toEqual(['SHADOW', 'SHADOW', 'SHADOW', 'DISABLED']);
+  });
+
+  it.each([
+    ['ANISHA', ANISHA_VENDOR_FLOW_V1],
+    ['AAROHI', AAROHI_ACQUISITION_FLOW_V1],
+  ] as const)('publishes a code-backed %s Phase 3 graph', (actor, flow) => {
+    expect(flow.actor).toBe(actor);
+    expect(flow.status).toBe('SHADOW');
+    expect(flow.nodes).toHaveLength(13);
+    expect(flow.edges).toHaveLength(15);
+    expect(flow.groups).toHaveLength(5);
+    for (const node of flow.nodes) {
+      expect(node.implementationRef.length).toBeGreaterThan(0);
+      expect(node.implementationVersionRef).toBe(
+        'qf-jarvis@f663d9b7df64ebc916ce260a8ac00c99ada757f6',
+      );
+    }
+  });
+
+  it('keeps all Phase 3 effectful nodes code locked behind Core governance', () => {
+    for (const flow of [
+      RIYA_PHASE3_CONTROLLED_FLOW_V2,
+      ANISHA_VENDOR_FLOW_V1,
+      AAROHI_ACQUISITION_FLOW_V1,
+    ]) {
+      for (const node of flow.nodes.filter(
+        (candidate) =>
+          candidate.effect === 'GOVERNED_ACTION' || candidate.effect === 'CHANNEL_REQUEST',
+      )) {
+        expect(node.codeLocked).toBe(true);
+        expect(node.authority).toBe('CORE_GOVERNED_ACTION');
+      }
+    }
   });
 
   it('does not expose arbitrary code, SQL or HTTP nodes in the approved catalogs', () => {
