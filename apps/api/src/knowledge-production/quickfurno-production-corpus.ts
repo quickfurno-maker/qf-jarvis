@@ -45,7 +45,7 @@ const candidates: readonly Candidate[] = Object.freeze([
     authorityTier: 'APPROVED_BUSINESS_RULE',
     contentFormat: 'PLAIN_TEXT',
     payload: {
-      kind: 'TEXT',
+      kind: 'TEXT' as const,
       text:
         'QuickFurno is a marketplace that connects homeowners with eligible home-service vendors in Pune. ' +
         'QuickFurno helps a homeowner share a requirement and get matched; QuickFurno does not carry out the vendor work itself. ' +
@@ -71,7 +71,7 @@ const candidates: readonly Candidate[] = Object.freeze([
     authorityTier: 'APPROVED_BUSINESS_RULE',
     contentFormat: 'PLAIN_TEXT',
     payload: {
-      kind: 'TEXT',
+      kind: 'TEXT' as const,
       text:
         'A client enquiry may be shared with up to 3 eligible vendors initially. ' +
         'If those vendors are unavailable, non-responsive or unable to serve the requirement, QuickFurno may manually connect the client with additional eligible vendors. ' +
@@ -96,7 +96,7 @@ const candidates: readonly Candidate[] = Object.freeze([
     authorityTier: 'APPROVED_BUSINESS_RULE',
     contentFormat: 'PLAIN_TEXT',
     payload: {
-      kind: 'TEXT',
+      kind: 'TEXT' as const,
       text:
         'QuickFurno reviews vendor submissions before approved profiles can go live. ' +
         'Only approved, active vendors that pass the public-listing controls appear as active public listings. ' +
@@ -122,7 +122,7 @@ const candidates: readonly Candidate[] = Object.freeze([
     authorityTier: 'APPROVED_BUSINESS_RULE',
     contentFormat: 'PLAIN_TEXT',
     payload: {
-      kind: 'TEXT',
+      kind: 'TEXT' as const,
       text:
         'When a client submits a requirement, QuickFurno collects the details the client provides, including name, phone number, city, area, service needed, budget, timeline and notes. ' +
         'If the client allows it, QuickFurno may also capture approximate location and source or campaign attribution. ' +
@@ -149,7 +149,7 @@ const candidates: readonly Candidate[] = Object.freeze([
     authorityTier: 'APPROVED_WEBSITE_CONTENT',
     contentFormat: 'PLAIN_TEXT',
     payload: {
-      kind: 'TEXT',
+      kind: 'TEXT' as const,
       text:
         'QuickFurno currently exposes these Pune marketplace categories: Interior Designers, Carpenters, Modular Factory, Premium Interiors, Sofa, Painter, Civil Work and False Ceiling. ' +
         'Category availability for a particular enquiry still depends on current marketplace supply and eligibility.',
@@ -173,7 +173,7 @@ const candidates: readonly Candidate[] = Object.freeze([
     authorityTier: 'APPROVED_WEBSITE_CONTENT',
     contentFormat: 'PLAIN_TEXT',
     payload: {
-      kind: 'TEXT',
+      kind: 'TEXT' as const,
       text:
         'QuickFurno is currently launched in Pune and PCMC. Common locality options shown by the launch surface include Kharadi, Viman Nagar, Koregaon Park, Baner, Wakad, Hinjewadi, Magarpatta, Kothrud, Aundh, Hadapsar, Pimpri-Chinchwad, Kalyani Nagar, Wagholi, Pimple Saudagar, Bavdhan, Warje, Sinhagad Road, Undri, NIBM and Ravet. ' +
         'A listed locality is not a guarantee that matching supply is available. A client may still submit an enquiry when a locality is not listed.',
@@ -197,7 +197,7 @@ const candidates: readonly Candidate[] = Object.freeze([
     authorityTier: 'APPROVED_WEBSITE_CONTENT',
     contentFormat: 'PLAIN_TEXT',
     payload: {
-      kind: 'TEXT',
+      kind: 'TEXT' as const,
       text:
         'Pune home-service professionals may apply to join QuickFurno. Public profiles are reviewed and approved before they go live. ' +
         'An approved vendor can receive relevant homeowner enquiries when the vendor is eligible for the requirement. ' +
