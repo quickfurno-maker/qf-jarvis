@@ -20,6 +20,7 @@
   "dependencies": {
     "@mastra/core": "1.61.0",
     "@qf-jarvis/agent-runtime": "workspace:*",
+    "@qf-jarvis/agent-flow-trace-contract": "workspace:*",
     "@qf-jarvis/approval-core-adapter": "workspace:*",
     "@qf-jarvis/contracts": "workspace:*",
     "@qf-jarvis/client-intelligence": "workspace:*",

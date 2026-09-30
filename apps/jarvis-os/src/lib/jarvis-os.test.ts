@@ -510,12 +510,14 @@ describe('live operator capability remains contained behind reviewed seams', () 
       expect(code, `${label}: node io`).not.toMatch(
         /from ['"]node:(net|http|https|dns|tls|child_process|dgram)['"]/,
       );
-      // Node filesystem access stays closed to the UI. Production may read only auth config and
-      // the one content-free worker observation file; the matching source test may create fixtures.
+      // Node filesystem access stays closed to the UI. Production may read only reviewed,
+      // content-free observation files; matching source tests may create fixtures.
       const fsAllowed = new Set([
         'src/server/auth/config/loader.ts',
         'src/server/control-plane/sources/worker-observation-source.ts',
         'src/server/control-plane/sources/worker-observation-source.test.ts',
+        'src/server/control-plane/sources/agent-flow-trace-source.ts',
+        'src/server/control-plane/sources/agent-flow-trace-source.test.ts',
         'src/server/control-plane/sources/release-assurance-source.ts',
         'src/server/control-plane/sources/release-assurance-source.test.ts',
         'src/server/control-plane/sources/quickfurno-operator-source.test.ts',

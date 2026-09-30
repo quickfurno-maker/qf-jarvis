@@ -47,6 +47,9 @@ importers:
       '@qf-jarvis/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/agent-runtime
+      '@qf-jarvis/agent-flow-trace-contract':
+        specifier: workspace:*
+        version: link:../../packages/agent-flow-trace-contract
       '@qf-jarvis/approval-core-adapter':
         specifier: workspace:*
         version: link:../../packages/approval-core-adapter
@@ -198,6 +201,9 @@ importers:
       '@qf-jarvis/agent-flow-registry':
         specifier: workspace:*
         version: link:../../packages/agent-flow-registry
+      '@qf-jarvis/agent-flow-trace-contract':
+        specifier: workspace:*
+        version: link:../../packages/agent-flow-trace-contract
       '@qf-jarvis/control-plane-read-contract':
         specifier: workspace:*
         version: link:../../packages/control-plane-read-contract
@@ -368,6 +374,12 @@ importers:
         version: link:../agent-runtime
 
   packages/agent-flow-registry: {}
+
+  packages/agent-flow-trace-contract:
+    dependencies:
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   packages/agent-runtime:
     dependencies:
@@ -831,6 +843,9 @@ importers:
 
   packages/operator-client-core:
     dependencies:
+      '@qf-jarvis/agent-flow-trace-contract':
+        specifier: workspace:*
+        version: link:../agent-flow-trace-contract
       '@qf-jarvis/control-plane-read-contract':
         specifier: workspace:*
         version: link:../control-plane-read-contract

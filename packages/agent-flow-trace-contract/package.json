@@ -1,10 +1,10 @@
 {
-  "name": "@qf-jarvis/operator-client-core",
+  "name": "@qf-jarvis/agent-flow-trace-contract",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "description": "Framework-neutral Jarvis OS operator client core shared by web and future native mobile clients.",
+  "description": "Content-free, read-only per-turn Agent Flow Studio trace contract. Carries execution metadata only and grants no workflow or business authority.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -17,8 +17,6 @@
     "typecheck:tests": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@qf-jarvis/agent-flow-trace-contract": "workspace:*",
-    "@qf-jarvis/control-plane-read-contract": "workspace:*",
-    "@qf-jarvis/operator-api-contract": "workspace:*"
+    "zod": "4.4.3"
   }
 }

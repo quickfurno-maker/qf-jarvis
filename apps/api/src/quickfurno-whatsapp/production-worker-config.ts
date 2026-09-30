@@ -194,6 +194,7 @@ const schema = z
     spoolDirectory: absolutePath,
     killSwitchFile: absolutePath,
     operationalSnapshotFile: absolutePath,
+    agentFlowTraceSnapshotFile: absolutePath.optional(),
     runtimeId: z.string().regex(REF),
     policyRevision: z.string().regex(REF),
     idlePollMs: z.number().int().min(50).max(60_000).default(500),
@@ -312,6 +313,7 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
   readonly spoolDirectory: string;
   readonly killSwitchFile: string;
   readonly operationalSnapshotFile: string;
+  readonly agentFlowTraceSnapshotFile?: string;
   readonly runtimeId: string;
   readonly policyRevision: string;
   readonly idlePollMs: number;
@@ -491,6 +493,9 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
     spoolDirectory: input.spoolDirectory,
     killSwitchFile: input.killSwitchFile,
     operationalSnapshotFile: input.operationalSnapshotFile,
+    ...(input.agentFlowTraceSnapshotFile === undefined
+      ? {}
+      : { agentFlowTraceSnapshotFile: input.agentFlowTraceSnapshotFile }),
     runtimeId: input.runtimeId,
     policyRevision: input.policyRevision,
     idlePollMs: input.idlePollMs,

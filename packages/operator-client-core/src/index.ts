@@ -1,4 +1,8 @@
 import {
+  parseAgentFlowTraceReadResult,
+  type AgentFlowTraceReadResult,
+} from '@qf-jarvis/agent-flow-trace-contract';
+import {
   parseControlPlaneSnapshotV2,
   type ControlPlaneSnapshotV2,
 } from '@qf-jarvis/control-plane-read-contract';
@@ -87,6 +91,19 @@ export function createOperatorClient(args: {
       } catch (error) {
         if (error instanceof OperatorClientError) throw error;
         throw new OperatorClientError('INVALID_RESPONSE', 'Operator snapshot was invalid.');
+      }
+    },
+
+    async agentFlowTrace(): Promise<AgentFlowTraceReadResult> {
+      const response = await args.transport.request({
+        method: 'GET',
+        path: '/api/operator/v1/agent-flow-trace',
+      });
+      try {
+        return parseAgentFlowTraceReadResult(requireSuccess(response));
+      } catch (error) {
+        if (error instanceof OperatorClientError) throw error;
+        throw new OperatorClientError('INVALID_RESPONSE', 'Agent flow trace response was invalid.');
       }
     },
 

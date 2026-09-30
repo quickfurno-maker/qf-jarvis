@@ -1,3 +1,4 @@
+import type { AgentFlowTraceEvent } from '@qf-jarvis/agent-flow-trace-contract';
 import { describe, expect, it, vi } from 'vitest';
 import { QuickFurnoWhatsAppHttpError } from '../quickfurno-whatsapp/quickfurno-http.js';
 import type {
@@ -153,6 +154,8 @@ function fixture(
     vendorFeedback?: (...args: unknown[]) => Promise<unknown>;
     matchRequest?: (...args: unknown[]) => Promise<unknown>;
     write?: () => Promise<'queued' | 'stale'>;
+    traceRecord?: (event: AgentFlowTraceEvent) => void;
+    traceClock?: () => string;
   } = {},
 ) {
   const claimNext = vi.fn(() => Promise.resolve(ref));
@@ -175,10 +178,14 @@ function fixture(
         Promise.resolve({ actor: 'RIYA', proposalId: 'prop.1', boundRevision: 7, body: 'reply' })),
   );
   const vendorFeedback =
-    over.vendorFeedback === undefined ? undefined : vi.fn(over.vendorFeedback as never);
+    over.vendorFeedback === undefined ? undefined : vi.fn(over.vendorFeedback);
   const matchRequest =
-    over.matchRequest === undefined ? undefined : vi.fn(over.matchRequest as never);
+    over.matchRequest === undefined ? undefined : vi.fn(over.matchRequest);
   const write = vi.fn(over.write ?? (() => Promise.resolve('queued' as const)));
+  const traceEvents: AgentFlowTraceEvent[] = [];
+  const traceRecord = vi.fn(
+    over.traceRecord ?? ((event: AgentFlowTraceEvent) => traceEvents.push(event)),
+  );
   const processor = createQuickFurnoWhatsAppTurnProcessor({
     queue,
     materialReader: { read },
@@ -186,9 +193,11 @@ function fixture(
     specialistRuntime: { process: process as never },
     ...(vendorFeedback === undefined
       ? {}
-      : { clientVendorFeedbackWriter: { record: vendorFeedback as never } }),
-    ...(matchRequest === undefined ? {} : { clientMatchRequestWriter: { request: matchRequest as never } }),
+      : { clientVendorFeedbackWriter: { record: vendorFeedback } }),
+    ...(matchRequest === undefined ? {} : { clientMatchRequestWriter: { request: matchRequest } }),
     replyWriter: { write },
+    traceSink: { record: traceRecord },
+    traceClock: over.traceClock ?? (() => '2026-09-30T10:00:00.000Z'),
   });
   return {
     processor,
@@ -203,6 +212,8 @@ function fixture(
     vendorFeedback,
     matchRequest,
     write,
+    traceEvents,
+    traceRecord,
   };
 }
 describe('QuickFurno WhatsApp turn processor', () => {
@@ -215,6 +226,62 @@ describe('QuickFurno WhatsApp turn processor', () => {
     expect(f.complete).toHaveBeenCalledWith(ref.inboundMessageId);
     expect(f.release).not.toHaveBeenCalled();
     expect(f.fail).not.toHaveBeenCalled();
+  });
+
+  it('emits content-free Riya node trace metadata without changing the successful turn', async () => {
+    const f = fixture();
+    expect(await f.processor.processOne()).toBe('completed-queued');
+
+    expect(f.traceEvents[0]).toMatchObject({
+      kind: 'RUN_STARTED',
+      status: 'RUNNING',
+      actor: 'RIYA',
+      flowId: 'agent-flow.riya.whatsapp-client.v1',
+      traceId: ref.inboundMessageId,
+    });
+    expect(f.traceEvents.at(-1)).toMatchObject({
+      kind: 'RUN_COMPLETED',
+      status: 'SUCCEEDED',
+      resultCode: 'completed-queued',
+    });
+
+    const tracedNodeIds = new Set(
+      f.traceEvents.flatMap((event) => (event.nodeId === undefined ? [] : [event.nodeId])),
+    );
+    for (const nodeId of [
+      'riya.trigger.whatsapp-inbound',
+      'riya.queue.claim-turn',
+      'riya.context.turn-material',
+      'riya.context.conversation',
+      'riya.memory.client-journey',
+      'riya.memory.lifetime',
+      'riya.memory.vendor-journey',
+      'riya.context.core-availability',
+      'riya.agent.specialist-runtime',
+      'riya.action.write-reply',
+      'riya.queue.complete',
+    ]) {
+      expect(tracedNodeIds.has(nodeId)).toBe(true);
+    }
+
+    const serialized = JSON.stringify(f.traceEvents);
+    expect(serialized).not.toContain('"normalizedText":"hello"');
+    expect(serialized).not.toContain('Earlier question');
+    expect(serialized).not.toContain('"body":"reply"');
+  });
+
+  it('cannot let a broken trace sink alter the customer turn', async () => {
+    const f = fixture({
+      traceRecord: () => {
+        throw new Error('observation-down');
+      },
+    });
+    expect(await f.processor.processOne()).toBe('completed-queued');
+    expect(f.process).toHaveBeenCalledOnce();
+    expect(f.write).toHaveBeenCalledOnce();
+    expect(f.complete).toHaveBeenCalledWith(ref.inboundMessageId);
+    expect(f.fail).not.toHaveBeenCalled();
+    expect(f.release).not.toHaveBeenCalled();
   });
 
   it('passes bounded conversation context to the specialist runtime', async () => {
@@ -305,9 +372,12 @@ describe('QuickFurno WhatsApp turn processor', () => {
     expect(f.read).toHaveBeenCalledTimes(2);
     expect(f.vendorFeedback).toHaveBeenCalledOnce();
     expect(f.process).toHaveBeenCalledWith(vendorFeedbackRecordedMaterial, f.context);
-    expect(f.vendorFeedback!.mock.invocationCallOrder[0]).toBeLessThan(
-      f.process.mock.invocationCallOrder[0]!,
-    );
+    const feedbackOrder = f.vendorFeedback?.mock.invocationCallOrder[0];
+    const feedbackProcessOrder = f.process.mock.invocationCallOrder[0];
+    if (feedbackOrder === undefined || feedbackProcessOrder === undefined) {
+      throw new Error('vendor-feedback-order-missing');
+    }
+    expect(feedbackOrder).toBeLessThan(feedbackProcessOrder);
     expect(f.write).toHaveBeenCalledOnce();
   });
 
@@ -357,9 +427,12 @@ describe('QuickFurno WhatsApp turn processor', () => {
     expect(f.matchRequest).toHaveBeenCalledOnce();
     expect(f.process).toHaveBeenCalledOnce();
     expect(f.process).toHaveBeenCalledWith(matchedMaterial, f.context);
-    expect(f.matchRequest!.mock.invocationCallOrder[0]).toBeLessThan(
-      f.process.mock.invocationCallOrder[0]!,
-    );
+    const matchOrder = f.matchRequest?.mock.invocationCallOrder[0];
+    const matchProcessOrder = f.process.mock.invocationCallOrder[0];
+    if (matchOrder === undefined || matchProcessOrder === undefined) {
+      throw new Error('match-order-missing');
+    }
+    expect(matchOrder).toBeLessThan(matchProcessOrder);
     expect(f.write).toHaveBeenCalledOnce();
   });
 

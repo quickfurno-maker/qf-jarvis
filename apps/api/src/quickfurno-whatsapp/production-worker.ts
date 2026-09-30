@@ -85,6 +85,7 @@ import type {
 import { bindOpenAIV1SealForProduction } from './openai-production-seal-binding.js';
 import { bindJf5cSealForProduction } from './production-seal-binding.js';
 import type { QuickFurnoWhatsAppProductionWorkerConfig } from './production-worker-config.js';
+import { createAgentFlowTraceObservationWriter } from './agent-flow-trace-observation.js';
 import { createQuickFurnoWorkerObservationWriter } from './production-observation.js';
 
 export interface QuickFurnoWhatsAppProductionWorker {
@@ -348,6 +349,13 @@ export async function createQuickFurnoWhatsAppProductionWorker(
     throw new Error('production-worker-config-invalid');
   }
 
+  const traceObservation =
+    config.agentFlowTraceSnapshotFile === undefined
+      ? undefined
+      : createAgentFlowTraceObservationWriter({
+          filePath: config.agentFlowTraceSnapshotFile,
+          sourceRevision: config.revision,
+        });
   const observation = createQuickFurnoWorkerObservationWriter({
     filePath: config.operationalSnapshotFile,
     revision: config.revision,
@@ -577,6 +585,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       clientVendorFeedbackWriter: createQuickFurnoClientVendorFeedbackWriter(httpConfig),
       clientMatchRequestWriter: createQuickFurnoClientMatchRequestWriter(httpConfig),
       replyWriter: createQuickFurnoWhatsAppReplyWriter(httpConfig),
+      ...(traceObservation === undefined ? {} : { traceSink: traceObservation }),
     });
 
     let lastObservationMs = 0;
@@ -606,6 +615,17 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         // Jarvis OS will reject the stale/missing file and mark only its owned sections unavailable.
       }
     };
+    let traceObservationTail: Promise<void> = Promise.resolve();
+    const writeTraceObservationBestEffort = async (): Promise<void> => {
+      if (traceObservation === undefined) return;
+      const operation = traceObservationTail.then(() => traceObservation.write(systemInstant()));
+      traceObservationTail = operation.catch(() => undefined);
+      try {
+        await operation;
+      } catch {
+        // Trace observation is read-only and powerless. Failure affects only trace visibility.
+      }
+    };
     const recordObservedOutcome = async (
       outcome: QuickFurnoWhatsAppProcessorOutcome,
     ): Promise<void> => {
@@ -616,6 +636,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
           ? 'DEGRADED'
           : 'HEALTHY';
       await writeObservationBestEffort(state, outcome !== 'idle');
+      if (outcome !== 'idle') await writeTraceObservationBestEffort();
     };
     const processObservedOne = async (): Promise<QuickFurnoWhatsAppProcessorOutcome> => {
       const outcome = await processor.processOne();
@@ -639,8 +660,10 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       },
     });
 
-    // Required once: a bad path/permission is a deployment defect and refuses startup before claims.
+    // Required once: a bad aggregate-observation path is a deployment defect and refuses startup.
     await writeObservation(killSwitch.active() ? 'DISABLED' : 'HEALTHY', true);
+    // The optional per-turn trace remains powerless: a trace-file defect cannot stop customer work.
+    await writeTraceObservationBestEffort();
 
     return Object.freeze({
       revision: config.revision,
@@ -657,6 +680,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       async close(): Promise<void> {
         if (closed) return;
         closed = true;
+        await traceObservationTail.catch(() => undefined);
         if (pool !== undefined) await closeDatabasePool(pool);
       },
     });

@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 
+import type { AgentFlowTraceReadResult } from '@qf-jarvis/agent-flow-trace-contract';
 import {
   type OperatorAction,
   type OperatorBootstrap,
@@ -24,6 +25,7 @@ interface OperatorCommandContextValue {
   readonly loading: boolean;
   readonly capabilityState: (action: OperatorAction) => 'AVAILABLE' | 'LOCKED' | 'NOT_CONNECTED';
   readonly execute: (command: OperatorCommand) => Promise<OperatorCommandResult>;
+  readonly readAgentFlowTrace: () => Promise<AgentFlowTraceReadResult>;
 }
 
 const OperatorCommandContext = createContext<OperatorCommandContextValue | null>(null);
@@ -92,6 +94,11 @@ export function OperatorCommandProvider({
     [bootstrap],
   );
 
+  const readAgentFlowTrace = useCallback(
+    async (): Promise<AgentFlowTraceReadResult> => client.agentFlowTrace(),
+    [client],
+  );
+
   const execute = useCallback(
     async (command: OperatorCommand): Promise<OperatorCommandResult> => {
       const result = await client.command(command);
@@ -104,8 +111,8 @@ export function OperatorCommandProvider({
   );
 
   const value = useMemo(
-    () => ({ bootstrap, loading, capabilityState, execute }),
-    [bootstrap, loading, capabilityState, execute],
+    () => ({ bootstrap, loading, capabilityState, execute, readAgentFlowTrace }),
+    [bootstrap, loading, capabilityState, execute, readAgentFlowTrace],
   );
 
   return (

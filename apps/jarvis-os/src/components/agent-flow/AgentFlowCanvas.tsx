@@ -24,10 +24,17 @@ import {
   type AgentFlowNodeDefinition,
   type AgentFlowNodeKind,
 } from '@qf-jarvis/agent-flow-registry';
-import { useMemo, useState } from 'react';
+import type {
+  AgentFlowTraceEvent,
+  AgentFlowTraceReadResult,
+} from '@qf-jarvis/agent-flow-trace-contract';
+import { useEffect, useMemo, useState } from 'react';
+
+import { useOperatorCommands } from '@/components/operator/OperatorCommandProvider';
 
 interface FlowNodeData extends Record<string, unknown> {
   readonly definition: AgentFlowNodeDefinition;
+  readonly traceEvent?: AgentFlowTraceEvent;
 }
 
 type FilterValue<T extends string> = 'ALL' | T;
@@ -95,14 +102,32 @@ const AUTHORITY_HELP: Readonly<Record<AgentFlowAuthority, string>> = {
   HUMAN_CONTROL: 'Human',
 };
 
+function traceRing(event: AgentFlowTraceEvent | undefined): string {
+  if (event === undefined) return '';
+  if (event.status === 'FAILED') return 'ring-2 ring-[var(--color-danger)]';
+  if (event.status === 'RUNNING') return 'ring-2 ring-[var(--color-warning)]';
+  if (event.status === 'SUCCEEDED') return 'ring-2 ring-[var(--color-healthy)]';
+  return 'ring-1 ring-[var(--color-violet)]';
+}
+
+function traceBadge(event: AgentFlowTraceEvent | undefined): string | undefined {
+  if (event === undefined) return undefined;
+  if (event.status === 'FAILED') return 'TRACE FAIL';
+  if (event.status === 'RUNNING') return 'TRACE LIVE';
+  if (event.status === 'SUCCEEDED') return 'TRACE PASS';
+  return 'TRACE SEEN';
+}
+
 function FlowNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
   const node = data.definition;
+  const badge = traceBadge(data.traceEvent);
   return (
     <div
       className={[
         'w-[220px] rounded-[10px] border bg-[var(--color-base-900)] px-3.5 py-3 shadow-[0_12px_28px_rgba(0,0,0,0.22)]',
         KIND_STYLES[node.kind],
-        selected ? 'ring-1 ring-[var(--color-accent-bright)]' : '',
+        traceRing(data.traceEvent),
+        selected ? 'outline outline-1 outline-[var(--color-accent-bright)]' : '',
       ].join(' ')}
     >
       <Handle
@@ -118,9 +143,16 @@ function FlowNode({ data, selected }: NodeProps<Node<FlowNodeData>>) {
           {node.executionRole}
         </span>
       </div>
-      <p className="mt-2 text-[12px] font-semibold leading-snug text-[var(--color-ink)]">
-        {node.label}
-      </p>
+      <div className="mt-2 flex items-start justify-between gap-2">
+        <p className="text-[12px] font-semibold leading-snug text-[var(--color-ink)]">
+          {node.label}
+        </p>
+        {badge === undefined ? null : (
+          <span className="shrink-0 rounded-full border border-[var(--color-line)] bg-[var(--color-base-850)] px-1.5 py-0.5 text-[7.5px] font-semibold text-[var(--color-ink-muted)]">
+            {badge}
+          </span>
+        )}
+      </div>
       <p className="mt-1 line-clamp-2 text-[9.5px] leading-relaxed text-[var(--color-ink-faint)]">
         {node.description}
       </p>
@@ -189,12 +221,53 @@ function matchesQuery(node: AgentFlowNodeDefinition, query: string): boolean {
 
 export function AgentFlowCanvas() {
   const flow = RIYA_WHATSAPP_CLIENT_FLOW_V1;
+  const { readAgentFlowTrace } = useOperatorCommands();
   const [selectedId, setSelectedId] = useState('riya.agent.specialist-runtime');
   const [query, setQuery] = useState('');
   const [kindFilter, setKindFilter] = useState<FilterValue<AgentFlowNodeKind>>('ALL');
   const [authorityFilter, setAuthorityFilter] =
     useState<FilterValue<AgentFlowAuthority>>('ALL');
   const [edgeKindFilter, setEdgeKindFilter] = useState<FilterValue<AgentFlowEdgeKind>>('ALL');
+  const [traceState, setTraceState] = useState<AgentFlowTraceReadResult | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const poll = async (): Promise<void> => {
+      try {
+        const result = await readAgentFlowTrace();
+        if (!cancelled) setTraceState(result);
+      } catch {
+        if (!cancelled) {
+          setTraceState(Object.freeze({ available: false, reason: 'SOURCE_UNREACHABLE' }));
+        }
+      } finally {
+        if (!cancelled) timer = setTimeout(() => void poll(), 2_000);
+      }
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [readAgentFlowTrace]);
+
+  const latestTraceEvents = useMemo<readonly AgentFlowTraceEvent[]>(() => {
+    if (!traceState?.available) return [];
+    const latest = traceState.snapshot.events.at(-1);
+    if (latest === undefined) return [];
+    return traceState.snapshot.events.filter((event) => event.traceId === latest.traceId);
+  }, [traceState]);
+
+  const latestTraceEventByNode = useMemo(() => {
+    const events = new Map<string, AgentFlowTraceEvent>();
+    for (const event of latestTraceEvents) {
+      if (event.nodeId !== undefined) events.set(event.nodeId, event);
+    }
+    return events;
+  }, [latestTraceEvents]);
 
   const visibleNodeIds = useMemo(() => {
     return new Set(
@@ -211,17 +284,23 @@ export function AgentFlowCanvas() {
 
   const nodes = useMemo<Node<FlowNodeData>[]>(
     () =>
-      flow.nodes.map((definition) => ({
-        id: definition.nodeId,
-        type: 'agentFlow',
-        position: POSITIONS[definition.nodeId] ?? { x: 0, y: 0 },
-        data: { definition },
-        draggable: false,
-        connectable: false,
-        selectable: true,
-        hidden: !visibleNodeIds.has(definition.nodeId),
-      })),
-    [flow.nodes, visibleNodeIds],
+      flow.nodes.map((definition) => {
+        const traceEvent = latestTraceEventByNode.get(definition.nodeId);
+        return {
+          id: definition.nodeId,
+          type: 'agentFlow',
+          position: POSITIONS[definition.nodeId] ?? { x: 0, y: 0 },
+          data: {
+            definition,
+            ...(traceEvent === undefined ? {} : { traceEvent }),
+          },
+          draggable: false,
+          connectable: false,
+          selectable: true,
+          hidden: !visibleNodeIds.has(definition.nodeId),
+        };
+      }),
+    [flow.nodes, latestTraceEventByNode, visibleNodeIds],
   );
 
   const edges = useMemo<Edge[]>(
@@ -281,6 +360,84 @@ export function AgentFlowCanvas() {
           Read-only · schema v{flow.registrySchemaVersion} · flow v{flow.flowVersion}
         </span>
       </div>
+
+      <section className="rounded-[var(--radius-panel)] border border-[var(--color-line)] bg-[var(--color-base-900)] px-3.5 py-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[9px] font-semibold tracking-[0.08em] text-[var(--color-ink-faint)] uppercase">
+              Live Riya trace
+            </p>
+            {traceState === null ? (
+              <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">Trace loading…</p>
+            ) : traceState.available ? (
+              <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+                {traceState.freshness} · snapshot {traceState.snapshot.emittedAt} · latest trace{' '}
+                {latestTraceEvents.at(-1)?.traceId.slice(0, 12) ?? 'none'}
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
+                Trace unavailable · {traceState.reason}
+              </p>
+            )}
+          </div>
+          <span className="rounded-full border border-[var(--color-line)] bg-[var(--color-base-850)] px-2.5 py-1 text-[8.5px] font-semibold tracking-[0.05em] text-[var(--color-ink-faint)] uppercase">
+            Authenticated GET · 2s refresh · metadata only
+          </span>
+        </div>
+
+        {latestTraceEvents.length === 0 ? (
+          <p className="mt-3 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">
+            No Riya execution trace is available yet. The canvas stays read-only and does not infer
+            steps from aggregate metrics.
+          </p>
+        ) : (
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            {latestTraceEvents.slice(-18).map((event) => {
+              const definition =
+                event.nodeId === undefined
+                  ? undefined
+                  : flow.nodes.find((node) => node.nodeId === event.nodeId);
+              const label =
+                definition?.label ??
+                (event.kind === 'RUN_STARTED' ? 'Run started' : 'Run completed');
+              const content = (
+                <>
+                  <span className="block text-[8px] font-semibold tracking-[0.06em] text-[var(--color-ink-faint)] uppercase">
+                    {event.at.slice(11, 23)} · {event.status}
+                  </span>
+                  <span className="mt-1 block whitespace-nowrap text-[9.5px] font-medium text-[var(--color-ink-muted)]">
+                    {label}
+                  </span>
+                  {event.resultCode === undefined ? null : (
+                    <span className="mt-0.5 block whitespace-nowrap text-[8px] text-[var(--color-ink-faint)]">
+                      {event.resultCode}
+                    </span>
+                  )}
+                </>
+              );
+              return event.nodeId === undefined ? (
+                <div
+                  key={event.traceId + ':' + String(event.sequence)}
+                  className="min-w-[150px] rounded-[8px] border border-[var(--color-line)] bg-[var(--color-base-850)] px-2.5 py-2"
+                >
+                  {content}
+                </div>
+              ) : (
+                <button
+                  key={event.traceId + ':' + String(event.sequence)}
+                  type="button"
+                  onClick={() => {
+                    setSelectedId(event.nodeId ?? selectedId);
+                  }}
+                  className="min-w-[150px] rounded-[8px] border border-[var(--color-line)] bg-[var(--color-base-850)] px-2.5 py-2 text-left transition hover:border-[var(--color-line-strong)]"
+                >
+                  {content}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_180px_220px_190px]">
         <label className="rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-base-900)] px-3 py-2">
