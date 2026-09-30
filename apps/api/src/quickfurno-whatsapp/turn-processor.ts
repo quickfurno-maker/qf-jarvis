@@ -1,10 +1,12 @@
 import type {
+  QuickFurnoClientMatchRequestWriter,
   QuickFurnoWhatsAppConversationContextReader,
   QuickFurnoWhatsAppMaterialReader,
   QuickFurnoWhatsAppReplyWriter,
 } from './quickfurno-http.js';
 import { QuickFurnoWhatsAppHttpError } from './quickfurno-http.js';
 import type { QuickFurnoWhatsAppSpecialistRuntime } from './specialist-runtime.js';
+import { shouldRequestCoreMatch } from './client-intelligence-adapter.js';
 
 export interface QuickFurnoWhatsAppTurnReference {
   readonly conversationId: string;
@@ -50,6 +52,7 @@ export interface QuickFurnoWhatsAppTurnProcessorConfig {
   readonly materialReader: QuickFurnoWhatsAppMaterialReader;
   readonly conversationContextReader?: QuickFurnoWhatsAppConversationContextReader;
   readonly specialistRuntime: QuickFurnoWhatsAppSpecialistRuntime;
+  readonly clientMatchRequestWriter?: QuickFurnoClientMatchRequestWriter;
   readonly replyWriter: QuickFurnoWhatsAppReplyWriter;
 }
 
@@ -131,6 +134,68 @@ export function createQuickFurnoWhatsAppTurnProcessor(
       await config.queue.fail(ref.inboundMessageId);
       return 'failed-indeterminate';
     }
+
+    if (
+      ref.turnPurpose !== 'lead_qualification' &&
+      config.clientMatchRequestWriter !== undefined &&
+      'subjectType' in material &&
+      material.assignedActor === 'RIYA' &&
+      material.subjectType === 'client' &&
+      shouldRequestCoreMatch(material)
+    ) {
+      let actionResult;
+      try {
+        actionResult = await config.clientMatchRequestWriter.request({ material });
+      } catch (error) {
+        if (error instanceof QuickFurnoWhatsAppHttpError && error.code === 'request-failed') {
+          await config.queue.release(ref.inboundMessageId);
+          return 'released-pre-agent';
+        }
+        await config.queue.fail(ref.inboundMessageId);
+        return 'failed-indeterminate';
+      }
+
+      if (actionResult.outcome === 'stale') {
+        await config.queue.complete(ref.inboundMessageId);
+        return 'completed-stale';
+      }
+      if (actionResult.outcome === 'retry_later') {
+        await config.queue.release(ref.inboundMessageId);
+        return 'released-pre-agent';
+      }
+
+      try {
+        material = await config.materialReader.read({
+          conversationId: ref.conversationId,
+          inboundMessageId: ref.inboundMessageId,
+          expectedRevision: ref.conversationRevision,
+        });
+      } catch (error) {
+        if (error instanceof QuickFurnoWhatsAppHttpError && error.code === 'request-failed') {
+          await config.queue.release(ref.inboundMessageId);
+          return 'released-pre-agent';
+        }
+        if (error instanceof QuickFurnoWhatsAppHttpError && error.code === 'stale-revision') {
+          await config.queue.complete(ref.inboundMessageId);
+          return 'completed-stale';
+        }
+        await config.queue.fail(ref.inboundMessageId);
+        return 'failed-indeterminate';
+      }
+      if (!materialMatches(ref, material)) {
+        await config.queue.fail(ref.inboundMessageId);
+        return 'failed-indeterminate';
+      }
+      if (
+        actionResult.outcome === 'blocked' &&
+        'clientMatchDecision' in material &&
+        material.clientMatchDecision?.state === 'READY'
+      ) {
+        await config.queue.fail(ref.inboundMessageId);
+        return 'failed-indeterminate';
+      }
+    }
+
     let proposal;
     try {
       proposal = await config.specialistRuntime.process(material, conversationContext);

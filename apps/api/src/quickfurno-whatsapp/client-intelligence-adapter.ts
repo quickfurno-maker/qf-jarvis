@@ -61,8 +61,10 @@ function opportunityContext(
   });
 }
 
+const NEGATED_MATCH_INTENT =
+  /\b(?:do\s*not|don't|dont|not\s+now|later|cancel|stop|no)\b[\s\S]{0,40}\b(?:vendor|vendors|professional|professionals|pro|pros|team|teams)\b|\b(?:vendor|vendors)\b[\s\S]{0,24}\b(?:nahi|nahin|mat|later)\b|\bmat\s+bhejo\b|\bnahi\s+chahiye\b/iu;
 const MATCH_INTENT =
-  /\b(send|share|connect|match|assign|find|give|need|want)\b[\s\S]{0,80}\b(vendor|vendors|professional|professionals|pro|pros|team|teams)\b|\b(vendor|vendors|professional|professionals|pro|pros|team|teams)\b[\s\S]{0,80}\b(send|share|connect|match|assign|find|give|need|want)\b|\b(?:3|three)\s+(?:nearby\s+)?vendors?\b|\bvendors?\s+nearby\b/iu;
+  /\b(?:send|share|connect|match|assign|find|give|need|want|get)\b[\s\S]{0,80}\b(?:vendor|vendors|professional|professionals|pro|pros|team|teams)\b|\b(?:vendor|vendors|professional|professionals|pro|pros|team|teams)\b[\s\S]{0,80}\b(?:send|share|connect|match|assign|find|give|need|want|get)\b|\b(?:3|three|teen)\s+(?:nearby\s+)?vendors?\b|\bvendors?\s+nearby\b|\bvendors?\b[\s\S]{0,40}\b(?:bhejo|bhej\s*do|chahiye|connect\s*karo|dikhao)\b/iu;
 
 function lifecycleState(
   status: QuickFurnoWhatsAppTurnMaterialV2['clientJourney'] extends infer Journey
@@ -73,9 +75,11 @@ function lifecycleState(
 ): ClientIntelligenceSnapshotV1['journey']['lifecycleState'] {
   return status === 'converted' ? 'CONVERTED' : status === 'cancelled' ? 'WITHDRAWN' : 'OPEN';
 }
-function explicitMatchRequested(text: string | undefined): boolean {
-  if (text === undefined || text.length === 0) return false;
-  return MATCH_INTENT.test(text);
+export function explicitMatchRequested(text: string | undefined): boolean {
+  const normalized = text?.trim();
+  if (!normalized || normalized.length > 4096) return false;
+  if (NEGATED_MATCH_INTENT.test(normalized)) return false;
+  return MATCH_INTENT.test(normalized);
 }
 
 function missingFields(material: QuickFurnoWhatsAppTurnMaterialV2): readonly string[] {
@@ -158,4 +162,8 @@ export function buildWhatsAppClientIntelligence(
     opportunities: Object.freeze([]),
     nextBestAction,
   });
+}
+
+export function shouldRequestCoreMatch(material: QuickFurnoWhatsAppTurnMaterialV2): boolean {
+  return buildWhatsAppClientIntelligence(material)?.nextBestAction.action === 'REQUEST_MATCH';
 }

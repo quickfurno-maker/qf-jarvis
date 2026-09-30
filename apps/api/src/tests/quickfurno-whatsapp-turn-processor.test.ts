@@ -45,11 +45,73 @@ const material: QuickFurnoWhatsAppTurnMaterialV2 = Object.freeze({
   normalizedText: 'hello',
 });
 
+
+const readyMaterial: QuickFurnoWhatsAppTurnMaterialV2 = Object.freeze({
+  ...material,
+  normalizedText: 'Please send me 3 vendors nearby',
+  inbound: Object.freeze({
+    version: 1 as const,
+    messageType: 'text' as const,
+    normalizedText: 'Please send me 3 vendors nearby',
+  }),
+  clientJourney: Object.freeze({
+    version: 1 as const,
+    profileId: '44444444-4444-4444-8444-444444444444',
+    profileRevision: 2,
+    profileStatus: 'known' as const,
+    isFirstContact: false,
+    name: 'Rahul',
+    missing: Object.freeze([]),
+    activeRequirement: Object.freeze({
+      requirementId: '55555555-5555-4555-8555-555555555555',
+      revision: 4,
+      status: 'discovering' as const,
+      phase: 'SUMMARY' as const,
+      summaryConfirmed: true,
+      provenance: Object.freeze({
+        serviceInterest: 'user_stated' as const,
+        location: 'user_stated' as const,
+      }),
+      serviceInterest: 'INTERIOR_DESIGN',
+      location: 'BANER',
+    }),
+  }),
+  clientMatchDecision: Object.freeze({
+    version: 1 as const,
+    state: 'READY' as const,
+    requirementId: '55555555-5555-4555-8555-555555555555',
+    requirementRevision: 4,
+    leadId: '66666666-6666-4666-8666-666666666666',
+    assignmentCount: 0,
+    missingFields: Object.freeze([]),
+    reasonCode: 'CORE_MATCH_READY',
+    coreReady: true,
+    executionAuthorized: false as const,
+  }),
+});
+
+const matchedMaterial: QuickFurnoWhatsAppTurnMaterialV2 = Object.freeze({
+  ...readyMaterial,
+  clientMatchDecision: Object.freeze({
+    version: 1 as const,
+    state: 'MATCHED' as const,
+    requirementId: '55555555-5555-4555-8555-555555555555',
+    requirementRevision: 4,
+    leadId: '66666666-6666-4666-8666-666666666666',
+    assignmentCount: 3,
+    missingFields: Object.freeze([]),
+    reasonCode: 'STANDARD_VENDOR_BATCH_ALREADY_RELEASED',
+    coreReady: false,
+    executionAuthorized: false as const,
+  }),
+});
+
 function fixture(
   over: {
     materialRead?: () => Promise<QuickFurnoWhatsAppTurnMaterialV2>;
     contextRead?: () => Promise<{ readonly context: QuickFurnoWhatsAppConversationContextV1 }>;
     specialist?: (...args: unknown[]) => Promise<unknown>;
+    matchRequest?: (...args: unknown[]) => Promise<unknown>;
     write?: () => Promise<'queued' | 'stale'>;
   } = {},
 ) {
@@ -72,12 +134,15 @@ function fixture(
       (() =>
         Promise.resolve({ actor: 'RIYA', proposalId: 'prop.1', boundRevision: 7, body: 'reply' })),
   );
+  const matchRequest =
+    over.matchRequest === undefined ? undefined : vi.fn(over.matchRequest as never);
   const write = vi.fn(over.write ?? (() => Promise.resolve('queued' as const)));
   const processor = createQuickFurnoWhatsAppTurnProcessor({
     queue,
     materialReader: { read },
     conversationContextReader: { read: contextRead as never },
     specialistRuntime: { process: process as never },
+    ...(matchRequest === undefined ? {} : { clientMatchRequestWriter: { request: matchRequest as never } }),
     replyWriter: { write },
   });
   return {
@@ -90,6 +155,7 @@ function fixture(
     contextRead,
     context,
     process,
+    matchRequest,
     write,
   };
 }
@@ -165,6 +231,50 @@ describe('QuickFurno WhatsApp turn processor', () => {
     expect(await f.processor.processOne()).toBe('completed-no-reply');
     expect(f.write).not.toHaveBeenCalled();
     expect(f.complete).toHaveBeenCalledOnce();
+  });
+
+
+  it('executes deterministic Core matching before Riya and refreshes Core state', async () => {
+    let reads = 0;
+    const f = fixture({
+      materialRead: () => {
+        reads += 1;
+        return Promise.resolve(reads === 1 ? readyMaterial : matchedMaterial);
+      },
+      matchRequest: () =>
+        Promise.resolve({
+          protocol: 'qfj.client-match.request',
+          version: 1,
+          requestId: '77777777-7777-4777-8777-777777777777',
+          outcome: 'matched',
+          leadId: '66666666-6666-4666-8666-666666666666',
+          assignmentCount: 3,
+          reasonCode: 'STANDARD_VENDOR_BATCH_ALREADY_RELEASED',
+          providerAuthority: 'quickfurno-core',
+        }),
+    });
+    expect(await f.processor.processOne()).toBe('completed-queued');
+    expect(f.read).toHaveBeenCalledTimes(2);
+    expect(f.matchRequest).toHaveBeenCalledOnce();
+    expect(f.process).toHaveBeenCalledOnce();
+    expect(f.process).toHaveBeenCalledWith(matchedMaterial, f.context);
+    expect(f.matchRequest!.mock.invocationCallOrder[0]).toBeLessThan(
+      f.process.mock.invocationCallOrder[0]!,
+    );
+    expect(f.write).toHaveBeenCalledOnce();
+  });
+
+  it('releases before Riya when match execution transport is uncertain', async () => {
+    const f = fixture({
+      materialRead: () => Promise.resolve(readyMaterial),
+      matchRequest: () => Promise.reject(new QuickFurnoWhatsAppHttpError('request-failed')),
+    });
+    expect(await f.processor.processOne()).toBe('released-pre-agent');
+    expect(f.matchRequest).toHaveBeenCalledOnce();
+    expect(f.process).not.toHaveBeenCalled();
+    expect(f.write).not.toHaveBeenCalled();
+    expect(f.release).toHaveBeenCalledWith(ref.inboundMessageId);
+    expect(f.fail).not.toHaveBeenCalled();
   });
 
   it('fails closed if QuickFurno material disagrees with the durable reference', async () => {

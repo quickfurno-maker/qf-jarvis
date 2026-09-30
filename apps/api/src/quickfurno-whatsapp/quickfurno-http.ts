@@ -1,6 +1,9 @@
 import { createHash, createPrivateKey, sign, type KeyObject } from 'node:crypto';
 import { parseCoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import {
+  QFJ_CLIENT_MATCH_REQUEST_PATH,
+  QFJ_CLIENT_MATCH_REQUEST_PROTOCOL,
+  QFJ_CLIENT_MATCH_REQUEST_SIGNING_DOMAIN,
   QFJ_WHATSAPP_CONVERSATION_CONTEXT_PATH,
   QFJ_WHATSAPP_CONVERSATION_CONTEXT_PROTOCOL,
   QFJ_WHATSAPP_CONVERSATION_CONTEXT_SIGNING_DOMAIN,
@@ -18,6 +21,7 @@ import {
   type QuickFurnoClientJourneySnapshotV1,
   type QuickFurnoClientJourneySnapshotV2,
   type QuickFurnoClientMatchDecisionV1,
+  type QuickFurnoClientMatchRequestResultV1,
   type QuickFurnoClientVendorJourneyV1,
   type QuickFurnoCoreAvailabilitySnapshotV1,
   type QuickFurnoLeadQualificationMaterialV1,
@@ -1625,6 +1629,142 @@ export function createQuickFurnoWhatsAppAuthorityReader(
         throw new QuickFurnoWhatsAppHttpError('response-invalid');
       }
       return authority;
+    },
+  });
+}
+
+export interface QuickFurnoClientMatchRequestWriter {
+  request(input: {
+    readonly material: QuickFurnoWhatsAppTurnMaterialV2;
+  }): Promise<QuickFurnoClientMatchRequestResultV1>;
+}
+
+export function createQuickFurnoClientMatchRequestWriter(
+  config: QuickFurnoWhatsAppHttpConfig,
+): QuickFurnoClientMatchRequestWriter {
+  const { key, timeoutMs } = parsePrivateKey(config);
+
+  return Object.freeze({
+    async request(input: { readonly material: QuickFurnoWhatsAppTurnMaterialV2 }) {
+      const material = input.material;
+      const journey = material.clientJourney;
+      const match = material.clientMatchDecision;
+      if (
+        material.assignedActor !== 'RIYA' ||
+        material.subjectType !== 'client' ||
+        journey === undefined ||
+        match === undefined ||
+        match.state !== 'READY' ||
+        !match.coreReady ||
+        match.executionAuthorized !== false ||
+        match.leadId === undefined ||
+        match.requirementId !== journey.activeRequirement.requirementId ||
+        match.requirementRevision !== journey.activeRequirement.revision
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
+
+      const requestId = config.requestId();
+      const issuedAt = config.clock();
+      if (!UUID.test(requestId) || !INSTANT.test(issuedAt) || !Number.isFinite(Date.parse(issuedAt))) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-config');
+      }
+
+      const body = JSON.stringify({
+        protocol: QFJ_CLIENT_MATCH_REQUEST_PROTOCOL,
+        version: 1,
+        caller: CALLER,
+        audience: AUDIENCE,
+        requestId,
+        issuedAt,
+        tenantId: material.tenantId,
+        conversationId: material.conversationId,
+        inboundMessageId: material.inboundMessageId,
+        expectedConversationRevision: material.revision,
+        profileId: journey.profileId,
+        expectedProfileRevision: journey.profileRevision,
+        requirementId: journey.activeRequirement.requirementId,
+        expectedRequirementRevision: journey.activeRequirement.revision,
+        leadId: match.leadId,
+        reasonCode: 'CLIENT_MATCH_REQUEST_READY',
+      });
+
+      const response = await signedPost({
+        config,
+        key,
+        timeoutMs,
+        path: QFJ_CLIENT_MATCH_REQUEST_PATH,
+        domain: QFJ_CLIENT_MATCH_REQUEST_SIGNING_DOMAIN,
+        requestId,
+        issuedAt,
+        body,
+      });
+      if (![200, 403, 409, 503].includes(response.status)) {
+        throw new QuickFurnoWhatsAppHttpError('request-failed');
+      }
+      const text = await response.text();
+      if (
+        Buffer.byteLength(text, 'utf8') < 2 ||
+        Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+
+      let decoded: unknown;
+      try {
+        decoded = JSON.parse(text);
+      } catch {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      if (!isRecord(decoded)) throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      const allowedOutcomes = [
+        'matched',
+        'partially_matched',
+        'waiting_for_supply',
+        'already_resolved',
+        'not_ready',
+        'blocked',
+        'stale',
+        'retry_later',
+      ] as const;
+      if (
+        !onlyKeys(decoded, [
+          'protocol',
+          'version',
+          'requestId',
+          'outcome',
+          'leadId',
+          'assignmentCount',
+          'reasonCode',
+          'providerAuthority',
+        ]) ||
+        decoded['protocol'] !== QFJ_CLIENT_MATCH_REQUEST_PROTOCOL ||
+        decoded['version'] !== 1 ||
+        decoded['requestId'] !== requestId ||
+        typeof decoded['outcome'] !== 'string' ||
+        !(allowedOutcomes as readonly string[]).includes(decoded['outcome']) ||
+        decoded['leadId'] !== match.leadId ||
+        typeof decoded['assignmentCount'] !== 'number' ||
+        !Number.isSafeInteger(decoded['assignmentCount']) ||
+        decoded['assignmentCount'] < 0 ||
+        decoded['assignmentCount'] > 6 ||
+        typeof decoded['reasonCode'] !== 'string' ||
+        !ID.test(decoded['reasonCode']) ||
+        decoded['providerAuthority'] !== 'quickfurno-core'
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+
+      return Object.freeze({
+        protocol: QFJ_CLIENT_MATCH_REQUEST_PROTOCOL,
+        version: 1 as const,
+        requestId,
+        outcome: decoded['outcome'] as QuickFurnoClientMatchRequestResultV1['outcome'],
+        leadId: match.leadId,
+        assignmentCount: decoded['assignmentCount'],
+        reasonCode: decoded['reasonCode'],
+        providerAuthority: 'quickfurno-core' as const,
+      });
     },
   });
 }

@@ -58,6 +58,7 @@ import {
 import { createFileGroqCredentialBinding } from '../secrets/file-groq-credential-binding.js';
 import { createFileOpenAICredentialBinding } from '../secrets/file-openai-credential-binding.js';
 import {
+  createQuickFurnoClientMatchRequestWriter,
   createQuickFurnoWhatsAppAuthorityReader,
   createQuickFurnoWhatsAppConversationContextReader,
   createQuickFurnoWhatsAppMaterialReader,
@@ -572,6 +573,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       materialReader: createQuickFurnoWhatsAppMaterialReader(httpConfig),
       conversationContextReader: createQuickFurnoWhatsAppConversationContextReader(httpConfig),
       specialistRuntime,
+      clientMatchRequestWriter: createQuickFurnoClientMatchRequestWriter(httpConfig),
       replyWriter: createQuickFurnoWhatsAppReplyWriter(httpConfig),
     });
 

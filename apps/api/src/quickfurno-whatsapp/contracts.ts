@@ -34,6 +34,11 @@ export const QFJ_WHATSAPP_REPLY_QUALIFICATION_SIGNING_DOMAIN =
   'qfj.whatsapp.reply.http.sig.v3' as const;
 export const QFJ_WHATSAPP_REPLY_JOURNEY_SIGNING_DOMAIN =
   'qfj.whatsapp.reply.http.sig.v4' as const;
+export const QFJ_CLIENT_MATCH_REQUEST_PROTOCOL = 'qfj.client-match.request' as const;
+export const QFJ_CLIENT_MATCH_REQUEST_VERSION = 1 as const;
+export const QFJ_CLIENT_MATCH_REQUEST_PATH = '/api/internal/jarvis/client-match-request' as const;
+export const QFJ_CLIENT_MATCH_REQUEST_SIGNING_DOMAIN =
+  'qfj.client-match.request.http.sig.v1' as const;
 
 export type QuickFurnoWhatsAppAgent = 'AAROHI' | 'ANISHA' | 'RIYA';
 export type QuickFurnoWhatsAppAuthorityActor = QuickFurnoWhatsAppAgent | 'HUMAN' | 'SYSTEM';
@@ -214,6 +219,27 @@ export interface QuickFurnoClientMatchDecisionV1 {
   readonly reasonCode: string;
   readonly coreReady: boolean;
   readonly executionAuthorized: false;
+}
+
+export type QuickFurnoClientMatchRequestOutcome =
+  | 'matched'
+  | 'partially_matched'
+  | 'waiting_for_supply'
+  | 'already_resolved'
+  | 'not_ready'
+  | 'blocked'
+  | 'stale'
+  | 'retry_later';
+
+export interface QuickFurnoClientMatchRequestResultV1 {
+  readonly protocol: typeof QFJ_CLIENT_MATCH_REQUEST_PROTOCOL;
+  readonly version: 1;
+  readonly requestId: string;
+  readonly outcome: QuickFurnoClientMatchRequestOutcome;
+  readonly leadId: string;
+  readonly assignmentCount: number;
+  readonly reasonCode: string;
+  readonly providerAuthority: 'quickfurno-core';
 }
 
 export type QuickFurnoClientVendorSatisfactionState =

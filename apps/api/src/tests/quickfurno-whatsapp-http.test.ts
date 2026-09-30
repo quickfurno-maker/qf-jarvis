@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync, verify } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  createQuickFurnoClientMatchRequestWriter,
   createQuickFurnoWhatsAppAuthorityReader,
   createQuickFurnoWhatsAppConversationContextReader,
   createQuickFurnoWhatsAppMaterialReader,
@@ -8,6 +9,8 @@ import {
   type QuickFurnoWhatsAppHttpPost,
 } from '../quickfurno-whatsapp/quickfurno-http.js';
 import {
+  QFJ_CLIENT_MATCH_REQUEST_PATH,
+  QFJ_CLIENT_MATCH_REQUEST_SIGNING_DOMAIN,
   QFJ_WHATSAPP_CONVERSATION_CONTEXT_PATH,
   QFJ_WHATSAPP_CONVERSATION_CONTEXT_SIGNING_DOMAIN,
   QFJ_WHATSAPP_REPLY_PATH,
@@ -16,6 +19,7 @@ import {
   QFJ_WHATSAPP_REPLY_SIGNING_DOMAIN,
   QFJ_WHATSAPP_TURN_MATERIAL_PATH,
   QFJ_WHATSAPP_TURN_MATERIAL_SIGNING_DOMAIN,
+  type QuickFurnoWhatsAppTurnMaterialV2,
 } from '../quickfurno-whatsapp/contracts.js';
 
 const keys = generateKeyPairSync('ed25519');
@@ -319,6 +323,133 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
     });
   });
 
+
+
+  it('signs a bounded client match request with no vendor selection or count', async () => {
+    let captured: Record<string, unknown> | undefined;
+    const post: QuickFurnoWhatsAppHttpPost = (url, init) => {
+      expect(url).toBe('https://quickfurno.example/api/internal/jarvis/client-match-request');
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      captured = request;
+      const signature = init.headers['x-qfj-signature'];
+      if (signature === undefined) throw new Error('signature missing');
+      expect(
+        verify(
+          null,
+          Buffer.from(
+            signingInput(
+              QFJ_CLIENT_MATCH_REQUEST_SIGNING_DOMAIN,
+              QFJ_CLIENT_MATCH_REQUEST_PATH,
+              String(request['requestId']),
+              String(request['issuedAt']),
+              init.body,
+            ),
+            'utf8',
+          ),
+          keys.publicKey,
+          Buffer.from(signature, 'base64url'),
+        ),
+      ).toBe(true);
+      return Promise.resolve({
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              protocol: 'qfj.client-match.request',
+              version: 1,
+              requestId: request['requestId'],
+              outcome: 'matched',
+              leadId: request['leadId'],
+              assignmentCount: 3,
+              reasonCode: 'STANDARD_VENDOR_BATCH_ALREADY_RELEASED',
+              providerAuthority: 'quickfurno-core',
+            }),
+          ),
+      });
+    };
+
+    const material: QuickFurnoWhatsAppTurnMaterialV2 = {
+      protocol: 'qfj.whatsapp.turn-material',
+      version: 2,
+      requestId: '77777777-7777-4777-8777-777777777777',
+      tenantId: 'quickfurno',
+      conversationId: '22222222-2222-4222-8222-222222222222',
+      revision: 7,
+      assignedActor: 'RIYA',
+      subjectType: 'client',
+      partyType: 'CLIENT',
+      conversationState: 'OPEN',
+      jarvisAllowed: true,
+      dataClass: 'HOSTED_ALLOWED',
+      humanTakeover: false,
+      aiPaused: false,
+      cancelled: false,
+      subjectStatus: 'clear',
+      observedAt: '2026-09-18T12:00:00.000Z',
+      inboundMessageId: '33333333-3333-4333-8333-333333333333',
+      receivedAt: '2026-09-18T12:00:00.000Z',
+      inbound: {
+        version: 1,
+        messageType: 'text',
+        normalizedText: 'Please send me 3 vendors nearby',
+      },
+      normalizedText: 'Please send me 3 vendors nearby',
+      clientJourney: {
+        version: 1,
+        profileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        profileRevision: 5,
+        profileStatus: 'known',
+        isFirstContact: false,
+        name: 'Rahul',
+        missing: [],
+        activeRequirement: {
+          requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          revision: 7,
+          status: 'ready_for_lead',
+          phase: 'SUMMARY',
+          summaryConfirmed: true,
+          provenance: {
+            serviceInterest: 'user_stated',
+            location: 'user_stated',
+          },
+          serviceInterest: 'INTERIOR_DESIGN',
+          location: 'BANER',
+        },
+      },
+      clientMatchDecision: {
+        version: 1,
+        state: 'READY',
+        requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        requirementRevision: 7,
+        leadId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        assignmentCount: 0,
+        missingFields: [],
+        reasonCode: 'CORE_MATCH_READY',
+        coreReady: true,
+        executionAuthorized: false,
+      },
+    };
+
+    const result = await createQuickFurnoClientMatchRequestWriter(config(post)).request({ material });
+    expect(result).toMatchObject({ outcome: 'matched', assignmentCount: 3 });
+    expect(captured).toMatchObject({
+      protocol: 'qfj.client-match.request',
+      version: 1,
+      conversationId: material.conversationId,
+      inboundMessageId: material.inboundMessageId,
+      expectedConversationRevision: 7,
+      profileId: material.clientJourney!.profileId,
+      expectedProfileRevision: 5,
+      requirementId: material.clientJourney!.activeRequirement.requirementId,
+      expectedRequirementRevision: 7,
+      leadId: material.clientMatchDecision!.leadId,
+      reasonCode: 'CLIENT_MATCH_REQUEST_READY',
+    });
+    const serialized = JSON.stringify(captured).toLowerCase();
+    expect(serialized).not.toContain('vendorid');
+    expect(serialized).not.toContain('vendorcount');
+    expect(serialized).not.toContain('requestedvendor');
+  });
 
   it('accepts a coherent Core vendor-journey summary bound to matching state', async () => {
     const post: QuickFurnoWhatsAppHttpPost = (_url, init) => {
