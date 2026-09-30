@@ -107,6 +107,65 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
     });
   });
 
+
+  it('requests matching immediately when Core says the requirement is READY', () => {
+    const snapshot = buildWhatsAppClientIntelligence(
+      material({
+        normalizedText: 'Please send me 3 vendors nearby',
+        clientMatchDecision: {
+          version: 1,
+          state: 'READY',
+          requirementId: 'requirement.1',
+          requirementRevision: 7,
+          leadId: 'lead.1',
+          assignmentCount: 0,
+          missingFields: [],
+          reasonCode: 'MATCH_READY',
+          coreReady: true,
+          executionAuthorized: false,
+        },
+      }),
+    );
+
+    expect(snapshot?.nextBestAction).toMatchObject({
+      action: 'REQUEST_MATCH',
+      reasonCode: 'CLIENT_MATCH_REQUEST_READY',
+      requiresCoreDecision: true,
+      businessEffect: false,
+      executionAuthorized: false,
+    });
+  });
+
+  it('asks Core-reported enrichment fields before requesting matching', () => {
+    const snapshot = buildWhatsAppClientIntelligence(
+      material({
+        normalizedText: 'Connect me with three vendors',
+        clientJourney: {
+          ...material().clientJourney!,
+          missing: [],
+        },
+        clientMatchDecision: {
+          version: 1,
+          state: 'NEEDS_ENRICHMENT',
+          requirementId: 'requirement.1',
+          requirementRevision: 7,
+          assignmentCount: 0,
+          missingFields: ['location'],
+          reasonCode: 'MATCH_LOCATION_REQUIRED',
+          coreReady: false,
+          executionAuthorized: false,
+        },
+      }),
+    );
+
+    expect(snapshot?.nextBestAction).toMatchObject({
+      action: 'ASK_MISSING_FIELD',
+      reasonCode: 'MATCH_REQUIRED_FIELD_MISSING',
+      requiredFieldRef: 'location',
+      requiresCoreDecision: false,
+    });
+  });
+
   it('does not create Client OS context when Core supplies no client journey', () => {
     expect(buildWhatsAppClientIntelligence(material({ clientJourney: undefined }))).toBeUndefined();
   });

@@ -193,6 +193,29 @@ export interface QuickFurnoClientJourneySnapshotV2 extends Omit<
 export type QuickFurnoClientJourneySnapshot =
   QuickFurnoClientJourneySnapshotV1 | QuickFurnoClientJourneySnapshotV2;
 
+export type QuickFurnoClientMatchState =
+  | 'REQUIREMENT_INCOMPLETE'
+  | 'LEAD_REQUIRED'
+  | 'NEEDS_ENRICHMENT'
+  | 'READY'
+  | 'PARTIALLY_MATCHED'
+  | 'MATCHED'
+  | 'WAITING_FOR_SUPPLY'
+  | 'BLOCKED';
+
+export interface QuickFurnoClientMatchDecisionV1 {
+  readonly version: 1;
+  readonly state: QuickFurnoClientMatchState;
+  readonly requirementId: string;
+  readonly requirementRevision: number;
+  readonly leadId?: string;
+  readonly assignmentCount: number;
+  readonly missingFields: readonly string[];
+  readonly reasonCode: string;
+  readonly coreReady: boolean;
+  readonly executionAuthorized: false;
+}
+
 export interface QuickFurnoCoreAvailabilitySnapshotV1 {
   readonly version: 1;
   readonly snapshotRef: string;
@@ -217,6 +240,8 @@ export interface QuickFurnoWhatsAppTurnMaterialV2 extends Omit<
   readonly normalizedText?: string;
   /** Present only for the upgraded Riya client-memory lane. */
   readonly clientJourney?: QuickFurnoClientJourneySnapshot;
+  /** Current QuickFurno Core decision about whether the active requirement may enter matching. */
+  readonly clientMatchDecision?: QuickFurnoClientMatchDecisionV1;
   /** Current QuickFurno Core service/city authority captured for the same Riya turn. */
   readonly coreAvailability?: QuickFurnoCoreAvailabilitySnapshotV1;
 }

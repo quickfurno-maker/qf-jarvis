@@ -17,6 +17,7 @@ import {
   type QuickFurnoClientJourneySnapshot,
   type QuickFurnoClientJourneySnapshotV1,
   type QuickFurnoClientJourneySnapshotV2,
+  type QuickFurnoClientMatchDecisionV1,
   type QuickFurnoCoreAvailabilitySnapshotV1,
   type QuickFurnoLeadQualificationMaterialV1,
   type QuickFurnoQualificationProposal,
@@ -621,8 +622,6 @@ function parseClientJourneyV1(value: unknown): QuickFurnoClientJourneySnapshotV1
     ...(name === undefined ? (['name'] as const) : []),
     ...(requirementValues.serviceInterest === undefined ? (['serviceInterest'] as const) : []),
     ...(requirementValues.location === undefined ? (['location'] as const) : []),
-    ...(requirementValues.budget === undefined ? (['budget'] as const) : []),
-    ...(requirementValues.timeline === undefined ? (['timeline'] as const) : []),
   ];
   if (
     missing.length !== expectedMissing.length ||
@@ -630,15 +629,12 @@ function parseClientJourneyV1(value: unknown): QuickFurnoClientJourneySnapshotV1
   ) {
     return null;
   }
-  const firstContact = name === undefined && Object.keys(requirementValues).length === 0;
-  if (value['isFirstContact'] !== firstContact) return null;
-
   return Object.freeze({
     version: 1 as const,
     profileId: value['profileId'],
     profileRevision: value['profileRevision'],
     profileStatus: value['profileStatus'] as QuickFurnoClientJourneySnapshotV1['profileStatus'],
-    isFirstContact: firstContact,
+    isFirstContact: value['isFirstContact'],
     ...(name === undefined ? {} : { name }),
     ...(preferredLanguage === undefined
       ? {}
@@ -817,6 +813,83 @@ function parseClientJourney(value: unknown): QuickFurnoClientJourneySnapshot | n
   return value['version'] === 2 ? parseClientJourneyV2(value) : parseClientJourneyV1(value);
 }
 
+function parseClientMatchDecision(
+  value: unknown,
+  journey: QuickFurnoClientJourneySnapshot,
+): QuickFurnoClientMatchDecisionV1 | null {
+  if (!isRecord(value)) return null;
+  if (
+    !onlyKeys(value, [
+      'version',
+      'state',
+      'requirementId',
+      'requirementRevision',
+      'leadId',
+      'assignmentCount',
+      'missingFields',
+      'reasonCode',
+      'coreReady',
+      'executionAuthorized',
+    ]) ||
+    value['version'] !== 1 ||
+    typeof value['state'] !== 'string' ||
+    ![
+      'REQUIREMENT_INCOMPLETE',
+      'LEAD_REQUIRED',
+      'NEEDS_ENRICHMENT',
+      'READY',
+      'PARTIALLY_MATCHED',
+      'MATCHED',
+      'WAITING_FOR_SUPPLY',
+      'BLOCKED',
+    ].includes(value['state']) ||
+    typeof value['requirementId'] !== 'string' ||
+    !UUID.test(value['requirementId']) ||
+    value['requirementId'] !== journey.activeRequirement.requirementId ||
+    typeof value['requirementRevision'] !== 'number' ||
+    !Number.isSafeInteger(value['requirementRevision']) ||
+    value['requirementRevision'] < 0 ||
+    value['requirementRevision'] !== journey.activeRequirement.revision ||
+    typeof value['assignmentCount'] !== 'number' ||
+    !Number.isSafeInteger(value['assignmentCount']) ||
+    value['assignmentCount'] < 0 ||
+    value['assignmentCount'] > 6 ||
+    !Array.isArray(value['missingFields']) ||
+    value['missingFields'].length > 16 ||
+    value['missingFields'].some((field) => typeof field !== 'string' || !ID.test(field)) ||
+    new Set(value['missingFields']).size !== value['missingFields'].length ||
+    typeof value['reasonCode'] !== 'string' ||
+    !ID.test(value['reasonCode']) ||
+    typeof value['coreReady'] !== 'boolean' ||
+    value['executionAuthorized'] !== false
+  ) return null;
+  const leadId = value['leadId'];
+  if (leadId !== undefined && (typeof leadId !== 'string' || !UUID.test(leadId))) return null;
+  const missingFields = value['missingFields'] as string[];
+  const requiresMissingFields =
+    value['state'] === 'REQUIREMENT_INCOMPLETE' || value['state'] === 'NEEDS_ENRICHMENT';
+  if (requiresMissingFields && missingFields.length === 0) return null;
+  if (!requiresMissingFields && missingFields.length > 0) return null;
+  if (value['state'] === 'READY' && (!value['coreReady'] || leadId === undefined)) return null;
+  if (value['state'] !== 'READY' && value['coreReady']) return null;
+  if (value['state'] === 'MATCHED' && value['assignmentCount'] < 3) return null;
+  if (value['state'] === 'PARTIALLY_MATCHED' && (value['assignmentCount'] < 1 || value['assignmentCount'] >= 3)) return null;
+  if (['REQUIREMENT_INCOMPLETE', 'LEAD_REQUIRED', 'NEEDS_ENRICHMENT', 'READY', 'WAITING_FOR_SUPPLY', 'BLOCKED'].includes(value['state']) &&
+      value['assignmentCount'] !== 0) return null;
+  return Object.freeze({
+    version: 1 as const,
+    state: value['state'] as QuickFurnoClientMatchDecisionV1['state'],
+    requirementId: value['requirementId'],
+    requirementRevision: value['requirementRevision'],
+    ...(leadId === undefined ? {} : { leadId }),
+    assignmentCount: value['assignmentCount'],
+    missingFields: Object.freeze([...missingFields]),
+    reasonCode: value['reasonCode'],
+    coreReady: value['coreReady'],
+    executionAuthorized: false as const,
+  });
+}
+
 function parseCoreAvailability(value: unknown): QuickFurnoCoreAvailabilitySnapshotV1 | null {
   try {
     return parseCoreServiceAvailabilitySnapshotV1(value);
@@ -882,6 +955,7 @@ function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTur
     'inbound',
     'normalizedText',
     'clientJourney',
+    'clientMatchDecision',
     'coreAvailability',
   ];
   if (!onlyKeys(value, allowed)) return null;
@@ -926,14 +1000,21 @@ function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTur
 
   const clientJourney =
     value['clientJourney'] === undefined ? undefined : parseClientJourney(value['clientJourney']);
+  const clientMatchDecision =
+    value['clientMatchDecision'] === undefined
+      ? undefined
+      : clientJourney === undefined || clientJourney === null
+        ? null
+        : parseClientMatchDecision(value['clientMatchDecision'], clientJourney);
   const coreAvailability =
     value['coreAvailability'] === undefined
       ? undefined
       : parseCoreAvailability(value['coreAvailability']);
-  if (clientJourney === null || coreAvailability === null) {
+  if (clientJourney === null || clientMatchDecision === null || coreAvailability === null) {
     return null;
   }
-  const hasRiyaContext = clientJourney !== undefined || coreAvailability !== undefined;
+  const hasRiyaContext =
+    clientJourney !== undefined || clientMatchDecision !== undefined || coreAvailability !== undefined;
   if (
     hasRiyaContext &&
     (parsedAuthority.assignedActor !== 'RIYA' ||
@@ -954,6 +1035,7 @@ function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTur
     inbound,
     ...(normalizedText === undefined ? {} : { normalizedText }),
     ...(clientJourney === undefined ? {} : { clientJourney }),
+    ...(clientMatchDecision === undefined ? {} : { clientMatchDecision }),
     ...(coreAvailability === undefined ? {} : { coreAvailability }),
   });
 }

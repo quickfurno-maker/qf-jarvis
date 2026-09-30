@@ -24,6 +24,10 @@ function explicitMatchRequested(text: string | undefined): boolean {
 }
 
 function missingFields(material: QuickFurnoWhatsAppTurnMaterialV2): readonly string[] {
+  const match = material.clientMatchDecision;
+  if (match?.state === 'REQUIREMENT_INCOMPLETE' || match?.state === 'NEEDS_ENRICHMENT') {
+    return Object.freeze([...match.missingFields]);
+  }
   const journey = material.clientJourney;
   if (journey === undefined) return Object.freeze([]);
   return Object.freeze([...journey.missing]);
@@ -43,14 +47,16 @@ export function buildWhatsAppClientIntelligence(
   if (journey === undefined) return undefined;
 
   const matchRequested = explicitMatchRequested(material.normalizedText);
+  const matchDecision = material.clientMatchDecision;
   const missingMandatoryFieldRefs = matchRequested ? missingFields(material) : Object.freeze([]);
+  const vendorsReleased = matchDecision?.assignmentCount ?? 0;
   const journeyState: ClientIntelligenceSnapshotV1['journey'] = Object.freeze({
     followUpDue: false,
     satisfactionState: 'UNKNOWN',
     serviceRecoveryNeeded: false,
     reassignmentState: 'NONE',
     lifecycleState: lifecycleState(journey.activeRequirement.status),
-    vendorsReleased: 0,
+    vendorsReleased,
     vendorNoContactCount: 0,
     allReleasedVendorsContacted: false,
   });
@@ -62,9 +68,9 @@ export function buildWhatsAppClientIntelligence(
     explicitReassignmentRequested: false,
     extraVendorReviewRequested: false,
     matchRequested,
-    matchReady: false,
+    matchReady: matchDecision?.state === 'READY' && matchDecision.coreReady,
     missingMandatoryFieldRefs,
-    vendorsReleased: 0,
+    vendorsReleased,
     vendorNoContactCount: 0,
     allReleasedVendorsContacted: false,
     satisfactionKnown: false,
