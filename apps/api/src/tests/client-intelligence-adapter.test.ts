@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { createServiceBlueprintRegistry } from '@qf-jarvis/client-intelligence';
+
 import type { QuickFurnoWhatsAppTurnMaterialV2 } from '../quickfurno-whatsapp/contracts.js';
 import { buildWhatsAppClientIntelligence } from '../quickfurno-whatsapp/client-intelligence-adapter.js';
 
@@ -163,6 +165,58 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
       reasonCode: 'MATCH_REQUIRED_FIELD_MISSING',
       requiredFieldRef: 'location',
       requiresCoreDecision: false,
+    });
+  });
+
+
+  it('evaluates configured related-service opportunities without hardcoding category knowledge in Riya', () => {
+    const registry = createServiceBlueprintRegistry([
+      {
+        version: 1,
+        serviceRef: 'INTERIOR_DESIGN',
+        coreCategoryRef: 'INTERIOR_DESIGN',
+        qualification: { mandatoryFieldRefs: [], optionalFieldRefs: [] },
+        relatedServices: [
+          {
+            targetServiceRef: 'PAINTING',
+            relevance: 'HIGH',
+            timing: { sourceState: 'ACTIVE' },
+          },
+        ],
+      },
+      {
+        version: 1,
+        serviceRef: 'PAINTING',
+        coreCategoryRef: 'PAINTING',
+        qualification: { mandatoryFieldRefs: [], optionalFieldRefs: [] },
+        relatedServices: [],
+      },
+    ]);
+    const snapshot = buildWhatsAppClientIntelligence(
+      material({
+        clientJourney: {
+          ...material().clientJourney!,
+          activeRequirement: {
+            ...material().clientJourney!.activeRequirement,
+            serviceInterest: 'INTERIOR_DESIGN',
+          },
+        },
+      }),
+      { serviceBlueprintRegistry: registry },
+    );
+
+    expect(snapshot?.opportunities).toStrictEqual([
+      {
+        serviceRef: 'PAINTING',
+        score: 75,
+        relevance: 'HIGH',
+        explicitInterest: false,
+      },
+    ]);
+    expect(snapshot?.nextBestAction).toMatchObject({
+      action: 'SURFACE_ADDITIONAL_SERVICE',
+      serviceRef: 'PAINTING',
+      reasonCode: 'NURTURE_OPPORTUNITY_READY',
     });
   });
 

@@ -17,6 +17,7 @@ import type {
   QuickFurnoWhatsAppWorkerMaterial,
   QuickFurnoWhatsAppWorkerProposal,
 } from './contracts.js';
+import type { ServiceBlueprintRegistry } from '@qf-jarvis/client-intelligence';
 import { buildWhatsAppClientIntelligence } from './client-intelligence-adapter.js';
 
 export interface QuickFurnoWhatsAppSpecialistRuntime {
@@ -34,6 +35,8 @@ type WhatsAppJarvisRuntime = ProposedReplyJarvisRuntime &
 export interface QuickFurnoWhatsAppSpecialistRuntimeConfig {
   readonly runtimeId: string;
   readonly jarvisRuntime: WhatsAppJarvisRuntime;
+  /** Optional CI-05 registry. Absence preserves the current no-opportunity production behavior. */
+  readonly serviceBlueprintRegistry?: ServiceBlueprintRegistry;
 }
 
 function isQualificationMaterial(
@@ -356,7 +359,11 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         const profile = material.clientJourney;
         const clientLifetime = riyaLifetimeContextFromMaterial(material);
         const availabilitySnapshot = material.coreAvailability;
-        const clientIntelligence = buildWhatsAppClientIntelligence(material);
+        const clientIntelligence = buildWhatsAppClientIntelligence(material, {
+          ...(config.serviceBlueprintRegistry === undefined
+            ? {}
+            : { serviceBlueprintRegistry: config.serviceBlueprintRegistry }),
+        });
         const result = await runCustomerTurnWorkflow(
           () =>
             processRiya({
