@@ -27,6 +27,10 @@
  * verbatim and whose digest is matched. Instructions smuggled into dynamic user content would be an
  * un-evaluated prompt that no gate ever reviewed.
  */
+import {
+  parseClientIntelligenceSnapshotV1,
+  type ClientIntelligenceSnapshotV1,
+} from '@qf-jarvis/client-intelligence';
 import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import { DISCOVERY_FIELDS_FROZEN } from '@qf-jarvis/riya-agent';
 import type { DiscoveryField, NeedDiscovery } from '@qf-jarvis/riya-agent';
@@ -65,7 +69,7 @@ const VALUE_KEY = {
  * `DEFAULT_GATEWAY_REQUEST_BUDGETS` are deliberately untouched, because one agent needing more room
  * is not a reason every agent should get it.
  */
-export const MAX_RIYA_USER_CONTENT_CHARS = 12_800;
+export const MAX_RIYA_USER_CONTENT_CHARS = 16_384;
 
 /** Build the ONE user message. Deterministic: the same inputs give byte-identical output. */
 export function buildRiyaUserContent(args: {
@@ -74,6 +78,8 @@ export function buildRiyaUserContent(args: {
   readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
   /** QuickFurno-owned client profile memory, minimized before it reaches the model. */
   readonly clientProfile?: RiyaClientProfileContextV1;
+  /** Rebuildable Jarvis advisory intelligence; never QuickFurno business authority. */
+  readonly clientIntelligence?: ClientIntelligenceSnapshotV1;
   /**
    * Governed knowledge for a grounded turn (RWC-P7), or absent.
    *
@@ -112,6 +118,9 @@ export function buildRiyaUserContent(args: {
     ...(args.clientProfile === undefined
       ? {}
       : { clientProfile: parseRiyaClientProfileContextV1(args.clientProfile) }),
+    ...(args.clientIntelligence === undefined
+      ? {}
+      : { clientIntelligence: parseClientIntelligenceSnapshotV1(args.clientIntelligence) }),
     message: message ?? '',
     // ONE additive sibling, and only when a grounded turn actually retrieved something (RWC-P7,
     // ADR-0103 s8). Structurally separate from `coreAvailability` for the same reason that is separate

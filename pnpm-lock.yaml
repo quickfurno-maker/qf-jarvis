@@ -628,6 +628,9 @@ importers:
       '@qf-jarvis/anisha-agent':
         specifier: workspace:*
         version: link:../anisha-agent
+      '@qf-jarvis/client-intelligence':
+        specifier: workspace:*
+        version: link:../client-intelligence
       '@qf-jarvis/conversation-control':
         specifier: workspace:*
         version: link:../conversation-control
@@ -1185,6 +1188,9 @@ importers:
 
   packages/riya-model-interaction:
     dependencies:
+      '@qf-jarvis/client-intelligence':
+        specifier: workspace:*
+        version: link:../client-intelligence
       '@qf-jarvis/core-service-availability-read':
         specifier: workspace:*
         version: link:../core-service-availability-read

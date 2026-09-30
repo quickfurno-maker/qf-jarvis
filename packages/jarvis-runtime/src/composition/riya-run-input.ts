@@ -12,6 +12,10 @@
  * or a snapshot with duplicate references is refused HERE, before the gateway.
  */
 import { createInboundEnvelope } from '@qf-jarvis/agent-runtime';
+import {
+  parseClientIntelligenceSnapshotV1,
+  type ClientIntelligenceSnapshotV1,
+} from '@qf-jarvis/client-intelligence';
 import type { InboundEnvelope, InboundEnvelopeInput } from '@qf-jarvis/agent-runtime';
 import { parseCoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
@@ -30,6 +34,7 @@ export type ProvenRiyaRunInput =
       readonly current: RiyaConversationContinuityStateV1;
       readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
       readonly clientProfile: RiyaClientProfileContextV1 | undefined;
+      readonly clientIntelligence: ClientIntelligenceSnapshotV1 | undefined;
     }
   | { readonly ok: false; readonly runId: string; readonly conversationId: string };
 
@@ -53,6 +58,7 @@ export function provenRiyaRunInput(input: unknown): ProvenRiyaRunInput {
     readonly continuity?: unknown;
     readonly availabilitySnapshot?: unknown;
     readonly clientProfile?: unknown;
+    readonly clientIntelligence?: unknown;
   };
   const envelopeValue = candidate.envelope;
   const continuityValue = candidate.continuity;
@@ -95,6 +101,15 @@ export function provenRiyaRunInput(input: unknown): ProvenRiyaRunInput {
   if (candidate.clientProfile !== undefined) {
     try {
       clientProfile = parseRiyaClientProfileContextV1(candidate.clientProfile);
+    } catch {
+      return failed;
+    }
+  }
+
+  let clientIntelligence: ClientIntelligenceSnapshotV1 | undefined;
+  if (candidate.clientIntelligence !== undefined) {
+    try {
+      clientIntelligence = parseClientIntelligenceSnapshotV1(candidate.clientIntelligence);
     } catch {
       return failed;
     }
@@ -156,5 +171,5 @@ export function provenRiyaRunInput(input: unknown): ProvenRiyaRunInput {
     return failed;
   }
 
-  return { ok: true, envelope, current, availabilitySnapshot, clientProfile };
+  return { ok: true, envelope, current, availabilitySnapshot, clientProfile, clientIntelligence };
 }

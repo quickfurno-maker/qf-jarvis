@@ -17,6 +17,7 @@
   // agent-runtime, so the graph stays acyclic. QFJ-P08-A (ADR-0075) adds
   // @qf-jarvis/conversation-control, a zod-only leaf, for the operator control surface.
   "references": [
+    { "path": "../client-intelligence/tsconfig.build.json" },
     { "path": "../agent-runtime/tsconfig.build.json" },
     { "path": "../core-decision-adapter/tsconfig.build.json" },
     { "path": "../model-reply-adapter/tsconfig.build.json" },

@@ -250,8 +250,8 @@ describe('the authority context in the one user message', () => {
     expect(userContent(state(), 'hello')).toBe(userContent(state(), 'hello'));
   });
 
-  it('the raised bound is 12288, and a payload at it is still sent', () => {
-    expect(MAX_RIYA_USER_CONTENT_CHARS).toBe(12_288);
+  it('the Client OS context bound is 16384, and a payload at it is still sent', () => {
+    expect(MAX_RIYA_USER_CONTENT_CHARS).toBe(16_384);
     const overhead = userContent(state(), '').length;
     const fits = 'y'.repeat(MAX_RIYA_USER_CONTENT_CHARS - overhead);
     expect(userContent(state(), fits).length).toBe(MAX_RIYA_USER_CONTENT_CHARS);

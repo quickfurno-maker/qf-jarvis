@@ -23,7 +23,9 @@
  * structured RWC-P6 action: those make zero model calls, and this method has nothing to write with.
  */
 import type { InboundEnvelope } from '@qf-jarvis/agent-runtime';
+import type { ClientIntelligenceSnapshotV1 } from '@qf-jarvis/client-intelligence';
 import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
+import type { RiyaClientProfileContextV1 } from '@qf-jarvis/riya-model-interaction';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 
 import type { JarvisCoreAuthorizedReplyV1 } from './core-authorized-reply.js';
@@ -40,6 +42,8 @@ export interface JarvisRiyaGroundedReplyInput {
    * owns the read. It is re-proved through the canonical constructor at this boundary.
    */
   readonly continuity: RiyaConversationContinuityStateV1;
+  readonly clientProfile?: RiyaClientProfileContextV1;
+  readonly clientIntelligence?: ClientIntelligenceSnapshotV1;
   /**
    * The CURRENT Core-owned availability, captured once for this turn (RWC-P5).
    *

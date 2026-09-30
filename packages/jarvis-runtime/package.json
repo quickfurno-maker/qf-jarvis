@@ -24,6 +24,7 @@
     "@qf-jarvis/aarohi-agent": "workspace:*",
     "@qf-jarvis/agent-runtime": "workspace:*",
     "@qf-jarvis/anisha-agent": "workspace:*",
+    "@qf-jarvis/client-intelligence": "workspace:*",
     "@qf-jarvis/conversation-control": "workspace:*",
     "@qf-jarvis/core-decision-adapter": "workspace:*",
     "@qf-jarvis/core-service-availability-read": "workspace:*",

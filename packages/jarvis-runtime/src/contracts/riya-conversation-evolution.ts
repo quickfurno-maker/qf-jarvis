@@ -17,6 +17,7 @@
  * free of persistence: the service that owns the store owns the read.
  */
 import type { InboundEnvelope } from '@qf-jarvis/agent-runtime';
+import type { ClientIntelligenceSnapshotV1 } from '@qf-jarvis/client-intelligence';
 import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 import type { RiyaConversationObservationBatchV1 } from '@qf-jarvis/riya-conversation-evolution';
@@ -59,6 +60,8 @@ export interface JarvisRiyaConversationEvolutionInput {
   readonly continuity: RiyaConversationContinuityStateV1;
   /** QuickFurno-owned person-level memory minimized for conversational use. */
   readonly clientProfile?: RiyaClientProfileContextV1;
+  /** Rebuildable Jarvis advisory intelligence, parsed again at the runtime boundary. */
+  readonly clientIntelligence?: ClientIntelligenceSnapshotV1;
   /**
    * The CURRENT Core-owned service availability, captured once for this turn (RWC-P5, ADR-0100).
    *

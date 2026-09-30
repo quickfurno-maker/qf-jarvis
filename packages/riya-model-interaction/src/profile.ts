@@ -16,6 +16,7 @@
  * the one-call answer can be *checked*; the reducer remains the phase and provenance authority, and
  * a disagreement refuses the whole structured result rather than trusting either side.
  */
+import type { ClientIntelligenceSnapshotV1 } from '@qf-jarvis/client-intelligence';
 import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import type {
   ModelReplyStructuredOutputProfile,
@@ -232,6 +233,7 @@ export function createRiyaConversationModelProfile(args: {
   readonly current: RiyaConversationContinuityStateV1;
   readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
   readonly clientProfile?: RiyaClientProfileContextV1;
+  readonly clientIntelligence?: ClientIntelligenceSnapshotV1;
   /**
    * The RWC-P7 grounded knowledge reader, or absent.
    *
@@ -255,6 +257,9 @@ export function createRiyaConversationModelProfile(args: {
         message: plan.normalizedText,
         availabilitySnapshot,
         ...(clientProfile === undefined ? {} : { clientProfile }),
+        ...(args.clientIntelligence === undefined
+          ? {}
+          : { clientIntelligence: args.clientIntelligence }),
         ...(grounded === undefined ? {} : { groundedKnowledge: grounded }),
       });
     },
@@ -263,7 +268,7 @@ export function createRiyaConversationModelProfile(args: {
       const wire = riyaProviderWireSchema.safeParse(value);
       if (
         wire.success &&
-        ((wire.data.profile.name === null) !== (wire.data.profile.provenance === null))
+        (wire.data.profile.name === null) !== (wire.data.profile.provenance === null)
       ) {
         return undefined;
       }
@@ -482,6 +487,7 @@ export function createRiyaGroundedReplyModelProfile(args: {
   readonly current: RiyaConversationContinuityStateV1;
   readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
   readonly clientProfile?: RiyaClientProfileContextV1;
+  readonly clientIntelligence?: ClientIntelligenceSnapshotV1;
   readonly groundedKnowledgeSource?: RiyaGroundedKnowledgeSource;
 }): ModelReplyStructuredOutputProfile {
   const { current, availabilitySnapshot } = args;
@@ -499,6 +505,9 @@ export function createRiyaGroundedReplyModelProfile(args: {
         message: plan.normalizedText,
         availabilitySnapshot,
         ...(clientProfile === undefined ? {} : { clientProfile }),
+        ...(args.clientIntelligence === undefined
+          ? {}
+          : { clientIntelligence: args.clientIntelligence }),
         ...(grounded === undefined ? {} : { groundedKnowledge: grounded }),
       });
     },

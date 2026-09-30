@@ -18,6 +18,7 @@
   // surface -- this contract is channel-neutral), the postgres store, `event-backbone`, and any
   // application.
   "references": [
+    { "path": "../client-intelligence/tsconfig.build.json" },
     { "path": "../model-reply-adapter/tsconfig.build.json" },
     // RWC-P5 (ADR-0100): the Core-owned availability READ contract. A type-and-parser
     // dependency only -- that package reaches nothing, and this one still invokes nothing. It is

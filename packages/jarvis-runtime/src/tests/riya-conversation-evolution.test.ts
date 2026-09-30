@@ -334,6 +334,20 @@ describe('it fails closed before the gateway, as a REFUSED run', () => {
     expect(invoker.invoked()).toBe(0);
   });
 
+  it('refuses malformed client intelligence before the gateway', async () => {
+    const invoker = recordingInvoker(riyaAnswer(continuity(), []));
+    const result = await runtimeWith({
+      gatewayInvoker: invoker,
+    }).processInboundForRiyaConversationEvolution({
+      envelope: envelope(),
+      continuity: continuity(),
+      availabilitySnapshot: SNAPSHOT,
+      clientIntelligence: { version: 99 } as never,
+    });
+    expectRefused(result);
+    expect(invoker.invoked()).toBe(0);
+  });
+
   it('refuses a continuity about a different tenant', async () => {
     const invoker = recordingInvoker(riyaAnswer(continuity(), []));
     expectRefused(
