@@ -41,3 +41,10 @@ export {
   createClientIntelligenceSnapshotV1,
   parseClientIntelligenceSnapshotV1,
 } from './snapshot.js';
+export {
+  buildClientIntelligenceContextV1,
+} from './context-builder.js';
+export type {
+  ClientDecisionContextV1,
+  ClientIntelligenceContextBuildInputV1,
+} from './context-builder.js';
