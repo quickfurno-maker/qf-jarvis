@@ -72,11 +72,11 @@ describe('QuickFurno production knowledge v1', () => {
       'vendor status is',
       'currently available vendor',
       'guaranteed lead volume',
-      '₹',
-      'rs.',
     ]) {
       expect(corpus).not.toContain(forbidden);
     }
+    expect(corpus).not.toMatch(/₹\s*\d/u);
+    expect(corpus).not.toMatch(/\brs\.?\s*\d/iu);
   });
 
   it('covers the three production agents without crossing agent authority', () => {
