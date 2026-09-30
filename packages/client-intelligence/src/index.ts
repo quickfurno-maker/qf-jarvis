@@ -41,6 +41,16 @@ export {
   createClientIntelligenceSnapshotV1,
   parseClientIntelligenceSnapshotV1,
 } from './snapshot.js';
+export {
+  createGovernedClientActionProposalV1,
+  GOVERNED_CLIENT_ACTION_KINDS,
+} from './client-action-planner.js';
+export type {
+  GovernedClientActionDraft,
+  GovernedClientActionKind,
+  GovernedClientActionPayload,
+  GovernedClientActionProposalV1,
+} from './client-action-planner.js';
 export { buildClientIntelligenceContextV1 } from './context-builder.js';
 export type {
   ClientDecisionContextV1,

@@ -407,7 +407,11 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
-  packages/client-intelligence: {}
+  packages/client-intelligence:
+    dependencies:
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/communication-authorization-runtime:
     dependencies:
