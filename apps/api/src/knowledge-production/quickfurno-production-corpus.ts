@@ -245,7 +245,7 @@ function approvalInstant(value: string): string {
   ) {
     throw new TypeError('quickfurno-knowledge-approval-invalid');
   }
-  return new Date(ms).toISOString();
+  return value;
 }
 
 function expiryFrom(instant: string): string {
