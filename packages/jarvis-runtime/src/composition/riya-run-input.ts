@@ -22,7 +22,9 @@ import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-
 import { createRiyaConversationContinuityState } from '@qf-jarvis/riya-conversation-continuity';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 import {
+  parseRiyaClientLifetimeContextV1,
   parseRiyaClientProfileContextV1,
+  type RiyaClientLifetimeContextV1,
   type RiyaClientProfileContextV1,
 } from '@qf-jarvis/riya-model-interaction';
 
@@ -35,6 +37,7 @@ export type ProvenRiyaRunInput =
       readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
       readonly clientProfile: RiyaClientProfileContextV1 | undefined;
       readonly clientIntelligence: ClientIntelligenceSnapshotV1 | undefined;
+      readonly clientLifetime: RiyaClientLifetimeContextV1 | undefined;
     }
   | { readonly ok: false; readonly runId: string; readonly conversationId: string };
 
@@ -59,6 +62,7 @@ export function provenRiyaRunInput(input: unknown): ProvenRiyaRunInput {
     readonly availabilitySnapshot?: unknown;
     readonly clientProfile?: unknown;
     readonly clientIntelligence?: unknown;
+    readonly clientLifetime?: unknown;
   };
   const envelopeValue = candidate.envelope;
   const continuityValue = candidate.continuity;
@@ -110,6 +114,19 @@ export function provenRiyaRunInput(input: unknown): ProvenRiyaRunInput {
   if (candidate.clientIntelligence !== undefined) {
     try {
       clientIntelligence = parseClientIntelligenceSnapshotV1(candidate.clientIntelligence);
+    } catch {
+      return failed;
+    }
+  }
+
+  let clientLifetime: RiyaClientLifetimeContextV1 | undefined;
+  if (candidate.clientLifetime !== undefined) {
+    try {
+      clientLifetime = parseRiyaClientLifetimeContextV1(candidate.clientLifetime);
+    } catch {
+      return failed;
+    }
+  }
     } catch {
       return failed;
     }
@@ -171,5 +188,13 @@ export function provenRiyaRunInput(input: unknown): ProvenRiyaRunInput {
     return failed;
   }
 
-  return { ok: true, envelope, current, availabilitySnapshot, clientProfile, clientIntelligence };
+  return {
+    ok: true,
+    envelope,
+    current,
+    availabilitySnapshot,
+    clientProfile,
+    clientIntelligence,
+    clientLifetime,
+  };
 }
