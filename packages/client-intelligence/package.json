@@ -1,0 +1,19 @@
+{
+  "name": "@qf-jarvis/client-intelligence",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Advisory QuickFurno client intelligence: configurable service blueprints, time-bounded interaction signals, service opportunities, and deterministic next-best-action planning. No business authority, persistence, transport, provider calls, or execution.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  }
+}
