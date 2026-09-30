@@ -79,6 +79,15 @@ describe('Riya v2 conversation quality', () => {
     expect(lower).toContain('if the first message already contains a requirement');
   });
 
+  it('uses returning-client lifetime context without treating history as current truth', () => {
+    expect(lower).toContain('"clientlifetime"');
+    expect(lower).toContain('historical context');
+    expect(lower).toContain('avoid blank-slate questions');
+    expect(lower).toContain("do not recite the client's history");
+    expect(lower).toContain('do not expose internal identifiers');
+    expect(lower).toContain('whether this is for that known property or another place');
+  });
+
   it('answers first and minimizes interrogation', () => {
     expect(lower).toContain('answer first, then ask');
     expect(lower).toContain('ask one question by default');
