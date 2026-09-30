@@ -3,16 +3,11 @@ import { isAbsolute } from 'node:path';
 
 import { closeDatabasePool, createDatabasePool } from '@qf-jarvis/event-backbone';
 import { createOpenAICompatibleEmbeddingPort } from '@qf-jarvis/openai-compatible-embedding-adapter';
-import {
-  buildStreamingKnowledgeRelease,
-  createPostgresKnowledgeIndexWriter,
-} from '@qf-jarvis/postgres-knowledge-index';
+import { createPostgresKnowledgeIndexWriter } from '@qf-jarvis/postgres-knowledge-index';
 
+import { createStreamingKnowledgeCandidateBuilder } from '../knowledge-freshness/create-knowledge-freshness-coordinator.js';
+import { buildQuickFurnoKnowledgeCandidate } from '../knowledge-production/build-quickfurno-knowledge-candidate.js';
 import { loadQuickFurnoKnowledgeCandidateConfig } from '../knowledge-production/knowledge-candidate-config.js';
-import {
-  createApprovedQuickFurnoKnowledgeSourceManifest,
-  deriveQuickFurnoKnowledgeReleaseRevision,
-} from '../knowledge-production/quickfurno-production-corpus.js';
 
 function configPathOf(argv: readonly string[]): string {
   if (argv.length !== 2 || argv[0] !== '--config') throw new Error('invalid-usage');
@@ -25,9 +20,6 @@ async function main(): Promise<void> {
   let pool: ReturnType<typeof createDatabasePool> | undefined;
   try {
     const config = loadQuickFurnoKnowledgeCandidateConfig(configPathOf(process.argv.slice(2)));
-    const manifest = createApprovedQuickFurnoKnowledgeSourceManifest(config.approval);
-    const revision = deriveQuickFurnoKnowledgeReleaseRevision(manifest);
-
     pool = createDatabasePool(config.database);
     const writer = createPostgresKnowledgeIndexWriter(pool);
     const embedding = createOpenAICompatibleEmbeddingPort({
@@ -42,12 +34,9 @@ async function main(): Promise<void> {
       maxInputChars: config.embedding.maxInputChars,
     });
 
-    const built = await buildStreamingKnowledgeRelease({
-      revision,
-      sources: manifest.sources.map((source) => source.document),
-      embedding,
-      writer,
-      activateAfterSeal: false,
+    const built = await buildQuickFurnoKnowledgeCandidate({
+      approval: config.approval,
+      builder: createStreamingKnowledgeCandidateBuilder({ embedding, writer }),
     });
 
     process.stdout.write(
