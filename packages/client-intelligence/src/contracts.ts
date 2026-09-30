@@ -139,7 +139,6 @@ export interface ClientNextBestAction {
   readonly executionAuthorized: false;
 }
 
-
 export const CLIENT_SATISFACTION_STATES = [
   'UNKNOWN',
   'SATISFIED',
@@ -148,12 +147,7 @@ export const CLIENT_SATISFACTION_STATES = [
 ] as const;
 export type ClientSatisfactionState = (typeof CLIENT_SATISFACTION_STATES)[number];
 
-export const CLIENT_REASSIGNMENT_STATES = [
-  'NONE',
-  'REQUESTED',
-  'AUTHORIZED',
-  'REJECTED',
-] as const;
+export const CLIENT_REASSIGNMENT_STATES = ['NONE', 'REQUESTED', 'AUTHORIZED', 'REJECTED'] as const;
 export type ClientReassignmentState = (typeof CLIENT_REASSIGNMENT_STATES)[number];
 
 export const CLIENT_LIFECYCLE_STATES = [

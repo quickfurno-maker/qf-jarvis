@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  createClientIntelligenceSnapshotV1,
-  parseClientIntelligenceSnapshotV1,
-} from '../index.js';
+import { createClientIntelligenceSnapshotV1, parseClientIntelligenceSnapshotV1 } from '../index.js';
 
 function validSnapshot() {
   return {
@@ -110,14 +107,12 @@ describe('CI-12 client intelligence snapshot', () => {
   });
 
   it('rejects unsupported versions and malformed confidence values', () => {
-    expect(() =>
-      parseClientIntelligenceSnapshotV1({ ...validSnapshot(), version: 2 }),
-    ).toThrow('client-intelligence-snapshot-version-invalid');
+    expect(() => parseClientIntelligenceSnapshotV1({ ...validSnapshot(), version: 2 })).toThrow(
+      'client-intelligence-snapshot-version-invalid',
+    );
 
     const candidate = validSnapshot() as Record<string, unknown>;
-    candidate['behaviour'] = [
-      { signalType: 'ENGAGEMENT', value: 'HIGH', confidence: 1.1 },
-    ];
+    candidate['behaviour'] = [{ signalType: 'ENGAGEMENT', value: 'HIGH', confidence: 1.1 }];
     expect(() => parseClientIntelligenceSnapshotV1(candidate)).toThrow(
       'client-intelligence-behaviour-invalid',
     );

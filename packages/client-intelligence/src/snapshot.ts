@@ -16,7 +16,8 @@ import { assertRef, assertUnit } from './validation.js';
 const MAX_OPPORTUNITIES = 5;
 
 function record(value: unknown, code: string): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new TypeError(code);
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw new TypeError(code);
   return value as Record<string, unknown>;
 }
 
@@ -44,11 +45,7 @@ function score(value: unknown, code: string): number {
   return value;
 }
 
-function enumValue<T extends string>(
-  value: unknown,
-  values: readonly T[],
-  code: string,
-): T {
+function enumValue<T extends string>(value: unknown, values: readonly T[], code: string): T {
   if (typeof value !== 'string' || !values.includes(value as T)) throw new TypeError(code);
   return value as T;
 }
@@ -93,14 +90,19 @@ function parseOpportunities(value: unknown): ClientIntelligenceSnapshotV1['oppor
   const parsed = value.map((entry) => {
     const row = record(entry, 'client-intelligence-opportunities-invalid');
     const serviceRef = row['serviceRef'];
-    if (typeof serviceRef !== 'string') throw new TypeError('client-intelligence-opportunities-invalid');
+    if (typeof serviceRef !== 'string')
+      throw new TypeError('client-intelligence-opportunities-invalid');
     assertRef(serviceRef, 'client-intelligence-opportunities-invalid');
     if (seen.has(serviceRef)) throw new TypeError('client-intelligence-opportunity-duplicate');
     seen.add(serviceRef);
     return Object.freeze({
       serviceRef,
       score: score(row['score'], 'client-intelligence-opportunities-invalid'),
-      relevance: enumValue(row['relevance'], SERVICE_RELEVANCE, 'client-intelligence-opportunities-invalid'),
+      relevance: enumValue(
+        row['relevance'],
+        SERVICE_RELEVANCE,
+        'client-intelligence-opportunities-invalid',
+      ),
       explicitInterest: bool(row['explicitInterest'], 'client-intelligence-opportunities-invalid'),
     });
   });
@@ -118,17 +120,20 @@ function parseNextBestAction(value: unknown): ClientNextBestAction {
     'client-intelligence-next-best-action-invalid',
   );
   const reasonCode = row['reasonCode'];
-  if (typeof reasonCode !== 'string') throw new TypeError('client-intelligence-next-best-action-invalid');
+  if (typeof reasonCode !== 'string')
+    throw new TypeError('client-intelligence-next-best-action-invalid');
   assertRef(reasonCode, 'client-intelligence-next-best-action-invalid');
 
   const requiredFieldRef = row['requiredFieldRef'];
   if (requiredFieldRef !== undefined) {
-    if (typeof requiredFieldRef !== 'string') throw new TypeError('client-intelligence-next-best-action-invalid');
+    if (typeof requiredFieldRef !== 'string')
+      throw new TypeError('client-intelligence-next-best-action-invalid');
     assertRef(requiredFieldRef, 'client-intelligence-next-best-action-invalid');
   }
   const serviceRef = row['serviceRef'];
   if (serviceRef !== undefined) {
-    if (typeof serviceRef !== 'string') throw new TypeError('client-intelligence-next-best-action-invalid');
+    if (typeof serviceRef !== 'string')
+      throw new TypeError('client-intelligence-next-best-action-invalid');
     assertRef(serviceRef, 'client-intelligence-next-best-action-invalid');
   }
   if (row['businessEffect'] !== false || row['executionAuthorized'] !== false) {
@@ -150,12 +155,16 @@ function parseNextBestAction(value: unknown): ClientNextBestAction {
 
 function parseJourney(value: unknown): ClientIntelligenceSnapshotV1['journey'] {
   const row = record(value, 'client-intelligence-journey-invalid');
-  const vendorsReleased = boundedCount(row['vendorsReleased'], 'client-intelligence-journey-invalid');
+  const vendorsReleased = boundedCount(
+    row['vendorsReleased'],
+    'client-intelligence-journey-invalid',
+  );
   const vendorNoContactCount = boundedCount(
     row['vendorNoContactCount'],
     'client-intelligence-journey-invalid',
   );
-  if (vendorNoContactCount > vendorsReleased) throw new TypeError('client-intelligence-journey-invalid');
+  if (vendorNoContactCount > vendorsReleased)
+    throw new TypeError('client-intelligence-journey-invalid');
   const allReleasedVendorsContacted = bool(
     row['allReleasedVendorsContacted'],
     'client-intelligence-journey-invalid',
