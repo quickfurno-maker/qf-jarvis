@@ -119,8 +119,10 @@ const KNOWLEDGE_OPERATOR_FILES: readonly string[] = Object.freeze([
   KNOWLEDGE_ACTIVATE_BIN,
   KNOWLEDGE_OPERATOR_CONFIG,
 ]);
-const isKnowledgeOperatorFile = (f: string, only: readonly string[] = KNOWLEDGE_OPERATOR_FILES): boolean =>
-  only.some((one) => normalise(f).endsWith(`/${one}`));
+const isKnowledgeOperatorFile = (
+  f: string,
+  only: readonly string[] = KNOWLEDGE_OPERATOR_FILES,
+): boolean => only.some((one) => normalise(f).endsWith(`/${one}`));
 
 const JF7_BIN = 'src/bin/run-quickfurno-whatsapp-production-worker.ts';
 const JF7_CONFIG = 'src/quickfurno-whatsapp/production-worker-config.ts';
@@ -597,7 +599,9 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     }
   });
 
-  it('exactly nine production modules name a database, with only reviewed config/pool seams', () => {
+  it(
+    'exactly nine production modules name a database, with only reviewed config/pool seams',
+    () => {
     const touching = productionFiles().filter((file) => {
       const code = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
       return (
@@ -673,7 +677,8 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     );
     // It composes; it does not configure. Nothing here builds a pool or reads a database setting.
     expect(operatorCode).not.toMatch(/createDatabasePool|createDatabaseConfig|DATABASE_URL/);
-  });
+    },
+  );
 
   it('production source creates no watcher or polling loop, and logs nothing', () => {
     for (const file of productionFiles()) {
