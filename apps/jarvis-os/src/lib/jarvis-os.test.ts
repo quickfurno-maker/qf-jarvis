@@ -562,6 +562,9 @@ describe('live operator capability remains contained behind reviewed seams', () 
     // The web shell and future mobile app share DTO contracts only. Runtime/database/provider
     // packages remain forbidden from the UI application.
     const ALLOWED = new Set([
+      '@qf-jarvis/agent-flow-governance',
+      '@qf-jarvis/agent-flow-registry',
+      '@qf-jarvis/agent-flow-trace-contract',
       '@qf-jarvis/control-plane-read-contract',
       '@qf-jarvis/operator-api-contract',
       '@qf-jarvis/operator-client-core',
@@ -603,6 +606,7 @@ describe('live operator capability remains contained behind reviewed seams', () 
       'src/components/shell/NotificationCenter.tsx', // local attention drawer only
       'src/components/shell/OperatorMenu.tsx', // menu toggle + sign-out submit
       'src/components/auth/LoginForm.tsx', // sign-in submit
+      'src/components/agent-flow/AgentFlowCanvas.tsx', // local trace/node selection only; no mutation route
       'src/components/operator/OperatorControls.tsx', // versioned commands only; Core authorizes
       'src/components/voice/LiveVoiceConsole.tsx', // voice media/session controls only
       'src/components/voice/VoiceStatusButton.tsx', // start/navigation control only

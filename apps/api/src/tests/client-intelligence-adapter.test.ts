@@ -354,6 +354,8 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
   });
 
   it('does not create Client OS context when Core supplies no client journey', () => {
-    expect(buildWhatsAppClientIntelligence(material({ clientJourney: undefined }))).toBeUndefined();
+    const withJourney = material();
+    const { clientJourney: _clientJourney, ...withoutJourney } = withJourney;
+    expect(buildWhatsAppClientIntelligence(withoutJourney)).toBeUndefined();
   });
 });

@@ -1,4 +1,4 @@
-import { mkdir, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import {
@@ -23,16 +23,37 @@ export function createAgentFlowTraceObservationWriter(
   config: AgentFlowTraceObservationWriterConfig,
 ): AgentFlowTraceObservationWriter {
   const events: AgentFlowTraceEvent[] = [];
+  let hydrated = false;
+
+  const retainNewest = (): void => {
+    if (events.length > MAX_TRACE_EVENTS) {
+      events.splice(0, events.length - MAX_TRACE_EVENTS);
+    }
+  };
+
+  const hydrateExisting = async (): Promise<void> => {
+    if (hydrated) return;
+    hydrated = true;
+    try {
+      const existing = parseAgentFlowTraceSnapshot(
+        JSON.parse(await readFile(config.filePath, { encoding: 'utf8' })),
+      );
+      if (existing.sourceRevision !== config.sourceRevision) return;
+      events.unshift(...existing.events.map((event) => Object.freeze({ ...event })));
+      retainNewest();
+    } catch {
+      // Missing, stale or malformed history is visibility-only; never fail customer work.
+    }
+  };
 
   return Object.freeze({
     record(event: AgentFlowTraceEvent): void {
       events.push(Object.freeze({ ...event }));
-      if (events.length > MAX_TRACE_EVENTS) {
-        events.splice(0, events.length - MAX_TRACE_EVENTS);
-      }
+      retainNewest();
     },
 
     async write(emittedAt: string): Promise<void> {
+      await hydrateExisting();
       const snapshot = parseAgentFlowTraceSnapshot({
         protocol: AGENT_FLOW_TRACE_SNAPSHOT_PROTOCOL,
         emittedAt,

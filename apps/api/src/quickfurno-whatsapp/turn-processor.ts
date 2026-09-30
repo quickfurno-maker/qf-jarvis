@@ -413,7 +413,17 @@ export function createQuickFurnoWhatsAppTurnProcessor(
     try {
       proposal = await traceNode(
         'riya.agent.specialist-runtime',
-        () => config.specialistRuntime.process(material, conversationContext),
+        () =>
+          config.traceSink === undefined
+            ? config.specialistRuntime.process(material, conversationContext)
+            : config.specialistRuntime.process(material, conversationContext, (observation) => {
+                emitTrace(
+                  'NODE_OBSERVED',
+                  'OBSERVED',
+                  'riya.agent.specialist-runtime',
+                  `model-route:${observation.complexity}:${observation.releaseId}`,
+                );
+              }),
         (value) => (value === null ? 'no-reply' : 'proposal'),
       );
     } catch {

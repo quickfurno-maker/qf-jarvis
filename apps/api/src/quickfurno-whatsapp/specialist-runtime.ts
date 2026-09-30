@@ -20,10 +20,21 @@ import type {
 import type { ServiceBlueprintRegistry } from '@qf-jarvis/client-intelligence';
 import { buildWhatsAppClientIntelligence } from './client-intelligence-adapter.js';
 
+export interface QuickFurnoWhatsAppSpecialistObservation {
+  readonly kind: 'MODEL_ROUTE_SELECTED';
+  readonly complexity: 'SIMPLE' | 'STANDARD' | 'COMPLEX';
+  readonly releaseId: string;
+}
+
+export type QuickFurnoWhatsAppSpecialistObserver = (
+  observation: QuickFurnoWhatsAppSpecialistObservation,
+) => void;
+
 export interface QuickFurnoWhatsAppSpecialistRuntime {
   process(
     material: QuickFurnoWhatsAppWorkerMaterial,
     conversationContext?: QuickFurnoWhatsAppConversationContextV1,
+    observer?: QuickFurnoWhatsAppSpecialistObserver,
   ): Promise<QuickFurnoWhatsAppWorkerProposal | null>;
 }
 
@@ -94,7 +105,7 @@ function riyaContinuityFromMaterial(material: QuickFurnoWhatsAppTurnMaterialV2) 
 
 function riyaLifetimeContextFromMaterial(material: QuickFurnoWhatsAppTurnMaterialV2) {
   const journey = material.clientJourney;
-  if (journey === undefined || journey.version !== 2) return undefined;
+  if (journey?.version !== 2) return undefined;
 
   const properties = [...journey.properties]
     .sort((left, right) => {
@@ -148,7 +159,7 @@ function riyaConversationProposal(
   >,
 ): QuickFurnoWhatsAppReplyProposal | null {
   const proposal = result.proposedReply;
-  if (proposal === undefined || proposal.boundRevision !== material.revision) return null;
+  if (proposal?.boundRevision !== material.revision) return null;
   if (proposal.replyBody.length < 1 || proposal.replyBody.length > 4096) return null;
 
   let journeyProposal: QuickFurnoWhatsAppReplyProposal['clientJourneyProposal'];
@@ -163,12 +174,14 @@ function riyaConversationProposal(
       return null;
     }
     const batch = result.observationBatch;
+    const clientJourney = material.clientJourney;
+    if (clientJourney === undefined) return null;
     journeyProposal = Object.freeze({
       version: 1 as const,
-      profileId: material.clientJourney!.profileId,
-      profileRevision: material.clientJourney!.profileRevision,
-      requirementId: material.clientJourney!.activeRequirement.requirementId,
-      requirementRevision: material.clientJourney!.activeRequirement.revision,
+      profileId: clientJourney.profileId,
+      profileRevision: clientJourney.profileRevision,
+      requirementId: clientJourney.activeRequirement.requirementId,
+      requirementRevision: clientJourney.activeRequirement.revision,
       nextPhase: next.state.phase,
       summaryConfirmed: next.state.summaryConfirmed,
       ...(result.clientProfileObservation === undefined
@@ -180,15 +193,17 @@ function riyaConversationProposal(
             }),
           }),
       sets: Object.freeze(
-        (batch?.observations ?? [])
-          .filter((observation) => observation.operation === 'SET')
-          .map((observation) =>
-            Object.freeze({
-              field: observation.field,
-              value: observation.value!,
-              provenance: observation.provenance as 'user_stated' | 'model_inferred',
-            }),
-          ),
+        (batch?.observations ?? []).flatMap((observation) =>
+          observation.operation === 'SET' && observation.value !== undefined
+            ? [
+                Object.freeze({
+                  field: observation.field,
+                  value: observation.value,
+                  provenance: observation.provenance as 'user_stated' | 'model_inferred',
+                }),
+              ]
+            : [],
+        ),
       ),
       clears: Object.freeze(
         (batch?.observations ?? [])

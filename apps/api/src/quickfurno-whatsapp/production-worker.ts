@@ -72,6 +72,7 @@ import { createQuickFurnoWhatsAppAuthorityStatePort } from './authority-state-po
 import { createQuickFurnoWhatsAppParallelScheduler } from './parallel-turn-scheduler.js';
 import {
   createQuickFurnoWhatsAppSpecialistRuntime,
+  type QuickFurnoWhatsAppSpecialistObserver,
   type QuickFurnoWhatsAppSpecialistRuntime,
 } from './specialist-runtime.js';
 import {
@@ -518,12 +519,13 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         process(
           material: QuickFurnoWhatsAppWorkerMaterial,
           conversationContext?: QuickFurnoWhatsAppConversationContextV1,
+          observer?: QuickFurnoWhatsAppSpecialistObserver,
         ) {
           const selected =
             'purpose' in material || material.assignedActor === 'RIYA'
               ? riyaSpecialist
               : genericSpecialist;
-          return selected.process(material, conversationContext);
+          return selected.process(material, conversationContext, observer);
         },
       });
 

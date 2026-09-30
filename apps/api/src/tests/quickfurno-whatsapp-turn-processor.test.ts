@@ -1,6 +1,10 @@
 import type { AgentFlowTraceEvent } from '@qf-jarvis/agent-flow-trace-contract';
 import { describe, expect, it, vi } from 'vitest';
-import { QuickFurnoWhatsAppHttpError } from '../quickfurno-whatsapp/quickfurno-http.js';
+import {
+  QuickFurnoWhatsAppHttpError,
+  type QuickFurnoClientMatchRequestWriter,
+  type QuickFurnoClientVendorFeedbackWriter,
+} from '../quickfurno-whatsapp/quickfurno-http.js';
 import type {
   QuickFurnoWhatsAppConversationContextV1,
   QuickFurnoWhatsAppTurnMaterialV2,
@@ -151,8 +155,8 @@ function fixture(
     materialRead?: () => Promise<QuickFurnoWhatsAppTurnMaterialV2>;
     contextRead?: () => Promise<{ readonly context: QuickFurnoWhatsAppConversationContextV1 }>;
     specialist?: (...args: unknown[]) => Promise<unknown>;
-    vendorFeedback?: (...args: unknown[]) => Promise<unknown>;
-    matchRequest?: (...args: unknown[]) => Promise<unknown>;
+    vendorFeedback?: QuickFurnoClientVendorFeedbackWriter['record'];
+    matchRequest?: QuickFurnoClientMatchRequestWriter['request'];
     write?: () => Promise<'queued' | 'stale'>;
     traceRecord?: (event: AgentFlowTraceEvent) => void;
     traceClock?: () => string;
@@ -174,8 +178,26 @@ function fixture(
   const contextRead = vi.fn(over.contextRead ?? (() => Promise.resolve({ context })));
   const process = vi.fn(
     over.specialist ??
-      (() =>
-        Promise.resolve({ actor: 'RIYA', proposalId: 'prop.1', boundRevision: 7, body: 'reply' })),
+      ((...args: unknown[]) => {
+        const observer = args[2] as
+          | ((value: {
+              readonly kind: 'MODEL_ROUTE_SELECTED';
+              readonly complexity: 'SIMPLE';
+              readonly releaseId: string;
+            }) => void)
+          | undefined;
+        observer?.({
+          kind: 'MODEL_ROUTE_SELECTED',
+          complexity: 'SIMPLE',
+          releaseId: 'release.fast',
+        });
+        return Promise.resolve({
+          actor: 'RIYA',
+          proposalId: 'prop.1',
+          boundRevision: 7,
+          body: 'reply',
+        });
+      }),
   );
   const vendorFeedback =
     over.vendorFeedback === undefined ? undefined : vi.fn(over.vendorFeedback);
@@ -244,6 +266,14 @@ describe('QuickFurno WhatsApp turn processor', () => {
       status: 'SUCCEEDED',
       resultCode: 'completed-queued',
     });
+    expect(
+      f.traceEvents.some(
+        (event) =>
+          event.kind === 'NODE_OBSERVED' &&
+          event.nodeId === 'riya.agent.specialist-runtime' &&
+          event.resultCode === 'model-route:SIMPLE:release.fast',
+      ),
+    ).toBe(true);
 
     const tracedNodeIds = new Set(
       f.traceEvents.flatMap((event) => (event.nodeId === undefined ? [] : [event.nodeId])),
@@ -288,7 +318,7 @@ describe('QuickFurno WhatsApp turn processor', () => {
     const f = fixture();
     expect(await f.processor.processOne()).toBe('completed-queued');
     expect(f.contextRead).toHaveBeenCalledOnce();
-    expect(f.process).toHaveBeenCalledWith(material, f.context);
+    expect(f.process).toHaveBeenCalledWith(material, f.context, expect.any(Function));
   });
 
   it('continues safely when optional conversation context is unavailable', async () => {
@@ -296,7 +326,7 @@ describe('QuickFurno WhatsApp turn processor', () => {
       contextRead: () => Promise.reject(new QuickFurnoWhatsAppHttpError('request-failed')),
     });
     expect(await f.processor.processOne()).toBe('completed-queued');
-    expect(f.process).toHaveBeenCalledWith(material, undefined);
+    expect(f.process).toHaveBeenCalledWith(material, undefined, expect.any(Function));
     expect(f.release).not.toHaveBeenCalled();
     expect(f.fail).not.toHaveBeenCalled();
   });
@@ -371,7 +401,11 @@ describe('QuickFurno WhatsApp turn processor', () => {
     expect(await f.processor.processOne()).toBe('completed-queued');
     expect(f.read).toHaveBeenCalledTimes(2);
     expect(f.vendorFeedback).toHaveBeenCalledOnce();
-    expect(f.process).toHaveBeenCalledWith(vendorFeedbackRecordedMaterial, f.context);
+    expect(f.process).toHaveBeenCalledWith(
+      vendorFeedbackRecordedMaterial,
+      f.context,
+      expect.any(Function),
+    );
     const feedbackOrder = f.vendorFeedback?.mock.invocationCallOrder[0];
     const feedbackProcessOrder = f.process.mock.invocationCallOrder[0];
     if (feedbackOrder === undefined || feedbackProcessOrder === undefined) {
@@ -426,7 +460,7 @@ describe('QuickFurno WhatsApp turn processor', () => {
     expect(f.read).toHaveBeenCalledTimes(2);
     expect(f.matchRequest).toHaveBeenCalledOnce();
     expect(f.process).toHaveBeenCalledOnce();
-    expect(f.process).toHaveBeenCalledWith(matchedMaterial, f.context);
+    expect(f.process).toHaveBeenCalledWith(matchedMaterial, f.context, expect.any(Function));
     const matchOrder = f.matchRequest?.mock.invocationCallOrder[0];
     const matchProcessOrder = f.process.mock.invocationCallOrder[0];
     if (matchOrder === undefined || matchProcessOrder === undefined) {

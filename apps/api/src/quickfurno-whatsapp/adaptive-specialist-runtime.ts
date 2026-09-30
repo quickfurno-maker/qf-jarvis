@@ -8,7 +8,10 @@ import type {
   QuickFurnoWhatsAppConversationContextV1,
   QuickFurnoWhatsAppWorkerMaterial,
 } from './contracts.js';
-import type { QuickFurnoWhatsAppSpecialistRuntime } from './specialist-runtime.js';
+import type {
+  QuickFurnoWhatsAppSpecialistObserver,
+  QuickFurnoWhatsAppSpecialistRuntime,
+} from './specialist-runtime.js';
 
 const RELEASE_REF = /^[A-Za-z0-9._:/-]{1,256}$/u;
 
@@ -51,6 +54,7 @@ export function createAdaptiveQuickFurnoWhatsAppSpecialistRuntime(
     async process(
       material: QuickFurnoWhatsAppWorkerMaterial,
       conversationContext?: QuickFurnoWhatsAppConversationContextV1,
+      observer?: QuickFurnoWhatsAppSpecialistObserver,
     ) {
       let complexity: AdaptiveComplexity;
       try {
@@ -63,7 +67,19 @@ export function createAdaptiveQuickFurnoWhatsAppSpecialistRuntime(
       } catch {
         return null;
       }
-      return config.routes[complexity].runtime.process(material, conversationContext);
+      const route = config.routes[complexity];
+      try {
+        observer?.(
+          Object.freeze({
+            kind: 'MODEL_ROUTE_SELECTED',
+            complexity,
+            releaseId: route.releaseId,
+          }),
+        );
+      } catch {
+        // Observability is powerless. An observer cannot change model routing or the turn result.
+      }
+      return route.runtime.process(material, conversationContext, observer);
     },
   });
 }

@@ -32,8 +32,8 @@ const opaqueRef = z
 const resultCode = z
   .string()
   .min(1)
-  .max(96)
-  .regex(/^[A-Za-z0-9._:-]+$/u);
+  .max(320)
+  .regex(/^[A-Za-z0-9._:@/-]+$/u);
 
 export const agentFlowTraceEventSchema = z
   .object({

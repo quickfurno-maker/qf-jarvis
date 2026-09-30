@@ -15,6 +15,7 @@
     "@livekit/protocol": "1.51.0",
     "@qf-jarvis/agent-flow-registry": "workspace:*",
     "@qf-jarvis/agent-flow-trace-contract": "workspace:*",
+    "@qf-jarvis/agent-flow-governance": "workspace:*",
     "@qf-jarvis/control-plane-read-contract": "workspace:*",
     "@qf-jarvis/operator-api-contract": "workspace:*",
     "@qf-jarvis/operator-client-core": "workspace:*",

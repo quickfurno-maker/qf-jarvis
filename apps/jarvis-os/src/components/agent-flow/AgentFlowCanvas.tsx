@@ -24,6 +24,7 @@ import {
   type AgentFlowNodeDefinition,
   type AgentFlowNodeKind,
 } from '@qf-jarvis/agent-flow-registry';
+import { buildAgentFlowReplayHistory } from '@qf-jarvis/agent-flow-governance';
 import type {
   AgentFlowTraceEvent,
   AgentFlowTraceReadResult,
@@ -229,6 +230,7 @@ export function AgentFlowCanvas() {
     useState<FilterValue<AgentFlowAuthority>>('ALL');
   const [edgeKindFilter, setEdgeKindFilter] = useState<FilterValue<AgentFlowEdgeKind>>('ALL');
   const [traceState, setTraceState] = useState<AgentFlowTraceReadResult | null>(null);
+  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -254,20 +256,25 @@ export function AgentFlowCanvas() {
     };
   }, [readAgentFlowTrace]);
 
-  const latestTraceEvents = useMemo<readonly AgentFlowTraceEvent[]>(() => {
-    if (!traceState?.available) return [];
-    const latest = traceState.snapshot.events.at(-1);
-    if (latest === undefined) return [];
-    return traceState.snapshot.events.filter((event) => event.traceId === latest.traceId);
-  }, [traceState]);
-
-  const latestTraceEventByNode = useMemo(() => {
+  const replayHistory = useMemo(
+    () => (traceState?.available ? buildAgentFlowReplayHistory(traceState.snapshot) : []),
+    [traceState],
+  );
+  const activeTraceId = selectedTraceId ?? replayHistory[0]?.traceId;
+  const selectedRun = replayHistory.find((run) => run.traceId === activeTraceId);
+  const selectedTraceEvents = useMemo<readonly AgentFlowTraceEvent[]>(() => {
+    if (!traceState?.available || activeTraceId === undefined) return [];
+    return traceState.snapshot.events.filter((event) => event.traceId === activeTraceId);
+  }, [activeTraceId, traceState]);
+  const selectedTraceEventByNode = useMemo(() => {
     const events = new Map<string, AgentFlowTraceEvent>();
-    for (const event of latestTraceEvents) {
+    for (const event of selectedTraceEvents) {
       if (event.nodeId !== undefined) events.set(event.nodeId, event);
     }
     return events;
-  }, [latestTraceEvents]);
+  }, [selectedTraceEvents]);
+  const replayingHistoricalRun =
+    selectedTraceId !== null && selectedTraceId !== replayHistory[0]?.traceId;
 
   const visibleNodeIds = useMemo(() => {
     return new Set(
@@ -285,7 +292,7 @@ export function AgentFlowCanvas() {
   const nodes = useMemo<Node<FlowNodeData>[]>(
     () =>
       flow.nodes.map((definition) => {
-        const traceEvent = latestTraceEventByNode.get(definition.nodeId);
+        const traceEvent = selectedTraceEventByNode.get(definition.nodeId);
         return {
           id: definition.nodeId,
           type: 'agentFlow',
@@ -300,7 +307,7 @@ export function AgentFlowCanvas() {
           hidden: !visibleNodeIds.has(definition.nodeId),
         };
       }),
-    [flow.nodes, latestTraceEventByNode, visibleNodeIds],
+    [flow.nodes, selectedTraceEventByNode, visibleNodeIds],
   );
 
   const edges = useMemo<Edge[]>(
@@ -316,6 +323,8 @@ export function AgentFlowCanvas() {
   );
 
   const selected = flow.nodes.find((node) => node.nodeId === selectedId) ?? flow.nodes[0];
+  const selectedNodeReplay =
+    selected === undefined ? undefined : selectedRun?.nodes.find((node) => node.nodeId === selected.nodeId);
   const governedActions = flow.nodes.filter(
     (node) => node.effect === 'GOVERNED_ACTION' || node.effect === 'CHANNEL_REQUEST',
   ).length;
@@ -365,14 +374,18 @@ export function AgentFlowCanvas() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-[9px] font-semibold tracking-[0.08em] text-[var(--color-ink-faint)] uppercase">
-              Live Riya trace
+              Riya execution trace · {replayingHistoricalRun ? 'Replay' : 'Live'}
             </p>
             {traceState === null ? (
               <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">Trace loading…</p>
             ) : traceState.available ? (
               <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
-                {traceState.freshness} · snapshot {traceState.snapshot.emittedAt} · latest trace{' '}
-                {latestTraceEvents.at(-1)?.traceId.slice(0, 12) ?? 'none'}
+                {traceState.freshness} · snapshot {traceState.snapshot.emittedAt} ·{' '}
+                {selectedRun?.traceId.slice(0, 12) ?? 'no run'}
+                {selectedRun?.durationMs === undefined
+                  ? ''
+                  : ' · ' + String(selectedRun.durationMs) + 'ms'}
+                {selectedRun?.outcome === undefined ? '' : ' · ' + selectedRun.outcome}
               </p>
             ) : (
               <p className="mt-1 text-[11px] text-[var(--color-ink-muted)]">
@@ -381,18 +394,41 @@ export function AgentFlowCanvas() {
             )}
           </div>
           <span className="rounded-full border border-[var(--color-line)] bg-[var(--color-base-850)] px-2.5 py-1 text-[8.5px] font-semibold tracking-[0.05em] text-[var(--color-ink-faint)] uppercase">
-            Authenticated GET · 2s refresh · metadata only
+            Authenticated GET · replay never executes
           </span>
         </div>
 
-        {latestTraceEvents.length === 0 ? (
+        {replayHistory.length > 0 ? (
+          <label className="mt-3 block max-w-[520px] rounded-[8px] border border-[var(--color-line)] bg-[var(--color-base-850)] px-3 py-2">
+            <span className="block text-[8.5px] font-semibold tracking-[0.07em] text-[var(--color-ink-faint)] uppercase">
+              Run selector
+            </span>
+            <select
+              value={selectedTraceId ?? 'LATEST'}
+              onChange={(event) => {
+                setSelectedTraceId(event.target.value === 'LATEST' ? null : event.target.value);
+              }}
+              className="mt-1 w-full bg-[var(--color-base-850)] text-[10.5px] text-[var(--color-ink-muted)] outline-none"
+            >
+              <option value="LATEST">LIVE · latest run</option>
+              {replayHistory.map((run, index) => (
+                <option key={run.traceId} value={run.traceId}>
+                  {index === 0 ? 'Latest' : 'Replay'} · {run.traceId.slice(0, 16)} · {run.status}
+                  {run.durationMs === undefined ? '' : ' · ' + String(run.durationMs) + 'ms'}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        {selectedTraceEvents.length === 0 ? (
           <p className="mt-3 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">
             No Riya execution trace is available yet. The canvas stays read-only and does not infer
             steps from aggregate metrics.
           </p>
         ) : (
           <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-            {latestTraceEvents.slice(-18).map((event) => {
+            {selectedTraceEvents.slice(-18).map((event) => {
               const definition =
                 event.nodeId === undefined
                   ? undefined
@@ -677,6 +713,34 @@ export function AgentFlowCanvas() {
                 ))}
               </dl>
 
+              {selectedNodeReplay === undefined ? null : (
+                <div className="mt-4 border-t border-[var(--color-line)] pt-4">
+                  <p className="text-[9.5px] font-semibold tracking-[0.08em] text-[var(--color-ink-faint)] uppercase">
+                    Trace execution
+                  </p>
+                  <dl className="mt-2 grid grid-cols-[98px_minmax(0,1fr)] gap-2 text-[9.5px]">
+                    <dt className="text-[var(--color-ink-faint)]">Status</dt>
+                    <dd className="text-[var(--color-ink-muted)]">{selectedNodeReplay.terminalStatus}</dd>
+                    <dt className="text-[var(--color-ink-faint)]">Duration</dt>
+                    <dd className="text-[var(--color-ink-muted)]">
+                      {selectedNodeReplay.durationMs === undefined
+                        ? 'Not measured'
+                        : String(selectedNodeReplay.durationMs) + ' ms'}
+                    </dd>
+                    <dt className="text-[var(--color-ink-faint)]">Result</dt>
+                    <dd className="break-all text-[var(--color-ink-muted)]">
+                      {selectedNodeReplay.resultCode ?? 'No result code'}
+                    </dd>
+                    <dt className="text-[var(--color-ink-faint)]">Observations</dt>
+                    <dd className="break-all text-[var(--color-ink-muted)]">
+                      {selectedNodeReplay.observations.length === 0
+                        ? 'None'
+                        : selectedNodeReplay.observations.join(' · ')}
+                    </dd>
+                  </dl>
+                </div>
+              )}
+
               <div className="mt-4 border-t border-[var(--color-line)] pt-4">
                 <p className="text-[9.5px] font-semibold tracking-[0.08em] text-[var(--color-ink-faint)] uppercase">
                   Implementation
@@ -704,12 +768,12 @@ export function AgentFlowCanvas() {
                 </p>
                 {selected.canvasEditable.length === 0 ? (
                   <p className="mt-2 text-[11px] leading-relaxed text-[var(--color-ink-muted)]">
-                    Locked in Phase 1. This node is visible but has no canvas-editable configuration.
+                    Code-locked. This node is visible but exposes no safe profile-selectable configuration.
                   </p>
                 ) : (
                   <>
                     <p className="mt-2 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">
-                      Declared future-safe configuration keys. Phase 1 exposes metadata only; none are writable here.
+                      Safe configuration keys are profile-bound in Phase 2. This live/replay surface remains read-only; repository-governed Draft manifests carry selections through certification.
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {selected.canvasEditable.map((key) => (

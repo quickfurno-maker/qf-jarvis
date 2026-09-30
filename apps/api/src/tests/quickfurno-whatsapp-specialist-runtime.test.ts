@@ -199,7 +199,7 @@ describe('QuickFurno WhatsApp specialist runtime', () => {
       actor: 'RIYA',
       body: 'Welcome back. Is this for the Baner property?',
     });
-    const input = processRiya.mock.calls[0]?.[0] as Record<string, unknown>;
+    const input = (processRiya.mock.calls as unknown as [[Record<string, unknown>]])[0][0];
     expect(input['clientLifetime']).toEqual({
       version: 1,
       authority: 'QUICKFURNO_CORE_CONTEXT',
@@ -279,7 +279,8 @@ describe('QuickFurno WhatsApp specialist runtime', () => {
         },
       }),
     );
-    expect(processRiya.mock.calls[0]?.[0]).not.toHaveProperty('clientLifetime');
+    const call = (processRiya.mock.calls as unknown as [[Record<string, unknown>]])[0][0];
+    expect(call).not.toHaveProperty('clientLifetime');
   });
 
   it('routes a verified vendor through Anisha with a canonical VENDOR envelope', async () => {

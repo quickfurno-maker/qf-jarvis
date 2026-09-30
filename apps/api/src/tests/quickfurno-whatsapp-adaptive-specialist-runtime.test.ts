@@ -69,6 +69,36 @@ describe('QuickFurno adaptive specialist runtime', () => {
     expect(strong.process).toHaveBeenCalledOnce();
   });
 
+  it('emits content-free model route observation without changing execution', async () => {
+    const fast = service('fast');
+    const runtime = createAdaptiveQuickFurnoWhatsAppSpecialistRuntime({
+      activeReleaseIds: ['release.fast'],
+      routes: {
+        SIMPLE: { releaseId: 'release.fast', runtime: fast.runtime },
+        STANDARD: { releaseId: 'release.fast', runtime: fast.runtime },
+        COMPLEX: { releaseId: 'release.fast', runtime: fast.runtime },
+      },
+      signals: () => ({
+        normalizedTextChars: 5,
+        conversationContextChars: 0,
+        knowledgeHitCount: 0,
+        ambiguitySignals: 0,
+        requiresCoreVerification: false,
+        multiStepReasoning: false,
+        highRisk: false,
+      }),
+    });
+    const observer = vi.fn();
+    await expect(runtime.process(material(), undefined, observer)).resolves.toMatchObject({
+      body: 'fast',
+    });
+    expect(observer).toHaveBeenCalledWith({
+      kind: 'MODEL_ROUTE_SELECTED',
+      complexity: 'SIMPLE',
+      releaseId: 'release.fast',
+    });
+  });
+
   it('refuses construction when a route names a release not in the active certified set', () => {
     const fast = service('fast');
     expect(() =>
