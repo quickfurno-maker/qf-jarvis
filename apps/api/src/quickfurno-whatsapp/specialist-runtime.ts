@@ -77,9 +77,7 @@ function riyaContinuityFromMaterial(material: QuickFurnoWhatsAppTurnMaterialV2) 
           ? {}
           : { consultationPreferenceRef: requirement.consultationPreference }),
         completeness:
-          requiredMissing.length === 0
-            ? 'SUFFICIENT_FOR_CORE_REVIEW'
-            : 'MORE_DISCOVERY_REQUIRED',
+          requiredMissing.length === 0 ? 'SUFFICIENT_FOR_CORE_REVIEW' : 'MORE_DISCOVERY_REQUIRED',
         ...(requiredMissing.length === 0 ? {} : { missingFields: requiredMissing }),
       },
       fieldProvenance: requirement.provenance,
@@ -90,12 +88,58 @@ function riyaContinuityFromMaterial(material: QuickFurnoWhatsAppTurnMaterialV2) 
   }
 }
 
+function riyaLifetimeContextFromMaterial(material: QuickFurnoWhatsAppTurnMaterialV2) {
+  const journey = material.clientJourney;
+  if (journey === undefined || journey.version !== 2) return undefined;
+
+  const properties = [...journey.properties]
+    .sort((left, right) => {
+      if (left.relation === right.relation) return 0;
+      return left.relation === 'current' ? -1 : 1;
+    })
+    .slice(0, 3)
+    .map((property) =>
+      Object.freeze({
+        relation: property.relation,
+        ...(property.area === undefined ? {} : { area: property.area }),
+        ...(property.propertyType === undefined ? {} : { propertyType: property.propertyType }),
+        ...(property.bhk === undefined ? {} : { bhk: property.bhk }),
+        ...(property.projectStage === undefined ? {} : { projectStage: property.projectStage }),
+      }),
+    );
+
+  const seenServices = new Set<string>();
+  const pastServices = [];
+  for (const requirement of journey.pastRequirements) {
+    if (seenServices.has(requirement.categoryRef)) continue;
+    seenServices.add(requirement.categoryRef);
+    pastServices.push(
+      Object.freeze({
+        serviceRef: requirement.categoryRef,
+        status: requirement.status,
+      }),
+    );
+    if (pastServices.length >= 6) break;
+  }
+
+  return Object.freeze({
+    version: 1 as const,
+    authority: 'QUICKFURNO_CORE_CONTEXT' as const,
+    isReturningClient: journey.isReturningClient,
+    lastSeenAt: journey.lastSeenAt,
+    properties: Object.freeze(properties),
+    pastServices: Object.freeze(pastServices),
+  });
+}
+
 function riyaConversationProposal(
   material: QuickFurnoWhatsAppTurnMaterialV2,
   current: NonNullable<ReturnType<typeof riyaContinuityFromMaterial>>,
   result: Awaited<
     ReturnType<
-      NonNullable<RiyaConversationEvolutionJarvisRuntime['processInboundForRiyaConversationEvolution']>
+      NonNullable<
+        RiyaConversationEvolutionJarvisRuntime['processInboundForRiyaConversationEvolution']
+      >
     >
   >,
 ): QuickFurnoWhatsAppReplyProposal | null {
@@ -309,6 +353,7 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         const continuity = riyaContinuityFromMaterial(material);
         if (continuity === null) return null;
         const profile = material.clientJourney;
+        const clientLifetime = riyaLifetimeContextFromMaterial(material);
         const availabilitySnapshot = material.coreAvailability;
         const result = await runCustomerTurnWorkflow(
           () =>
@@ -323,6 +368,7 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
                   ? {}
                   : { preferredLanguage: profile.preferredLanguage }),
               },
+              ...(clientLifetime === undefined ? {} : { clientLifetime }),
               availabilitySnapshot,
             }),
           'WHATSAPP',

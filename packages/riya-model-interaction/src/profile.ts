@@ -28,6 +28,7 @@ import {
 } from '@qf-jarvis/riya-conversation-evolution';
 import type { RiyaConversationObservationBatchV1 } from '@qf-jarvis/riya-conversation-evolution';
 
+import type { RiyaClientLifetimeContextV1 } from './contracts/client-lifetime-context.js';
 import type { RiyaClientProfileContextV1 } from './contracts/client-profile-context.js';
 import { isActiveCity, isActiveService, pairAvailable } from './internal/availability.js';
 import {
@@ -232,6 +233,7 @@ export function createRiyaConversationModelProfile(args: {
   readonly current: RiyaConversationContinuityStateV1;
   readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
   readonly clientProfile?: RiyaClientProfileContextV1;
+  readonly clientLifetime?: RiyaClientLifetimeContextV1;
   /**
    * The RWC-P7 grounded knowledge reader, or absent.
    *
@@ -242,6 +244,7 @@ export function createRiyaConversationModelProfile(args: {
 }): ModelReplyStructuredOutputProfile {
   const { current, availabilitySnapshot } = args;
   const clientProfile = args.clientProfile;
+  const clientLifetime = args.clientLifetime;
   const readGrounded = args.groundedKnowledgeSource;
 
   return Object.freeze({
@@ -255,6 +258,7 @@ export function createRiyaConversationModelProfile(args: {
         message: plan.normalizedText,
         availabilitySnapshot,
         ...(clientProfile === undefined ? {} : { clientProfile }),
+        ...(clientLifetime === undefined ? {} : { clientLifetime }),
         ...(grounded === undefined ? {} : { groundedKnowledge: grounded }),
       });
     },
@@ -263,7 +267,7 @@ export function createRiyaConversationModelProfile(args: {
       const wire = riyaProviderWireSchema.safeParse(value);
       if (
         wire.success &&
-        ((wire.data.profile.name === null) !== (wire.data.profile.provenance === null))
+        (wire.data.profile.name === null) !== (wire.data.profile.provenance === null)
       ) {
         return undefined;
       }
@@ -482,10 +486,12 @@ export function createRiyaGroundedReplyModelProfile(args: {
   readonly current: RiyaConversationContinuityStateV1;
   readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
   readonly clientProfile?: RiyaClientProfileContextV1;
+  readonly clientLifetime?: RiyaClientLifetimeContextV1;
   readonly groundedKnowledgeSource?: RiyaGroundedKnowledgeSource;
 }): ModelReplyStructuredOutputProfile {
   const { current, availabilitySnapshot } = args;
   const clientProfile = args.clientProfile;
+  const clientLifetime = args.clientLifetime;
   const readGrounded = args.groundedKnowledgeSource;
 
   return Object.freeze({
@@ -499,6 +505,7 @@ export function createRiyaGroundedReplyModelProfile(args: {
         message: plan.normalizedText,
         availabilitySnapshot,
         ...(clientProfile === undefined ? {} : { clientProfile }),
+        ...(clientLifetime === undefined ? {} : { clientLifetime }),
         ...(grounded === undefined ? {} : { groundedKnowledge: grounded }),
       });
     },

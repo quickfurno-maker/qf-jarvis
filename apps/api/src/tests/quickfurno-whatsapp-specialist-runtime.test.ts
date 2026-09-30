@@ -100,6 +100,188 @@ describe('QuickFurno WhatsApp specialist runtime', () => {
     expect(envelope.normalizedText).toContain('What about the budget?');
   });
 
+  it('passes only minimized V2 lifetime context to Riya and strips Core entity identifiers', async () => {
+    const processRiya = vi.fn(() =>
+      Promise.resolve({
+        runtimeResult: {
+          outcome: 'MODEL_DRAFTED',
+          coreConsulted: false,
+          modelDrafted: true,
+          proposalId: 'prop.riya.v2',
+          boundRevision: 9,
+        },
+        proposedReply: {
+          version: 1,
+          proposalId: 'prop.riya.v2',
+          boundRevision: 9,
+          proposalKind: 'REPLY',
+          authorityStatus: 'PENDING_CORE_VALIDATION',
+          replyBody: 'Welcome back. Is this for the Baner property?',
+        },
+        observationBatch: undefined,
+        clientProfileObservation: undefined,
+      }),
+    );
+    const service = createQuickFurnoWhatsAppSpecialistRuntime({
+      runtimeId: 'qfj.whatsapp.prod',
+      jarvisRuntime: {
+        processInboundForProposedReply: vi.fn(),
+        processInboundForRiyaConversationEvolution: processRiya,
+      } as never,
+    });
+
+    const journey = {
+      version: 2 as const,
+      profileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      profileRevision: 12,
+      profileStatus: 'known' as const,
+      isFirstContact: false,
+      isReturningClient: true,
+      createdAt: '2025-09-10T05:00:00.000Z',
+      lastSeenAt: '2026-09-30T04:00:00.000Z',
+      name: 'Rahul',
+      preferredLanguage: 'hinglish' as const,
+      missing: [] as const,
+      activeRequirement: {
+        requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        revision: 4,
+        status: 'discovering' as const,
+        phase: 'PROJECT_DETAILS' as const,
+        summaryConfirmed: false,
+        provenance: {
+          serviceInterest: 'user_stated' as const,
+          location: 'user_stated' as const,
+          budget: 'user_stated' as const,
+          timeline: 'user_stated' as const,
+        },
+        serviceInterest: 'PAINTING',
+        location: 'PUNE',
+        budget: 'OPEN',
+        timeline: 'NOW',
+      },
+      properties: [
+        {
+          propertyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          relation: 'current' as const,
+          area: 'Baner',
+          propertyType: 'Apartment',
+          bhk: '3BHK',
+          projectStage: 'occupied',
+        },
+      ],
+      pastRequirements: [
+        {
+          requirementId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          categoryRef: 'INTERIOR_DESIGN',
+          propertyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          status: 'converted' as const,
+          closedAt: '2025-12-01T10:00:00.000Z',
+        },
+      ],
+    };
+    const availability = {
+      version: 1 as const,
+      snapshotRef: 'availability.1',
+      taxonomyVersion: 1,
+      cities: [{ ref: 'PUNE', displayName: 'Pune' }],
+      services: [{ ref: 'PAINTING', displayName: 'Painting' }],
+      availability: [{ serviceRef: 'PAINTING', cityRefs: ['PUNE'] as readonly string[] }],
+    };
+
+    const reply = await service.process(
+      material({
+        clientJourney: journey,
+        coreAvailability: availability,
+        normalizedText: 'Need painting now',
+      }),
+    );
+    expect(reply).toMatchObject({
+      actor: 'RIYA',
+      body: 'Welcome back. Is this for the Baner property?',
+    });
+    const input = processRiya.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(input['clientLifetime']).toEqual({
+      version: 1,
+      authority: 'QUICKFURNO_CORE_CONTEXT',
+      isReturningClient: true,
+      lastSeenAt: '2026-09-30T04:00:00.000Z',
+      properties: [
+        {
+          relation: 'current',
+          area: 'Baner',
+          propertyType: 'Apartment',
+          bhk: '3BHK',
+          projectStage: 'occupied',
+        },
+      ],
+      pastServices: [{ serviceRef: 'INTERIOR_DESIGN', status: 'converted' }],
+    });
+    expect(JSON.stringify(input['clientLifetime'])).not.toContain('aaaaaaaa-');
+    expect(JSON.stringify(input['clientLifetime'])).not.toContain('bbbbbbbb-');
+    expect(JSON.stringify(input['clientLifetime'])).not.toContain('cccccccc-');
+    expect(JSON.stringify(input['clientLifetime'])).not.toContain('dddddddd-');
+  });
+
+  it('keeps the V1 Riya lane compatible with no lifetime context', async () => {
+    const processRiya = vi.fn(() =>
+      Promise.resolve({
+        runtimeResult: {
+          outcome: 'MODEL_DRAFTED',
+          coreConsulted: false,
+          modelDrafted: true,
+          proposalId: 'prop.riya.v1',
+          boundRevision: 9,
+        },
+        proposedReply: {
+          version: 1,
+          proposalId: 'prop.riya.v1',
+          boundRevision: 9,
+          proposalKind: 'REPLY',
+          authorityStatus: 'PENDING_CORE_VALIDATION',
+          replyBody: 'How can I help?',
+        },
+        observationBatch: undefined,
+        clientProfileObservation: undefined,
+      }),
+    );
+    const service = createQuickFurnoWhatsAppSpecialistRuntime({
+      runtimeId: 'qfj.whatsapp.prod',
+      jarvisRuntime: {
+        processInboundForProposedReply: vi.fn(),
+        processInboundForRiyaConversationEvolution: processRiya,
+      } as never,
+    });
+    await service.process(
+      material({
+        clientJourney: {
+          version: 1,
+          profileId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          profileRevision: 1,
+          profileStatus: 'discovering',
+          isFirstContact: true,
+          missing: ['name', 'serviceInterest', 'location', 'budget', 'timeline'],
+          activeRequirement: {
+            requirementId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            revision: 0,
+            status: 'discovering',
+            phase: 'INTRO',
+            summaryConfirmed: false,
+            provenance: {},
+          },
+        },
+        coreAvailability: {
+          version: 1,
+          snapshotRef: 'availability.1',
+          taxonomyVersion: 1,
+          cities: [],
+          services: [],
+          availability: [],
+        },
+      }),
+    );
+    expect(processRiya.mock.calls[0]?.[0]).not.toHaveProperty('clientLifetime');
+  });
+
   it('routes a verified vendor through Anisha with a canonical VENDOR envelope', async () => {
     const r = runtime();
     const reply = await r.service.process(

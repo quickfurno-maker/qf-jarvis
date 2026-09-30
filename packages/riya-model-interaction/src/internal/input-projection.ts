@@ -33,6 +33,10 @@ import type { DiscoveryField, NeedDiscovery } from '@qf-jarvis/riya-agent';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 
 import {
+  parseRiyaClientLifetimeContextV1,
+  type RiyaClientLifetimeContextV1,
+} from '../contracts/client-lifetime-context.js';
+import {
   parseRiyaClientProfileContextV1,
   type RiyaClientProfileContextV1,
 } from '../contracts/client-profile-context.js';
@@ -74,6 +78,8 @@ export function buildRiyaUserContent(args: {
   readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
   /** QuickFurno-owned client profile memory, minimized before it reaches the model. */
   readonly clientProfile?: RiyaClientProfileContextV1;
+  /** Bounded returning-client context derived from QuickFurno Core, with no contact or entity ids. */
+  readonly clientLifetime?: RiyaClientLifetimeContextV1;
   /**
    * Governed knowledge for a grounded turn (RWC-P7), or absent.
    *
@@ -112,6 +118,9 @@ export function buildRiyaUserContent(args: {
     ...(args.clientProfile === undefined
       ? {}
       : { clientProfile: parseRiyaClientProfileContextV1(args.clientProfile) }),
+    ...(args.clientLifetime === undefined
+      ? {}
+      : { clientLifetime: parseRiyaClientLifetimeContextV1(args.clientLifetime) }),
     message: message ?? '',
     // ONE additive sibling, and only when a grounded turn actually retrieved something (RWC-P7,
     // ADR-0103 s8). Structurally separate from `coreAvailability` for the same reason that is separate

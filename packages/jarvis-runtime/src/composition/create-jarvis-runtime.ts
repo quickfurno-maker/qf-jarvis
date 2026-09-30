@@ -302,7 +302,7 @@ export function createJarvisRuntime(
       if (!proven.ok) {
         return refused(proven.runId, proven.conversationId);
       }
-      const { envelope, current, availabilitySnapshot, clientProfile } = proven;
+      const { envelope, current, availabilitySnapshot, clientProfile, clientLifetime } = proven;
 
       // RWC-P4A owns INTRO..SUMMARY. CONTACT/CONSENT/COMPLETE are RWC-P6's, and a model call about
       // one of them would be this slice reasoning past its ceiling. RWC-P7 does NOT widen this: the
@@ -337,6 +337,7 @@ export function createJarvisRuntime(
           current,
           availabilitySnapshot,
           ...(clientProfile === undefined ? {} : { clientProfile }),
+          ...(clientLifetime === undefined ? {} : { clientLifetime }),
           // A READER, not a value. M2 calls the knowledge port before M4 builds the request, so the
           // capture does not exist yet at this line -- and passing a snapshot of `undefined` would
           // silently produce an ungrounded turn on a grounded deployment.
@@ -379,7 +380,7 @@ export function createJarvisRuntime(
       if (!proven.ok) {
         return refused(proven.runId, proven.conversationId);
       }
-      const { envelope, current, availabilitySnapshot, clientProfile } = proven;
+      const { envelope, current, availabilitySnapshot, clientProfile, clientLifetime } = proven;
 
       // The MIRROR of the P4B ceiling. This method owns CONTACT/CONSENT/COMPLETE and nothing else:
       // an INTRO..SUMMARY turn served here would skip the observation extraction the discovery
@@ -411,6 +412,7 @@ export function createJarvisRuntime(
           current,
           availabilitySnapshot,
           ...(clientProfile === undefined ? {} : { clientProfile }),
+          ...(clientLifetime === undefined ? {} : { clientLifetime }),
           groundedKnowledgeSource: () => bridge.readCaptured(),
         }),
         promptBinding: binding,

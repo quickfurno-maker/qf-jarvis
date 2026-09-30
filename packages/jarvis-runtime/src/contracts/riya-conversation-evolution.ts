@@ -21,6 +21,7 @@ import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 import type { RiyaConversationObservationBatchV1 } from '@qf-jarvis/riya-conversation-evolution';
 import type {
+  RiyaClientLifetimeContextV1,
   RiyaClientProfileContextV1,
   RiyaClientProfileObservationV1,
 } from '@qf-jarvis/riya-model-interaction';
@@ -59,6 +60,8 @@ export interface JarvisRiyaConversationEvolutionInput {
   readonly continuity: RiyaConversationContinuityStateV1;
   /** QuickFurno-owned person-level memory minimized for conversational use. */
   readonly clientProfile?: RiyaClientProfileContextV1;
+  /** Bounded returning-client context derived from Core; no contact or entity identifiers. */
+  readonly clientLifetime?: RiyaClientLifetimeContextV1;
   /**
    * The CURRENT Core-owned service availability, captured once for this turn (RWC-P5, ADR-0100).
    *
