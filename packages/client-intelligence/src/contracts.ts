@@ -138,3 +138,55 @@ export interface ClientNextBestAction {
   readonly businessEffect: false;
   readonly executionAuthorized: false;
 }
+
+
+export const CLIENT_SATISFACTION_STATES = [
+  'UNKNOWN',
+  'SATISFIED',
+  'DISSATISFIED',
+  'COMPLAINT',
+] as const;
+export type ClientSatisfactionState = (typeof CLIENT_SATISFACTION_STATES)[number];
+
+export const CLIENT_REASSIGNMENT_STATES = [
+  'NONE',
+  'REQUESTED',
+  'AUTHORIZED',
+  'REJECTED',
+] as const;
+export type ClientReassignmentState = (typeof CLIENT_REASSIGNMENT_STATES)[number];
+
+export const CLIENT_LIFECYCLE_STATES = [
+  'OPEN',
+  'CONVERTED',
+  'LOST',
+  'ABANDONED',
+  'WITHDRAWN',
+] as const;
+export type ClientLifecycleState = (typeof CLIENT_LIFECYCLE_STATES)[number];
+
+export interface ClientIntelligenceSnapshotV1 {
+  readonly version: 1;
+  readonly behaviour: readonly {
+    readonly signalType: ClientBehaviourSignalType;
+    readonly value: ClientBehaviourValue;
+    readonly confidence: number;
+  }[];
+  readonly journey: {
+    readonly followUpDue: boolean;
+    readonly satisfactionState: ClientSatisfactionState;
+    readonly serviceRecoveryNeeded: boolean;
+    readonly reassignmentState: ClientReassignmentState;
+    readonly lifecycleState: ClientLifecycleState;
+    readonly vendorsReleased: number;
+    readonly vendorNoContactCount: number;
+    readonly allReleasedVendorsContacted: boolean;
+  };
+  readonly opportunities: readonly {
+    readonly serviceRef: string;
+    readonly score: number;
+    readonly relevance: ServiceRelevance;
+    readonly explicitInterest: boolean;
+  }[];
+  readonly nextBestAction: ClientNextBestAction;
+}
