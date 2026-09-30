@@ -510,7 +510,7 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
                 vendorNoContactCount: 1,
                 allReleasedVendorsContacted: false,
                 satisfactionState: 'UNKNOWN',
-                serviceRecoveryNeeded: false,
+                serviceRecoveryNeeded: true,
                 reassignmentState: 'NONE',
                 followUpDue: false,
               },
