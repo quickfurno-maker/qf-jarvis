@@ -98,6 +98,29 @@ describe('Riya v2 conversation quality', () => {
     expect(lower).toContain('follow their language changes');
   });
 
+  it('acts as a QuickFurno service expert using live Core truth', () => {
+    expect(lower).toContain('quickfurno expert mode');
+    expect(lower).toContain('live service catalogue');
+    expect(lower).toContain('read it before drafting every reply');
+    expect(lower).toContain('recognize ordinary customer language');
+    expect(lower).toContain('quickfurno can help with that requirement');
+    expect(lower).toContain('never name a service that is absent');
+  });
+
+  it('is proactive without turning into a pushy form or menu', () => {
+    expect(lower).toContain('proactive consultation');
+    expect(lower).toContain('be useful before being interrogative');
+    expect(lower).toContain('do not wait for the client to know which quickfurno service name');
+    expect(lower).toContain('keep momentum toward a useful, core-reviewable requirement');
+    expect(lower).toContain('proactive does not mean pushy');
+  });
+
+  it('uses current governed QuickFurno facts over stale conversation assumptions', () => {
+    expect(lower).toContain('freshness matters');
+    expect(lower).toContain('override older conversation assumptions about quickfurno');
+    expect(lower).toContain('do not repeat a superseded value');
+  });
+
   it('handles objections without invented claims or pressure', () => {
     expect(lower).toContain('price, trust, quality or timing');
     expect(lower).toContain('do not argue, pressure, guilt');
