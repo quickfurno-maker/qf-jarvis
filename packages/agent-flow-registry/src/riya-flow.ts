@@ -56,6 +56,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'NONE',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.quickfurno-gateway',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Validated inbound message enters the durable turn path.',
     codeLocked: true,
     canvasEditable: [],
@@ -74,6 +75,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'NONE',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.QuickFurnoWhatsAppTurnQueue.claimNext',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Claims one durable turn with actor/conversation concurrency protection.',
     codeLocked: true,
     canvasEditable: ['retryPolicyRef'],
@@ -92,6 +94,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'READ_ONLY',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.QuickFurnoWhatsAppMaterialReader.read',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Reads revision-bound Core material for the exact inbound turn.',
     codeLocked: true,
     canvasEditable: ['timeoutPolicyRef', 'fallbackNodeId'],
@@ -110,6 +113,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'READ_ONLY',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.contracts.clientJourney',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Core-owned current client/requirement projection carried inside turn material.',
     codeLocked: true,
     canvasEditable: ['contextProfileRef'],
@@ -128,6 +132,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'READ_ONLY',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.riyaLifetimeContextFromMaterial',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'Bounded returning-client, property and past-service context derived from Core material.',
     codeLocked: true,
@@ -147,6 +152,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'READ_ONLY',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.contracts.clientVendorJourney',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Core-owned released-vendor, contact, satisfaction and recovery projection.',
     codeLocked: true,
     canvasEditable: ['contextProfileRef'],
@@ -165,6 +171,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'READ_ONLY',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.contracts.coreAvailability',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Authoritative service/city availability supplied by QuickFurno Core.',
     codeLocked: true,
     canvasEditable: ['contextProfileRef'],
@@ -183,6 +190,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'NONE',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.feedbackForMaterial',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'Deterministically detects narrow ordinal-bound client vendor feedback before model execution.',
     codeLocked: true,
@@ -202,6 +210,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'GOVERNED_ACTION',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.createQuickFurnoClientVendorFeedbackWriter',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'Sends a signed evidence-bound proposal; Core independently validates before persistence.',
     codeLocked: true,
@@ -221,6 +230,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'READ_ONLY',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.QuickFurnoWhatsAppMaterialReader.read',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Re-reads Core material after accepted feedback so Riya sees accepted truth.',
     codeLocked: true,
     canvasEditable: ['timeoutPolicyRef', 'fallbackNodeId'],
@@ -239,6 +249,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'PROPOSAL_ONLY',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.buildWhatsAppClientIntelligence',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'Builds advisory client intelligence and deterministic next-best-action from bounded Core state.',
     codeLocked: true,
@@ -258,6 +269,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'NONE',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.shouldRequestCoreMatch',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'Allows a match request only when the typed Client OS next-best-action is REQUEST_MATCH.',
     codeLocked: true,
@@ -277,6 +289,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'GOVERNED_ACTION',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.createQuickFurnoClientMatchRequestWriter',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'Sends signed revision-bound match request; Core revalidates readiness and owns matching.',
     codeLocked: true,
@@ -296,6 +309,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'READ_ONLY',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.QuickFurnoWhatsAppMaterialReader.read',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Re-reads Core material after a match action before model response generation.',
     codeLocked: true,
     canvasEditable: ['timeoutPolicyRef', 'fallbackNodeId'],
@@ -315,6 +329,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     status: 'IMPLEMENTED',
     implementationRef:
       'apps.api.quickfurno-whatsapp.QuickFurnoWhatsAppConversationContextReader.read',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Loads bounded conversation context in parallel with Core turn material.',
     codeLocked: true,
     canvasEditable: ['contextProfileRef', 'timeoutPolicyRef'],
@@ -333,6 +348,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'PROPOSAL_ONLY',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.createQuickFurnoWhatsAppSpecialistRuntime',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'Composes Riya continuity, semantic context, prompt/model route, governed knowledge and proposal generation.',
     codeLocked: true,
@@ -358,6 +374,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'CHANNEL_REQUEST',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.createQuickFurnoWhatsAppReplyWriter',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'Submits the Riya reply through the signed Core reply boundary; Jarvis does not send directly.',
     codeLocked: true,
@@ -377,6 +394,7 @@ const nodes: readonly AgentFlowNodeDefinition[] = [
     effect: 'NONE',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.QuickFurnoWhatsAppTurnQueue.complete',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Marks the claimed turn complete after the governed reply/result is accepted.',
     codeLocked: true,
     canvasEditable: [],
@@ -548,6 +566,10 @@ const edges: readonly AgentFlowEdgeDefinition[] = [
 ] as const;
 
 export const RIYA_WHATSAPP_CLIENT_FLOW_V1 = createAgentFlowDefinition({
+  registrySchemaVersion: 1,
+  implementationBaselineRef: 'qf-jarvis@2423e3d5',
+  verifiedAt: '2026-09-30',
+  readOnly: true,
   flowId: 'agent-flow.riya.whatsapp-client.v1',
   flowVersion: 1,
   label: 'Riya — WhatsApp client journey',

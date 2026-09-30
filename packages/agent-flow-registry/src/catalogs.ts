@@ -11,6 +11,7 @@ export const AGENT_FLOW_TRIGGER_CATALOG_V1: readonly AgentFlowTriggerDefinition[
     label: 'WhatsApp inbound',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.quickfurno-gateway',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'A validated inbound WhatsApp message enters the durable QuickFurno/Jarvis turn path.',
   }),
@@ -20,6 +21,7 @@ export const AGENT_FLOW_TRIGGER_CATALOG_V1: readonly AgentFlowTriggerDefinition[
     label: 'Lead qualification turn',
     status: 'IMPLEMENTED',
     implementationRef: 'apps.api.quickfurno-whatsapp.turn-processor',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'Core-bound Phase-1 qualification work is claimed with the dedicated lead_qualification purpose.',
   }),
@@ -29,6 +31,7 @@ export const AGENT_FLOW_TRIGGER_CATALOG_V1: readonly AgentFlowTriggerDefinition[
     label: 'Client follow-up due',
     status: 'PLANNED',
     implementationRef: 'packages.durable-orchestration-contracts',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'Approved future Riya follow-up wake trigger; durable orchestration primitives already exist underneath.',
   }),
@@ -38,6 +41,7 @@ export const AGENT_FLOW_TRIGGER_CATALOG_V1: readonly AgentFlowTriggerDefinition[
     label: 'Vendor lifecycle event',
     status: 'PLANNED',
     implementationRef: 'packages.event-backbone',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Future Anisha flow trigger sourced from canonical vendor lifecycle events.',
   }),
   Object.freeze({
@@ -46,6 +50,7 @@ export const AGENT_FLOW_TRIGGER_CATALOG_V1: readonly AgentFlowTriggerDefinition[
     label: 'Prospect acquisition event',
     status: 'PLANNED',
     implementationRef: 'packages.event-backbone',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Future Aarohi flow trigger sourced from acquisition/prospect events.',
   }),
 ]);
@@ -59,6 +64,7 @@ export const AGENT_FLOW_ACTION_CATALOG_V1: readonly AgentFlowActionDefinition[] 
     authority: 'CORE_GOVERNED_ACTION',
     effect: 'GOVERNED_ACTION',
     implementationRef: 'apps.api.quickfurno-whatsapp.createQuickFurnoClientVendorFeedbackWriter',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'Signed, evidence-bound client feedback request. Core independently validates and persists truth.',
   }),
@@ -70,6 +76,7 @@ export const AGENT_FLOW_ACTION_CATALOG_V1: readonly AgentFlowActionDefinition[] 
     authority: 'CORE_GOVERNED_ACTION',
     effect: 'GOVERNED_ACTION',
     implementationRef: 'apps.api.quickfurno-whatsapp.createQuickFurnoClientMatchRequestWriter',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'Signed revision-bound match request. QuickFurno Core revalidates readiness and owns matching.',
   }),
@@ -81,6 +88,7 @@ export const AGENT_FLOW_ACTION_CATALOG_V1: readonly AgentFlowActionDefinition[] 
     authority: 'CORE_GOVERNED_ACTION',
     effect: 'CHANNEL_REQUEST',
     implementationRef: 'apps.api.quickfurno-whatsapp.createQuickFurnoWhatsAppReplyWriter',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description:
       'Queues a governed conversational reply through the existing Core/provider boundary.',
   }),
@@ -92,6 +100,7 @@ export const AGENT_FLOW_ACTION_CATALOG_V1: readonly AgentFlowActionDefinition[] 
     authority: 'CORE_GOVERNED_ACTION',
     effect: 'GOVERNED_ACTION',
     implementationRef: 'packages.jao-action-registry.request_human_takeover',
+    implementationVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Reviewed proposal path exists but is disabled by the engineering registry.',
   }),
 ]);
@@ -104,6 +113,7 @@ export const AGENT_FLOW_EVENT_CATALOG_V1: readonly AgentFlowEventDefinition[] = 
     status: 'IMPLEMENTED',
     eventClass: 'FLOW_RESULT',
     sourceRef: 'apps.api.quickfurno-whatsapp.client-vendor-feedback',
+    sourceVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Core result accepted by the turn processor before context refresh.',
   }),
   Object.freeze({
@@ -113,6 +123,7 @@ export const AGENT_FLOW_EVENT_CATALOG_V1: readonly AgentFlowEventDefinition[] = 
     status: 'IMPLEMENTED',
     eventClass: 'FLOW_RESULT',
     sourceRef: 'apps.api.quickfurno-whatsapp.client-match-request',
+    sourceVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Core match result accepted before the specialist/model turn.',
   }),
   Object.freeze({
@@ -122,6 +133,7 @@ export const AGENT_FLOW_EVENT_CATALOG_V1: readonly AgentFlowEventDefinition[] = 
     status: 'IMPLEMENTED',
     eventClass: 'CHANNEL_EVENT',
     sourceRef: 'apps.api.quickfurno-whatsapp.reply-writer',
+    sourceVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Core accepted a reply request and returned its queue result.',
   }),
   Object.freeze({
@@ -131,6 +143,7 @@ export const AGENT_FLOW_EVENT_CATALOG_V1: readonly AgentFlowEventDefinition[] = 
     status: 'PLANNED',
     eventClass: 'CORE_EVENT',
     sourceRef: 'packages.event-backbone',
+    sourceVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Future canonical vendor event wake source for Anisha.',
   }),
   Object.freeze({
@@ -140,6 +153,7 @@ export const AGENT_FLOW_EVENT_CATALOG_V1: readonly AgentFlowEventDefinition[] = 
     status: 'PLANNED',
     eventClass: 'CORE_EVENT',
     sourceRef: 'packages.event-backbone',
+    sourceVersionRef: 'qf-jarvis@2423e3d5',
     description: 'Future acquisition/prospect wake source for Aarohi.',
   }),
 ]);

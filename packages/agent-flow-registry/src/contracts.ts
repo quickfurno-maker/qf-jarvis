@@ -1,3 +1,5 @@
+export const AGENT_FLOW_REGISTRY_SCHEMA_VERSION = 1 as const;
+
 export const AGENT_FLOW_ACTORS = ['RIYA', 'ANISHA', 'AAROHI', 'SHARED'] as const;
 export type AgentFlowActor = (typeof AGENT_FLOW_ACTORS)[number];
 
@@ -94,6 +96,7 @@ export interface AgentFlowNodeDefinition {
   readonly effect: AgentFlowEffect;
   readonly status: AgentFlowStatus;
   readonly implementationRef: string;
+  readonly implementationVersionRef: string;
   readonly description: string;
   readonly codeLocked: boolean;
   readonly canvasEditable: readonly AgentFlowCanvasConfigKey[];
@@ -119,6 +122,10 @@ export interface AgentFlowGroupDefinition {
 }
 
 export interface AgentFlowDefinition {
+  readonly registrySchemaVersion: typeof AGENT_FLOW_REGISTRY_SCHEMA_VERSION;
+  readonly implementationBaselineRef: string;
+  readonly verifiedAt: string;
+  readonly readOnly: true;
   readonly flowId: string;
   readonly flowVersion: number;
   readonly label: string;
@@ -137,6 +144,7 @@ export interface AgentFlowTriggerDefinition {
   readonly label: string;
   readonly status: AgentFlowStatus;
   readonly implementationRef: string;
+  readonly implementationVersionRef: string;
   readonly description: string;
 }
 
@@ -148,6 +156,7 @@ export interface AgentFlowActionDefinition {
   readonly authority: AgentFlowAuthority;
   readonly effect: Extract<AgentFlowEffect, 'GOVERNED_ACTION' | 'CHANNEL_REQUEST'>;
   readonly implementationRef: string;
+  readonly implementationVersionRef: string;
   readonly description: string;
 }
 
@@ -158,5 +167,6 @@ export interface AgentFlowEventDefinition {
   readonly status: AgentFlowStatus;
   readonly eventClass: 'FLOW_RESULT' | 'CORE_EVENT' | 'CHANNEL_EVENT';
   readonly sourceRef: string;
+  readonly sourceVersionRef: string;
   readonly description: string;
 }
