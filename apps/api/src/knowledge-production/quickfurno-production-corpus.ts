@@ -35,8 +35,12 @@ type Candidate = Omit<
   'approvedBy' | 'approvedAt' | 'effectiveFrom' | 'expiresAt' | 'lifecycleState'
 >;
 
+function candidate(value: Candidate): Candidate {
+  return Object.freeze(value);
+}
+
 const candidates: readonly Candidate[] = Object.freeze([
-  Object.freeze({
+  candidate({
     knowledgeId: 'qf.public.marketplace-overview',
     version: 1,
     topic: 'quickfurno-overview',
@@ -62,7 +66,7 @@ const candidates: readonly Candidate[] = Object.freeze([
       allowedPurposes: ['CLIENT_RESPONSE', 'VENDOR_RESPONSE', 'PROSPECT_RESPONSE'],
     },
   }),
-  Object.freeze({
+  candidate({
     knowledgeId: 'qf.public.matching-process',
     version: 1,
     topic: 'matching-process',
@@ -87,7 +91,7 @@ const candidates: readonly Candidate[] = Object.freeze([
       allowedPurposes: ['CLIENT_RESPONSE', 'VENDOR_RESPONSE'],
     },
   }),
-  Object.freeze({
+  candidate({
     knowledgeId: 'qf.public.vendor-listing-policy',
     version: 1,
     topic: 'vendor-listing-policy',
@@ -113,7 +117,7 @@ const candidates: readonly Candidate[] = Object.freeze([
       allowedPurposes: ['CLIENT_RESPONSE', 'VENDOR_RESPONSE', 'PROSPECT_RESPONSE'],
     },
   }),
-  Object.freeze({
+  candidate({
     knowledgeId: 'qf.public.lead-sharing-privacy',
     version: 1,
     topic: 'lead-sharing-privacy',
@@ -140,7 +144,7 @@ const candidates: readonly Candidate[] = Object.freeze([
       allowedPurposes: ['CLIENT_RESPONSE', 'VENDOR_RESPONSE'],
     },
   }),
-  Object.freeze({
+  candidate({
     knowledgeId: 'qf.public.service-categories',
     version: 1,
     topic: 'service-categories',
@@ -164,7 +168,7 @@ const candidates: readonly Candidate[] = Object.freeze([
       allowedPurposes: ['CLIENT_RESPONSE', 'VENDOR_RESPONSE', 'PROSPECT_RESPONSE'],
     },
   }),
-  Object.freeze({
+  candidate({
     knowledgeId: 'qf.public.pune-service-areas',
     version: 1,
     topic: 'pune-service-areas',
@@ -188,7 +192,7 @@ const candidates: readonly Candidate[] = Object.freeze([
       allowedPurposes: ['CLIENT_RESPONSE', 'VENDOR_RESPONSE', 'PROSPECT_RESPONSE'],
     },
   }),
-  Object.freeze({
+  candidate({
     knowledgeId: 'qf.public.vendor-join-overview',
     version: 1,
     topic: 'vendor-join-overview',
