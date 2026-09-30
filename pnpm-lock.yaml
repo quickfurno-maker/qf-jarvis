@@ -50,6 +50,9 @@ importers:
       '@qf-jarvis/approval-core-adapter':
         specifier: workspace:*
         version: link:../../packages/approval-core-adapter
+      '@qf-jarvis/client-intelligence':
+        specifier: workspace:*
+        version: link:../../packages/client-intelligence
       '@qf-jarvis/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

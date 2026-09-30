@@ -22,6 +22,7 @@
     "@qf-jarvis/agent-runtime": "workspace:*",
     "@qf-jarvis/approval-core-adapter": "workspace:*",
     "@qf-jarvis/contracts": "workspace:*",
+    "@qf-jarvis/client-intelligence": "workspace:*",
     "@qf-jarvis/core-decision-adapter": "workspace:*",
     "@qf-jarvis/core-data-tools": "workspace:*",
     "@qf-jarvis/core-riya-intake": "workspace:*",

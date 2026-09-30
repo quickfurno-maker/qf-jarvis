@@ -17,6 +17,7 @@ import type {
   QuickFurnoWhatsAppWorkerMaterial,
   QuickFurnoWhatsAppWorkerProposal,
 } from './contracts.js';
+import { buildWhatsAppClientIntelligence } from './client-intelligence-adapter.js';
 
 export interface QuickFurnoWhatsAppSpecialistRuntime {
   process(
@@ -310,6 +311,7 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         if (continuity === null) return null;
         const profile = material.clientJourney;
         const availabilitySnapshot = material.coreAvailability;
+        const clientIntelligence = buildWhatsAppClientIntelligence(material);
         const result = await runCustomerTurnWorkflow(
           () =>
             processRiya({
@@ -323,6 +325,7 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
                   ? {}
                   : { preferredLanguage: profile.preferredLanguage }),
               },
+              ...(clientIntelligence === undefined ? {} : { clientIntelligence }),
               availabilitySnapshot,
             }),
           'WHATSAPP',
