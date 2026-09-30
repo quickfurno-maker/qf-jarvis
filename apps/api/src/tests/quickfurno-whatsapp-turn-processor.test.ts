@@ -106,11 +106,51 @@ const matchedMaterial: QuickFurnoWhatsAppTurnMaterialV2 = Object.freeze({
   }),
 });
 
+
+const vendorFeedbackMaterial: QuickFurnoWhatsAppTurnMaterialV2 = Object.freeze({
+  ...matchedMaterial,
+  normalizedText: "Vendor 2 didn't call me",
+  inbound: Object.freeze({
+    version: 1 as const,
+    messageType: 'text' as const,
+    normalizedText: "Vendor 2 didn't call me",
+  }),
+  clientVendorJourney: Object.freeze({
+    version: 1 as const,
+    requirementId: '55555555-5555-4555-8555-555555555555',
+    requirementRevision: 4,
+    vendorsReleased: 3,
+    vendorNoContactCount: 0,
+    allReleasedVendorsContacted: false,
+    satisfactionState: 'UNKNOWN' as const,
+    serviceRecoveryNeeded: false,
+    reassignmentState: 'NONE' as const,
+    followUpDue: true,
+  }),
+});
+
+const vendorFeedbackRecordedMaterial: QuickFurnoWhatsAppTurnMaterialV2 = Object.freeze({
+  ...vendorFeedbackMaterial,
+  clientVendorJourney: Object.freeze({
+    version: 1 as const,
+    requirementId: '55555555-5555-4555-8555-555555555555',
+    requirementRevision: 4,
+    vendorsReleased: 3,
+    vendorNoContactCount: 1,
+    allReleasedVendorsContacted: false,
+    satisfactionState: 'UNKNOWN' as const,
+    serviceRecoveryNeeded: true,
+    reassignmentState: 'NONE' as const,
+    followUpDue: true,
+  }),
+});
+
 function fixture(
   over: {
     materialRead?: () => Promise<QuickFurnoWhatsAppTurnMaterialV2>;
     contextRead?: () => Promise<{ readonly context: QuickFurnoWhatsAppConversationContextV1 }>;
     specialist?: (...args: unknown[]) => Promise<unknown>;
+    vendorFeedback?: (...args: unknown[]) => Promise<unknown>;
     matchRequest?: (...args: unknown[]) => Promise<unknown>;
     write?: () => Promise<'queued' | 'stale'>;
   } = {},
@@ -134,6 +174,8 @@ function fixture(
       (() =>
         Promise.resolve({ actor: 'RIYA', proposalId: 'prop.1', boundRevision: 7, body: 'reply' })),
   );
+  const vendorFeedback =
+    over.vendorFeedback === undefined ? undefined : vi.fn(over.vendorFeedback as never);
   const matchRequest =
     over.matchRequest === undefined ? undefined : vi.fn(over.matchRequest as never);
   const write = vi.fn(over.write ?? (() => Promise.resolve('queued' as const)));
@@ -142,6 +184,9 @@ function fixture(
     materialReader: { read },
     conversationContextReader: { read: contextRead as never },
     specialistRuntime: { process: process as never },
+    ...(vendorFeedback === undefined
+      ? {}
+      : { clientVendorFeedbackWriter: { record: vendorFeedback as never } }),
     ...(matchRequest === undefined ? {} : { clientMatchRequestWriter: { request: matchRequest as never } }),
     replyWriter: { write },
   });
@@ -155,6 +200,7 @@ function fixture(
     contextRead,
     context,
     process,
+    vendorFeedback,
     matchRequest,
     write,
   };
@@ -233,6 +279,59 @@ describe('QuickFurno WhatsApp turn processor', () => {
     expect(f.complete).toHaveBeenCalledOnce();
   });
 
+
+  it('records explicit client vendor feedback before Riya and refreshes Core journey', async () => {
+    let reads = 0;
+    const f = fixture({
+      materialRead: () => {
+        reads += 1;
+        return Promise.resolve(
+          reads === 1 ? vendorFeedbackMaterial : vendorFeedbackRecordedMaterial,
+        );
+      },
+      vendorFeedback: () =>
+        Promise.resolve({
+          protocol: 'qfj.client-vendor-feedback.request',
+          version: 1,
+          requestId: '88888888-8888-4888-8888-888888888888',
+          outcome: 'recorded',
+          assignmentOrdinal: 2,
+          eventType: 'client_reported_no_contact',
+          reasonCode: 'CLIENT_VENDOR_FEEDBACK_RECORDED',
+          providerAuthority: 'quickfurno-core',
+        }),
+    });
+    expect(await f.processor.processOne()).toBe('completed-queued');
+    expect(f.read).toHaveBeenCalledTimes(2);
+    expect(f.vendorFeedback).toHaveBeenCalledOnce();
+    expect(f.process).toHaveBeenCalledWith(vendorFeedbackRecordedMaterial, f.context);
+    expect(f.vendorFeedback!.mock.invocationCallOrder[0]).toBeLessThan(
+      f.process.mock.invocationCallOrder[0]!,
+    );
+    expect(f.write).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed before Riya when Core rejects explicit vendor feedback evidence', async () => {
+    const f = fixture({
+      materialRead: () => Promise.resolve(vendorFeedbackMaterial),
+      vendorFeedback: () =>
+        Promise.resolve({
+          protocol: 'qfj.client-vendor-feedback.request',
+          version: 1,
+          requestId: '88888888-8888-4888-8888-888888888888',
+          outcome: 'blocked',
+          assignmentOrdinal: 2,
+          eventType: 'client_reported_no_contact',
+          reasonCode: 'CLIENT_VENDOR_FEEDBACK_EVIDENCE_MISMATCH',
+          providerAuthority: 'quickfurno-core',
+        }),
+    });
+    expect(await f.processor.processOne()).toBe('failed-indeterminate');
+    expect(f.vendorFeedback).toHaveBeenCalledOnce();
+    expect(f.process).not.toHaveBeenCalled();
+    expect(f.write).not.toHaveBeenCalled();
+    expect(f.fail).toHaveBeenCalledWith(ref.inboundMessageId);
+  });
 
   it('executes deterministic Core matching before Riya and refreshes Core state', async () => {
     let reads = 0;

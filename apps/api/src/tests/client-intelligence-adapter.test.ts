@@ -327,6 +327,32 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
     });
   });
 
+  it('keeps no-contact evidence while prioritizing an explicit replacement request', () => {
+    const snapshot = buildWhatsAppClientIntelligence(
+      material({
+        normalizedText: "Vendor 2 didn't call me, send another vendor",
+        clientVendorJourney: {
+          version: 1,
+          requirementId: 'requirement.1',
+          requirementRevision: 7,
+          vendorsReleased: 3,
+          vendorNoContactCount: 1,
+          allReleasedVendorsContacted: false,
+          satisfactionState: 'UNKNOWN',
+          serviceRecoveryNeeded: true,
+          reassignmentState: 'NONE',
+          followUpDue: false,
+        },
+      }),
+    );
+    expect(snapshot?.journey.vendorNoContactCount).toBe(1);
+    expect(snapshot?.nextBestAction).toMatchObject({
+      action: 'REQUEST_REASSIGNMENT',
+      reasonCode: 'CLIENT_REASSIGNMENT_REQUESTED',
+      requiresCoreDecision: true,
+    });
+  });
+
   it('does not create Client OS context when Core supplies no client journey', () => {
     expect(buildWhatsAppClientIntelligence(material({ clientJourney: undefined }))).toBeUndefined();
   });

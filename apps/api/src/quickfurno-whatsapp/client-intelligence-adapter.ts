@@ -65,6 +65,8 @@ const NEGATED_MATCH_INTENT =
   /\b(?:do\s*not|don't|dont|not\s+now|later|cancel|stop|no)\b[\s\S]{0,40}\b(?:vendor|vendors|professional|professionals|pro|pros|team|teams)\b|\b(?:vendor|vendors)\b[\s\S]{0,24}\b(?:nahi|nahin|mat|later)\b|\bmat\s+bhejo\b|\bnahi\s+chahiye\b/iu;
 const MATCH_INTENT =
   /\b(?:send|share|connect|match|assign|find|give|need|want|get)\b[\s\S]{0,80}\b(?:vendor|vendors|professional|professionals|pro|pros|team|teams)\b|\b(?:vendor|vendors|professional|professionals|pro|pros|team|teams)\b[\s\S]{0,80}\b(?:send|share|connect|match|assign|find|give|need|want|get)\b|\b(?:3|three|teen)\s+(?:nearby\s+)?vendors?\b|\bvendors?\s+nearby\b|\bvendors?\b[\s\S]{0,40}\b(?:bhejo|bhej\s*do|chahiye|connect\s*karo|dikhao)\b/iu;
+const REASSIGNMENT_INTENT =
+  /\b(?:replace|change|remove|another)\b[\s\S]{0,40}\bvendor\b|\bvendor\b[\s\S]{0,40}\b(?:replace|change|remove)\b|\b(?:dusra|doosra)\s+vendor\b/iu;
 
 function lifecycleState(
   status: QuickFurnoWhatsAppTurnMaterialV2['clientJourney'] extends infer Journey
@@ -125,7 +127,8 @@ export function buildWhatsAppClientIntelligence(
   const decision = Object.freeze({
     clientQuestionPending: false,
     humanHandoffRequested: false,
-    explicitReassignmentRequested: false,
+    explicitReassignmentRequested:
+      vendorsReleased > 0 && REASSIGNMENT_INTENT.test(material.normalizedText?.trim() ?? ''),
     extraVendorReviewRequested: false,
     matchRequested,
     matchReady: matchDecision?.state === 'READY' && matchDecision.coreReady,

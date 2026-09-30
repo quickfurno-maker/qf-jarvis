@@ -39,6 +39,13 @@ export const QFJ_CLIENT_MATCH_REQUEST_VERSION = 1 as const;
 export const QFJ_CLIENT_MATCH_REQUEST_PATH = '/api/internal/jarvis/client-match-request' as const;
 export const QFJ_CLIENT_MATCH_REQUEST_SIGNING_DOMAIN =
   'qfj.client-match.request.http.sig.v1' as const;
+export const QFJ_CLIENT_VENDOR_FEEDBACK_PROTOCOL =
+  'qfj.client-vendor-feedback.request' as const;
+export const QFJ_CLIENT_VENDOR_FEEDBACK_VERSION = 1 as const;
+export const QFJ_CLIENT_VENDOR_FEEDBACK_PATH =
+  '/api/internal/jarvis/client-vendor-feedback' as const;
+export const QFJ_CLIENT_VENDOR_FEEDBACK_SIGNING_DOMAIN =
+  'qfj.client-vendor-feedback.http.sig.v1' as const;
 
 export type QuickFurnoWhatsAppAgent = 'AAROHI' | 'ANISHA' | 'RIYA';
 export type QuickFurnoWhatsAppAuthorityActor = QuickFurnoWhatsAppAgent | 'HUMAN' | 'SYSTEM';
@@ -238,6 +245,37 @@ export interface QuickFurnoClientMatchRequestResultV1 {
   readonly outcome: QuickFurnoClientMatchRequestOutcome;
   readonly leadId: string;
   readonly assignmentCount: number;
+  readonly reasonCode: string;
+  readonly providerAuthority: 'quickfurno-core';
+}
+
+export type QuickFurnoClientVendorFeedbackEventType =
+  | 'client_confirmed_contact'
+  | 'client_reported_no_contact'
+  | 'client_satisfied'
+  | 'client_dissatisfied'
+  | 'client_complaint'
+  | 'reassignment_requested';
+
+export interface QuickFurnoExplicitClientVendorFeedback {
+  readonly assignmentOrdinal: number;
+  readonly eventType: QuickFurnoClientVendorFeedbackEventType;
+}
+
+export type QuickFurnoClientVendorFeedbackOutcome =
+  | 'recorded'
+  | 'already_recorded'
+  | 'stale'
+  | 'blocked'
+  | 'retry_later';
+
+export interface QuickFurnoClientVendorFeedbackResultV1 {
+  readonly protocol: typeof QFJ_CLIENT_VENDOR_FEEDBACK_PROTOCOL;
+  readonly version: 1;
+  readonly requestId: string;
+  readonly outcome: QuickFurnoClientVendorFeedbackOutcome;
+  readonly assignmentOrdinal: number;
+  readonly eventType: QuickFurnoClientVendorFeedbackEventType;
   readonly reasonCode: string;
   readonly providerAuthority: 'quickfurno-core';
 }

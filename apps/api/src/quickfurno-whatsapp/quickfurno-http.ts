@@ -4,6 +4,9 @@ import {
   QFJ_CLIENT_MATCH_REQUEST_PATH,
   QFJ_CLIENT_MATCH_REQUEST_PROTOCOL,
   QFJ_CLIENT_MATCH_REQUEST_SIGNING_DOMAIN,
+  QFJ_CLIENT_VENDOR_FEEDBACK_PATH,
+  QFJ_CLIENT_VENDOR_FEEDBACK_PROTOCOL,
+  QFJ_CLIENT_VENDOR_FEEDBACK_SIGNING_DOMAIN,
   QFJ_WHATSAPP_CONVERSATION_CONTEXT_PATH,
   QFJ_WHATSAPP_CONVERSATION_CONTEXT_PROTOCOL,
   QFJ_WHATSAPP_CONVERSATION_CONTEXT_SIGNING_DOMAIN,
@@ -22,6 +25,8 @@ import {
   type QuickFurnoClientJourneySnapshotV2,
   type QuickFurnoClientMatchDecisionV1,
   type QuickFurnoClientMatchRequestResultV1,
+  type QuickFurnoClientVendorFeedbackResultV1,
+  type QuickFurnoExplicitClientVendorFeedback,
   type QuickFurnoClientVendorJourneyV1,
   type QuickFurnoCoreAvailabilitySnapshotV1,
   type QuickFurnoLeadQualificationMaterialV1,
@@ -941,9 +946,11 @@ function parseClientVendorJourney(
 
   const vendorsReleased = value['vendorsReleased'];
   const vendorNoContactCount = value['vendorNoContactCount'];
-  const allReleasedVendorsContacted =
-    vendorsReleased > 0 && vendorNoContactCount === 0;
-  if (value['allReleasedVendorsContacted'] !== allReleasedVendorsContacted) return null;
+  const allReleasedVendorsContacted = value['allReleasedVendorsContacted'];
+  if (
+    allReleasedVendorsContacted &&
+    (vendorsReleased === 0 || vendorNoContactCount > 0)
+  ) return null;
   if (
     matchDecision !== undefined &&
     matchDecision.assignmentCount !== vendorsReleased
@@ -954,10 +961,10 @@ function parseClientVendorJourney(
   const reassignmentState =
     value['reassignmentState'] as QuickFurnoClientVendorJourneyV1['reassignmentState'];
   const recoveryExpected =
+    vendorNoContactCount > 0 ||
     satisfactionState === 'DISSATISFIED' ||
     satisfactionState === 'COMPLAINT' ||
-    reassignmentState === 'REQUESTED' ||
-    reassignmentState === 'REJECTED';
+    reassignmentState === 'REQUESTED';
   if (value['serviceRecoveryNeeded'] !== recoveryExpected) return null;
 
   return Object.freeze({
@@ -1629,6 +1636,126 @@ export function createQuickFurnoWhatsAppAuthorityReader(
         throw new QuickFurnoWhatsAppHttpError('response-invalid');
       }
       return authority;
+    },
+  });
+}
+
+export interface QuickFurnoClientVendorFeedbackWriter {
+  record(input: {
+    readonly material: QuickFurnoWhatsAppTurnMaterialV2;
+    readonly feedback: QuickFurnoExplicitClientVendorFeedback;
+  }): Promise<QuickFurnoClientVendorFeedbackResultV1>;
+}
+
+export function createQuickFurnoClientVendorFeedbackWriter(
+  config: QuickFurnoWhatsAppHttpConfig,
+): QuickFurnoClientVendorFeedbackWriter {
+  const { key, timeoutMs } = parsePrivateKey(config);
+
+  return Object.freeze({
+    async record(input: {
+      readonly material: QuickFurnoWhatsAppTurnMaterialV2;
+      readonly feedback: QuickFurnoExplicitClientVendorFeedback;
+    }) {
+      const { material, feedback } = input;
+      const journey = material.clientJourney;
+      const vendorJourney = material.clientVendorJourney;
+      if (
+        material.assignedActor !== 'RIYA' ||
+        material.subjectType !== 'client' ||
+        journey === undefined ||
+        vendorJourney === undefined ||
+        vendorJourney.requirementId !== journey.activeRequirement.requirementId ||
+        vendorJourney.requirementRevision !== journey.activeRequirement.revision ||
+        !Number.isSafeInteger(feedback.assignmentOrdinal) ||
+        feedback.assignmentOrdinal < 1 ||
+        feedback.assignmentOrdinal > 6 ||
+        feedback.assignmentOrdinal > vendorJourney.vendorsReleased
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
+
+      const requestId = config.requestId();
+      const issuedAt = config.clock();
+      if (!UUID.test(requestId) || !INSTANT.test(issuedAt) || !Number.isFinite(Date.parse(issuedAt))) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-config');
+      }
+
+      const body = JSON.stringify({
+        protocol: QFJ_CLIENT_VENDOR_FEEDBACK_PROTOCOL,
+        version: 1,
+        caller: CALLER,
+        audience: AUDIENCE,
+        requestId,
+        issuedAt,
+        tenantId: material.tenantId,
+        conversationId: material.conversationId,
+        inboundMessageId: material.inboundMessageId,
+        expectedConversationRevision: material.revision,
+        requirementId: journey.activeRequirement.requirementId,
+        expectedRequirementRevision: journey.activeRequirement.revision,
+        assignmentOrdinal: feedback.assignmentOrdinal,
+        eventType: feedback.eventType,
+      });
+
+      const response = await signedPost({
+        config,
+        key,
+        timeoutMs,
+        path: QFJ_CLIENT_VENDOR_FEEDBACK_PATH,
+        domain: QFJ_CLIENT_VENDOR_FEEDBACK_SIGNING_DOMAIN,
+        requestId,
+        issuedAt,
+        body,
+      });
+      if (![200, 403, 409, 503].includes(response.status)) {
+        throw new QuickFurnoWhatsAppHttpError('request-failed');
+      }
+      const text = await response.text();
+      if (
+        Buffer.byteLength(text, 'utf8') < 2 ||
+        Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+
+      let decoded: unknown;
+      try {
+        decoded = JSON.parse(text);
+      } catch {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      if (!isRecord(decoded)) throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      const outcomes = ['recorded','already_recorded','stale','blocked','retry_later'] as const;
+      if (
+        !onlyKeys(decoded, [
+          'protocol','version','requestId','outcome','assignmentOrdinal',
+          'eventType','reasonCode','providerAuthority',
+        ]) ||
+        decoded['protocol'] !== QFJ_CLIENT_VENDOR_FEEDBACK_PROTOCOL ||
+        decoded['version'] !== 1 ||
+        decoded['requestId'] !== requestId ||
+        typeof decoded['outcome'] !== 'string' ||
+        !(outcomes as readonly string[]).includes(decoded['outcome']) ||
+        decoded['assignmentOrdinal'] !== feedback.assignmentOrdinal ||
+        decoded['eventType'] !== feedback.eventType ||
+        typeof decoded['reasonCode'] !== 'string' ||
+        !ID.test(decoded['reasonCode']) ||
+        decoded['providerAuthority'] !== 'quickfurno-core'
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+
+      return Object.freeze({
+        protocol: QFJ_CLIENT_VENDOR_FEEDBACK_PROTOCOL,
+        version: 1 as const,
+        requestId,
+        outcome: decoded['outcome'] as QuickFurnoClientVendorFeedbackResultV1['outcome'],
+        assignmentOrdinal: feedback.assignmentOrdinal,
+        eventType: feedback.eventType,
+        reasonCode: decoded['reasonCode'],
+        providerAuthority: 'quickfurno-core' as const,
+      });
     },
   });
 }
