@@ -1,4 +1,8 @@
 import {
+  planClientNextBestAction,
+  type ClientNextBestActionInput,
+} from '@qf-jarvis/client-intelligence';
+import {
   runDigitalTwinSuite,
   type DigitalTwinCandidate,
   type DigitalTwinScenario,
@@ -27,16 +31,85 @@ function scenario(
   });
 }
 
-const COMMON = Object.freeze(['zero-effects', 'core-authority-preserved', 'no-direct-provider-send']);
+const COMMON = Object.freeze([
+  'zero-effects',
+  'core-authority-preserved',
+  'no-direct-provider-send',
+]);
+
+export const RIYA_CLIENT_INTELLIGENCE_REGRESSION_CANDIDATE_REF =
+  'client-intelligence.planClientNextBestAction@c45bf5f43ae4d963e3031bdcdfd96ff5b57522b2';
+
+function syntheticRecord(input: unknown): Readonly<Record<string, unknown>> {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    throw new TypeError('riya-regression-synthetic-input-invalid');
+  }
+  return input as Readonly<Record<string, unknown>>;
+}
+
+function regressionPlannerInput(input: unknown): ClientNextBestActionInput {
+  const synthetic = syntheticRecord(input);
+  const incomplete = synthetic['requirementComplete'] === false;
+  const explicitVendorCount =
+    typeof synthetic['explicitVendorCount'] === 'number' ? synthetic['explicitVendorCount'] : 0;
+  const vendorNoContact = synthetic['contacted'] === false;
+  const contactedVendorCount =
+    typeof synthetic['contactedVendorCount'] === 'number' ? synthetic['contactedVendorCount'] : 0;
+
+  return Object.freeze({
+    clientQuestionPending: false,
+    humanHandoffRequested: synthetic['humanTakeover'] === true,
+    unresolvedServiceIssue: synthetic['complaint'] === true,
+    explicitReassignmentRequested: synthetic['replacementRequested'] === true,
+    extraVendorReviewRequested: synthetic['extraVendorRequested'] === true,
+    matchRequested: incomplete || explicitVendorCount > 0 || synthetic['coreTimeout'] === true,
+    matchReady: explicitVendorCount > 0 && synthetic['coreTimeout'] !== true,
+    missingMandatoryFieldRefs: incomplete ? Object.freeze(['location']) : Object.freeze([]),
+    vendorsReleased: vendorNoContact ? 3 : contactedVendorCount,
+    vendorNoContactCount: vendorNoContact ? 1 : 0,
+    allReleasedVendorsContacted: contactedVendorCount > 0,
+    satisfactionKnown: false,
+    followUpDue: false,
+    opportunities: Object.freeze([]),
+  });
+}
+
+export function createRiyaClientIntelligenceRegressionCandidate(): DigitalTwinCandidate {
+  return Object.freeze({
+    run(input: unknown) {
+      const decision = planClientNextBestAction(regressionPlannerInput(input));
+      return Promise.resolve(
+        Object.freeze({
+          decision: decision.action,
+          artifact: decision,
+          effects: Object.freeze({
+            providerCalls: 0,
+            coreMutations: 0,
+            channelSends: 0,
+            workflowStarts: 0,
+            databaseWrites: 0,
+          }),
+        }),
+      );
+    },
+  });
+}
 
 export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScenarioDefinition[] =
   Object.freeze([
-    scenario('riya.new-client', 'New client', 'IDENTITY', 'QUALIFY_CLIENT', { returning: false }, COMMON),
+    scenario(
+      'riya.new-client',
+      'New client',
+      'IDENTITY',
+      'ANSWER_CLIENT',
+      { returning: false },
+      COMMON,
+    ),
     scenario(
       'riya.returning-client',
       'Returning after one year',
       'IDENTITY',
-      'LOAD_LIFETIME_CONTEXT',
+      'ANSWER_CLIENT',
       { returning: true, monthsSinceLastTurn: 12 },
       COMMON,
     ),
@@ -44,7 +117,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.known-property-new-service',
       'Known property, new service',
       'QUALIFICATION',
-      'QUALIFY_NEW_REQUIREMENT',
+      'ANSWER_CLIENT',
       { knownProperty: true, newService: true },
       COMMON,
     ),
@@ -52,7 +125,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.incomplete-requirement',
       'Incomplete requirement',
       'QUALIFICATION',
-      'ASK_MISSING_INFO',
+      'ASK_MISSING_FIELD',
       { requirementComplete: false },
       COMMON,
     ),
@@ -60,7 +133,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.explicit-three-vendors',
       'Explicit three-vendor request',
       'MATCHING',
-      'REQUEST_CORE_MATCH',
+      'REQUEST_MATCH',
       { explicitVendorCount: 3 },
       COMMON,
     ),
@@ -68,7 +141,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.vendor-two-no-contact',
       'Vendor 2 did not contact',
       'VENDOR_JOURNEY',
-      'RECORD_VENDOR_FEEDBACK',
+      'CHECK_VENDOR_CONTACT',
       { vendorOrdinal: 2, contacted: false },
       COMMON,
     ),
@@ -76,7 +149,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.all-three-contacted',
       'All three contacted',
       'VENDOR_JOURNEY',
-      'CONTINUE_CLIENT_EVALUATION',
+      'ASK_SATISFACTION',
       { contactedVendorCount: 3 },
       COMMON,
     ),
@@ -84,7 +157,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.extra-vendor-request',
       'Extra vendor request',
       'MATCHING',
-      'REQUEST_CORE_REVIEW',
+      'REQUEST_EXTRA_VENDOR_REVIEW',
       { extraVendorRequested: true },
       COMMON,
     ),
@@ -92,7 +165,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.complaint',
       'Client complaint',
       'RECOVERY',
-      'START_RECOVERY_REVIEW',
+      'SERVICE_RECOVERY',
       { complaint: true },
       [...COMMON, 'human-escalation-available'],
     ),
@@ -100,7 +173,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.replacement',
       'Replacement request',
       'RECOVERY',
-      'REQUEST_REPLACEMENT_REVIEW',
+      'REQUEST_REASSIGNMENT',
       { replacementRequested: true },
       COMMON,
     ),
@@ -108,7 +181,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.multiple-categories',
       'Multiple categories',
       'QUALIFICATION',
-      'QUALIFY_MULTIPLE_REQUIREMENTS',
+      'ANSWER_CLIENT',
       { categoryCount: 2 },
       COMMON,
     ),
@@ -116,7 +189,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.corrected-area',
       'Corrected area',
       'CONTEXT_CORRECTION',
-      'REFRESH_REQUIREMENT_CONTEXT',
+      'ANSWER_CLIENT',
       { areaCorrected: true },
       COMMON,
     ),
@@ -124,7 +197,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.corrected-budget',
       'Corrected budget',
       'CONTEXT_CORRECTION',
-      'REFRESH_REQUIREMENT_CONTEXT',
+      'ANSWER_CLIENT',
       { budgetCorrected: true },
       COMMON,
     ),
@@ -132,7 +205,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.core-timeout',
       'Core timeout',
       'DEPENDENCY_FAILURE',
-      'FAIL_CLOSED_OR_RETRY_SAFE',
+      'CHECK_CORE_ELIGIBILITY',
       { coreTimeout: true },
       [...COMMON, 'no-invented-core-result'],
     ),
@@ -140,7 +213,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.whatsapp-retry',
       'WhatsApp retry',
       'DEPENDENCY_FAILURE',
-      'RETRY_CHANNEL_SAFELY',
+      'ANSWER_CLIENT',
       { channelRetry: true },
       [...COMMON, 'no-duplicate-send'],
     ),
@@ -148,7 +221,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
       'riya.human-takeover',
       'Human takeover',
       'HUMAN_HANDOFF',
-      'HANDOFF_TO_HUMAN',
+      'HUMAN_HANDOFF',
       { humanTakeover: true },
       [...COMMON, 'agent-stops-effectful-actions'],
     ),
@@ -156,6 +229,7 @@ export const RIYA_PHASE2_REGRESSION_SCENARIOS: readonly AgentFlowRegressionScena
 
 export async function runRiyaAgentFlowRegression(input: {
   readonly candidate: DigitalTwinCandidate;
+  readonly candidateRef: string;
   readonly reportId: string;
 }): Promise<AgentFlowRegressionSummary> {
   const scenarios: readonly DigitalTwinScenario[] = RIYA_PHASE2_REGRESSION_SCENARIOS.map(
@@ -170,6 +244,7 @@ export async function runRiyaAgentFlowRegression(input: {
   return Object.freeze({
     reportId: input.reportId,
     protocol: 'qfj.agent-flow-regression.v1',
+    candidateRef: input.candidateRef,
     scenarioCount: result.scenarioCount,
     passed: result.passed,
     failed: result.failed,

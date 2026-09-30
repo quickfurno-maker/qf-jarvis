@@ -33,10 +33,16 @@ export function AgentFlowPhase3Governance() {
             <Tag tone="healthy">Safe retry plans</Tag>
           </div>
           <ul className="mt-4 space-y-2 text-[10px] leading-relaxed text-[var(--color-ink-muted)]">
-            <li>• Conditions use a closed operator vocabulary; arbitrary expressions are not accepted.</li>
+            <li>
+              • Conditions use a closed operator vocabulary; arbitrary expressions are not accepted.
+            </li>
             <li>• Wait/retry plans compile to the existing durable orchestration contracts.</li>
-            <li>• Generated wait/retry/handoff plans carry <code>canExecute: false</code>.</li>
-            <li>• Effectful node selection is restricted to code-locked Core-governed capabilities.</li>
+            <li>
+              • Generated wait/retry/handoff plans carry <code>canExecute: false</code>.
+            </li>
+            <li>
+              • Effectful node selection is restricted to code-locked Core-governed capabilities.
+            </li>
             <li>• QuickFurno Core remains the final business authority.</li>
           </ul>
         </Panel>
@@ -97,8 +103,12 @@ export function AgentFlowPhase3Governance() {
           subtitle="Human takeover remains proposal-gated through the existing action registry."
         >
           <ul className="space-y-2 text-[10px] leading-relaxed text-[var(--color-ink-muted)]">
-            <li>• The existing <code>request_human_takeover</code> action remains disabled by default.</li>
-            <li>• Even an eligible assessment produces a proposal only; it does not execute takeover.</li>
+            <li>
+              • The existing <code>request_human_takeover</code> action remains disabled by default.
+            </li>
+            <li>
+              • Even an eligible assessment produces a proposal only; it does not execute takeover.
+            </li>
             <li>• Every wait and retry policy has a bounded fallback node.</li>
             <li>• Effectful blind retry is not introduced.</li>
           </ul>
@@ -135,7 +145,9 @@ export function AgentFlowPhase3Governance() {
 function Metric({ label, value }: { readonly label: string; readonly value: number }) {
   return (
     <div className="rounded-[7px] border border-[var(--color-line)] px-2 py-1.5">
-      <dt className="text-[7.5px] font-semibold text-[var(--color-ink-faint)] uppercase">{label}</dt>
+      <dt className="text-[7.5px] font-semibold text-[var(--color-ink-faint)] uppercase">
+        {label}
+      </dt>
       <dd className="mt-0.5 font-mono text-[10px] text-[var(--color-ink-muted)]">{value}</dd>
     </div>
   );

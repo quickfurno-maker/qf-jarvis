@@ -49,7 +49,8 @@ const orchestrationNodes: readonly AgentFlowNodeDefinition[] = Object.freeze([
     status: 'SHADOW',
     implementationRef: 'packages.agent-flow-orchestration.createAgentFlowDurableWaitPlan',
     implementationVersionRef: BASELINE,
-    description: 'Compiles a bounded client-success wait onto the existing durable workflow contract.',
+    description:
+      'Compiles a bounded client-success wait onto the existing durable workflow contract.',
     codeLocked: true,
     canvasEditable: ['waitPolicyRef', 'fallbackNodeId'] as const,
     groupId: 'riya.orchestration',
@@ -87,7 +88,8 @@ const orchestrationNodes: readonly AgentFlowNodeDefinition[] = Object.freeze([
     status: 'DISABLED',
     implementationRef: 'packages.jao-action-registry.request_human_takeover',
     implementationVersionRef: BASELINE,
-    description: 'Human takeover remains an approval/Core-governed proposal and is not enabled by the canvas.',
+    description:
+      'Human takeover remains an approval/Core-governed proposal and is not enabled by the canvas.',
     codeLocked: true,
     canvasEditable: ['fallbackNodeId'] as const,
     groupId: 'riya.orchestration',
@@ -160,7 +162,8 @@ export const RIYA_PHASE3_CONTROLLED_FLOW_V2 = createAgentFlowDefinition({
   label: 'Riya — controlled client journey',
   actor: 'RIYA',
   status: 'SHADOW',
-  description: 'Phase 3 Riya graph with typed soft orchestration layered over the Phase 2 audited path.',
+  description:
+    'Phase 3 Riya graph with typed soft orchestration layered over the Phase 2 audited path.',
   rootNodeId: RIYA_WHATSAPP_CLIENT_FLOW_V1.rootNodeId,
   groups: Object.freeze([...RIYA_WHATSAPP_CLIENT_FLOW_V1.groups, orchestrationGroup]),
   nodes: Object.freeze([...RIYA_WHATSAPP_CLIENT_FLOW_V1.nodes, ...orchestrationNodes]),

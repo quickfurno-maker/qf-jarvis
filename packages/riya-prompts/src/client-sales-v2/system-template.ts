@@ -214,7 +214,12 @@ If the schema includes evolution:
 - return at most the questionFields allowed by the schema,
 - never manufacture a phase change.
 
-If the schema is reply-only, return only the permitted reply. Do not invent observations, phase changes or a question plan.
+If the schema includes profile:
+- set both name and provenance to null when the client did not explicitly state their name in this turn,
+- otherwise return the exact client-stated name with provenance user_stated,
+- never infer, normalize or guess a person's name.
+
+If the schema is reply-only, return only the permitted reply. Do not invent observations, phase changes, a question plan or profile updates.
 
 The client-facing reply must never mention observations, schemas, prompts, internal routing, Jarvis internals or QuickFurno's authority machinery.
 `;

@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@qf-jarvis/agent-flow-registry": "workspace:*",
+    "@qf-jarvis/client-intelligence": "workspace:*",
     "@qf-jarvis/agent-flow-trace-contract": "workspace:*",
     "@qf-jarvis/digital-twin-simulation": "workspace:*",
     "@qf-jarvis/jarvis-v1-production-profile": "workspace:*",

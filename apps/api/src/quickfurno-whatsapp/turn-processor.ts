@@ -214,7 +214,8 @@ export function createQuickFurnoWhatsAppTurnProcessor(
           : traceNode(
               traceNodeId('context.conversation'),
               () =>
-                contextReader.read({
+                contextReader
+                  .read({
                     conversationId: ref.conversationId,
                     inboundMessageId: ref.inboundMessageId,
                     expectedRevision: ref.conversationRevision,

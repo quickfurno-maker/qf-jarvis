@@ -258,8 +258,7 @@ export function AgentFlowPhase3Studio() {
   const [selectedId, setSelectedId] = useState(RIYA_PHASE3_CONTROLLED_FLOW_V2.rootNodeId);
   const [query, setQuery] = useState('');
   const [kindFilter, setKindFilter] = useState<FilterValue<AgentFlowNodeKind>>('ALL');
-  const [authorityFilter, setAuthorityFilter] =
-    useState<FilterValue<AgentFlowAuthority>>('ALL');
+  const [authorityFilter, setAuthorityFilter] = useState<FilterValue<AgentFlowAuthority>>('ALL');
   const [traceState, setTraceState] = useState<AgentFlowTraceReadResult | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
 
@@ -292,7 +291,9 @@ export function AgentFlowPhase3Studio() {
 
   const replayHistory = useMemo(() => {
     if (!traceState?.available || flow === null) return [];
-    return buildAgentFlowReplayHistory(traceState.snapshot).filter((run) => run.actor === flow.actor);
+    return buildAgentFlowReplayHistory(traceState.snapshot).filter(
+      (run) => run.actor === flow.actor,
+    );
   }, [flow, traceState]);
   const activeTraceId = selectedTraceId ?? replayHistory[0]?.traceId;
   const activeEvents = useMemo(() => {
@@ -353,8 +354,7 @@ export function AgentFlowPhase3Studio() {
       markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
       style: { stroke: definition.kind === 'COMMAND' ? '#2fd39b' : '#64708a', strokeWidth: 1.4 },
       labelStyle: { fill: '#98a3b8', fontSize: 8.5 },
-      hidden:
-        !visibleIds.has(definition.sourceNodeId) || !visibleIds.has(definition.targetNodeId),
+      hidden: !visibleIds.has(definition.sourceNodeId) || !visibleIds.has(definition.targetNodeId),
     }));
   }, [flow, visibleIds]);
 
@@ -369,7 +369,9 @@ export function AgentFlowPhase3Studio() {
           <button
             key={candidate}
             type="button"
-            onClick={() => { setView(candidate); }}
+            onClick={() => {
+              setView(candidate);
+            }}
             className={[
               'rounded-[7px] border px-3 py-1.5 text-[9.5px] font-semibold tracking-[0.05em]',
               view === candidate
@@ -422,9 +424,9 @@ export function AgentFlowPhase3Studio() {
             {replayHistory.length === 0 ? null : (
               <select
                 value={selectedTraceId ?? 'LATEST'}
-                onChange={(event) =>
-                  { setSelectedTraceId(event.target.value === 'LATEST' ? null : event.target.value); }
-                }
+                onChange={(event) => {
+                  setSelectedTraceId(event.target.value === 'LATEST' ? null : event.target.value);
+                }}
                 className="mt-3 max-w-[520px] rounded-[7px] border border-[var(--color-line)] bg-[var(--color-base-850)] px-3 py-2 text-[9.5px] text-[var(--color-ink-muted)] outline-none"
               >
                 <option value="LATEST">LIVE · latest {flow.actor} run</option>
@@ -444,7 +446,9 @@ export function AgentFlowPhase3Studio() {
               </span>
               <input
                 value={query}
-                onChange={(event) => { setQuery(event.target.value); }}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                }}
                 placeholder="node, capability, tag..."
                 className="mt-1 block w-full bg-transparent text-[10.5px] text-[var(--color-ink)] outline-none"
               />
@@ -455,9 +459,9 @@ export function AgentFlowPhase3Studio() {
               </span>
               <select
                 value={kindFilter}
-                onChange={(event) =>
-                  { setKindFilter(event.target.value as FilterValue<AgentFlowNodeKind>); }
-                }
+                onChange={(event) => {
+                  setKindFilter(event.target.value as FilterValue<AgentFlowNodeKind>);
+                }}
                 className="mt-1 block w-full bg-[var(--color-base-900)] text-[10px] text-[var(--color-ink)] outline-none"
               >
                 <option value="ALL">All kinds</option>
@@ -472,9 +476,9 @@ export function AgentFlowPhase3Studio() {
               </span>
               <select
                 value={authorityFilter}
-                onChange={(event) =>
-                  { setAuthorityFilter(event.target.value as FilterValue<AgentFlowAuthority>); }
-                }
+                onChange={(event) => {
+                  setAuthorityFilter(event.target.value as FilterValue<AgentFlowAuthority>);
+                }}
                 className="mt-1 block w-full bg-[var(--color-base-900)] text-[10px] text-[var(--color-ink)] outline-none"
               >
                 <option value="ALL">All authorities</option>
@@ -499,7 +503,9 @@ export function AgentFlowPhase3Studio() {
                 nodesConnectable={false}
                 edgesReconnectable={false}
                 deleteKeyCode={null}
-                onNodeClick={(_, node) => { setSelectedId(node.id); }}
+                onNodeClick={(_, node) => {
+                  setSelectedId(node.id);
+                }}
               >
                 <ViewportPortal>
                   {computed.sortedGroups.map((group) => {

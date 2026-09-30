@@ -9,8 +9,10 @@ import {
 
 import {
   RIYA_AGENT_FLOW_PROFILES_V1,
+  RIYA_CLIENT_INTELLIGENCE_REGRESSION_CANDIDATE_REF,
   RIYA_PHASE2_DRAFT_MANIFEST_V2,
   RIYA_PHASE2_REGRESSION_SCENARIOS,
+  createRiyaClientIntelligenceRegressionCandidate,
   buildAgentFlowReplayHistory,
   compareAgentFlowVersions,
   createAgentFlowCertification,
@@ -24,12 +26,7 @@ import {
 
 function event(input: {
   readonly sequence: number;
-  readonly kind:
-    | 'RUN_STARTED'
-    | 'NODE_ENTERED'
-    | 'NODE_OBSERVED'
-    | 'NODE_EXITED'
-    | 'RUN_COMPLETED';
+  readonly kind: 'RUN_STARTED' | 'NODE_ENTERED' | 'NODE_OBSERVED' | 'NODE_EXITED' | 'RUN_COMPLETED';
   readonly status: 'RUNNING' | 'OBSERVED' | 'SUCCEEDED';
   readonly at: string;
   readonly nodeId?: string;
@@ -58,7 +55,12 @@ describe('agent-flow Phase 2 governance', () => {
       emittedAt: '2026-09-30T10:00:01.000Z',
       sourceRevision: 'b1571cb1fc35689a23d48a49486af2b5f8ce9d7e',
       events: [
-        event({ sequence: 0, kind: 'RUN_STARTED', status: 'RUNNING', at: '2026-09-30T10:00:00.000Z' }),
+        event({
+          sequence: 0,
+          kind: 'RUN_STARTED',
+          status: 'RUNNING',
+          at: '2026-09-30T10:00:00.000Z',
+        }),
         event({
           sequence: 1,
           kind: 'NODE_ENTERED',
@@ -123,8 +125,15 @@ describe('agent-flow Phase 2 governance', () => {
     expect(diff.changes.some((change) => change.field === 'lifecycle')).toBe(true);
   });
 
-  it('requires clean certification and rollback evidence before STAGING can become LIVE', () => {
+  it('requires clean certification bound to the exact STAGING release before LIVE', () => {
+    const stagingCandidate = createAgentFlowVersionManifest({
+      ...RIYA_PHASE2_DRAFT_MANIFEST_V2,
+      versionId: 'riya-flow-config.v2.staging',
+      lifecycle: 'STAGING',
+      rollbackTargetVersionId: 'riya-flow-config.v1.live',
+    });
     const certification = createAgentFlowCertification({
+      manifest: stagingCandidate,
       lint: {
         reportId: 'lint:riya.staging.v1',
         flowId: RIYA_WHATSAPP_CLIENT_FLOW_V1.flowId,
@@ -137,6 +146,7 @@ describe('agent-flow Phase 2 governance', () => {
       regression: {
         reportId: 'regression:riya.staging.v1',
         protocol: 'qfj.agent-flow-regression.v1',
+        candidateRef: RIYA_CLIENT_INTELLIGENCE_REGRESSION_CANDIDATE_REF,
         scenarioCount: 16,
         passed: 16,
         failed: 0,
@@ -147,13 +157,19 @@ describe('agent-flow Phase 2 governance', () => {
       certifiedBy: 'REPOSITORY_TESTS',
     });
     const staging = createAgentFlowVersionManifest({
-      ...RIYA_PHASE2_DRAFT_MANIFEST_V2,
-      versionId: 'riya-flow-config.v2.staging',
-      lifecycle: 'STAGING',
+      ...stagingCandidate,
       certification,
-      rollbackTargetVersionId: 'riya-flow-config.v1.live',
     });
     expect(evaluateAgentFlowPromotion(staging, 'LIVE').allowed).toBe(true);
+
+    const changedAfterCertification = createAgentFlowVersionManifest({
+      ...staging,
+      configurationDigest:
+        'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    });
+    const changedDecision = evaluateAgentFlowPromotion(changedAfterCertification, 'LIVE');
+    expect(changedDecision.allowed).toBe(false);
+    expect(changedDecision.reasons).toContain('certification-binding-mismatch');
   });
 
   it('selects only an explicit same-flow LIVE or RETIRED rollback target', () => {
@@ -168,7 +184,9 @@ describe('agent-flow Phase 2 governance', () => {
       lifecycle: 'LIVE',
       rollbackTargetVersionId: previous.versionId,
     });
-    expect(selectRollbackTarget({ live, candidates: [previous] }).versionId).toBe(previous.versionId);
+    expect(selectRollbackTarget({ live, candidates: [previous] }).versionId).toBe(
+      previous.versionId,
+    );
   });
 
   it('keeps Phase 3 orchestration profiles activation-locked from LIVE in Phase 2', () => {
@@ -177,21 +195,15 @@ describe('agent-flow Phase 2 governance', () => {
       versionId: 'riya-flow-config.v2.live-candidate',
       lifecycle: 'LIVE',
       rollbackTargetVersionId: 'riya-flow-config.v1.live',
-      certification: {
-        lintReportRef: 'lint:riya.live-candidate',
-        regressionReportRef: 'regression:riya.live-candidate',
-        passedScenarioCount: 16,
-        failedScenarioCount: 0,
-        certifiedAt: '2026-09-30T10:45:00.000Z',
-        certifiedBy: 'REPOSITORY_TESTS',
-      },
     });
     const report = lintAgentFlow({
       flow: RIYA_WHATSAPP_CLIENT_FLOW_V1,
       manifest: liveCandidate,
       profiles: RIYA_AGENT_FLOW_PROFILES_V1,
     });
-    expect(report.issues.filter((issue) => issue.code === 'PROFILE_NOT_PRODUCTION_ELIGIBLE')).toHaveLength(3);
+    expect(
+      report.issues.filter((issue) => issue.code === 'PROFILE_NOT_PRODUCTION_ELIGIBLE'),
+    ).toHaveLength(3);
     expect(report.promotable).toBe(false);
   });
   it('ships the required protected Riya regression library', () => {
@@ -204,28 +216,13 @@ describe('agent-flow Phase 2 governance', () => {
     );
   });
 
-  it('runs all Riya scenarios through the zero-effect digital twin', async () => {
+  it('runs all Riya scenarios through the real deterministic client-intelligence planner', async () => {
     const summary = await runRiyaAgentFlowRegression({
-      reportId: 'regression:riya.phase2.reference',
-      candidate: {
-        run(input) {
-          const found = RIYA_PHASE2_REGRESSION_SCENARIOS.find(
-            (item) => JSON.stringify(item.syntheticInput) === JSON.stringify(input),
-          );
-          if (found === undefined) throw new Error('unknown-scenario');
-          return Promise.resolve({
-            decision: found.expectedDecision,
-            effects: {
-              providerCalls: 0,
-              coreMutations: 0,
-              channelSends: 0,
-              workflowStarts: 0,
-              databaseWrites: 0,
-            },
-          });
-        },
-      },
+      reportId: 'regression:riya.phase2.client-intelligence',
+      candidateRef: RIYA_CLIENT_INTELLIGENCE_REGRESSION_CANDIDATE_REF,
+      candidate: createRiyaClientIntelligenceRegressionCandidate(),
     });
+    expect(summary.candidateRef).toBe(RIYA_CLIENT_INTELLIGENCE_REGRESSION_CANDIDATE_REF);
     expect(summary.scenarioCount).toBe(16);
     expect(summary.passed).toBe(16);
     expect(summary.failed).toBe(0);

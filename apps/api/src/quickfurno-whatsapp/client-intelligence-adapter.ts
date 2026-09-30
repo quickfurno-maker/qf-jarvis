@@ -9,13 +9,14 @@ import {
 
 import type { QuickFurnoWhatsAppTurnMaterialV2 } from './contracts.js';
 
-
 export interface WhatsAppClientIntelligenceOptions {
   readonly serviceBlueprintRegistry?: ServiceBlueprintRegistry;
 }
 
 function unique(values: readonly (string | undefined)[]): readonly string[] {
-  return Object.freeze([...new Set(values.filter((value): value is string => value !== undefined))]);
+  return Object.freeze([
+    ...new Set(values.filter((value): value is string => value !== undefined)),
+  ]);
 }
 
 function daysUntil(date: string | undefined, asOf: string): number | undefined {
@@ -32,7 +33,8 @@ function opportunityContext(
   const journey = material.clientJourney;
   if (journey === undefined) return undefined;
   const activeService =
-    journey.activeRequirement.status === 'cancelled' || journey.activeRequirement.status === 'closed'
+    journey.activeRequirement.status === 'cancelled' ||
+    journey.activeRequirement.status === 'closed'
       ? undefined
       : journey.activeRequirement.serviceInterest;
   const pastRequirements = journey.version === 2 ? journey.pastRequirements : [];

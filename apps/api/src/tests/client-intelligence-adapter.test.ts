@@ -52,6 +52,13 @@ function material(
     ...over,
   };
 }
+
+function clientJourney() {
+  const journey = material().clientJourney;
+  if (journey === undefined) throw new Error('test-client-journey-missing');
+  return journey;
+}
+
 describe('QuickFurno WhatsApp Client OS adapter', () => {
   it('stays neutral for ordinary conversation', () => {
     const snapshot = buildWhatsAppClientIntelligence(material());
@@ -69,7 +76,7 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
       material({
         normalizedText: 'Please send me 3 vendors nearby',
         clientJourney: {
-          ...material().clientJourney!,
+          ...clientJourney(),
           missing: ['location', 'budget'],
         },
       }),
@@ -87,10 +94,10 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
       material({
         normalizedText: 'I need three vendors',
         clientJourney: {
-          ...material().clientJourney!,
+          ...clientJourney(),
           missing: [],
           activeRequirement: {
-            ...material().clientJourney!.activeRequirement,
+            ...clientJourney().activeRequirement,
             serviceInterest: 'INTERIOR_DESIGN',
             location: 'BANER',
             budget: '8 lakh',
@@ -108,7 +115,6 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
       executionAuthorized: false,
     });
   });
-
 
   it('requests matching immediately when Core says the requirement is READY', () => {
     const snapshot = buildWhatsAppClientIntelligence(
@@ -143,7 +149,7 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
       material({
         normalizedText: 'Connect me with three vendors',
         clientJourney: {
-          ...material().clientJourney!,
+          ...clientJourney(),
           missing: [],
         },
         clientMatchDecision: {
@@ -167,7 +173,6 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
       requiresCoreDecision: false,
     });
   });
-
 
   it('evaluates configured related-service opportunities without hardcoding category knowledge in Riya', () => {
     const registry = createServiceBlueprintRegistry([
@@ -195,9 +200,9 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
     const snapshot = buildWhatsAppClientIntelligence(
       material({
         clientJourney: {
-          ...material().clientJourney!,
+          ...clientJourney(),
           activeRequirement: {
-            ...material().clientJourney!.activeRequirement,
+            ...clientJourney().activeRequirement,
             serviceInterest: 'INTERIOR_DESIGN',
           },
         },
@@ -219,7 +224,6 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
       reasonCode: 'NURTURE_OPPORTUNITY_READY',
     });
   });
-
 
   it('prioritizes vendor no-contact recovery from Core-owned vendor journey state', () => {
     const snapshot = buildWhatsAppClientIntelligence(
@@ -298,9 +302,9 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
     const snapshot = buildWhatsAppClientIntelligence(
       material({
         clientJourney: {
-          ...material().clientJourney!,
+          ...clientJourney(),
           activeRequirement: {
-            ...material().clientJourney!.activeRequirement,
+            ...clientJourney().activeRequirement,
             serviceInterest: 'INTERIOR_DESIGN',
           },
         },

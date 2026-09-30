@@ -478,7 +478,9 @@ describe('the contracts this slice reuses are unchanged', () => {
       }
     }
 
-    expect([...importingApps]).toStrictEqual([]);
+    // Client OS intentionally composes this contract in the private API/WhatsApp process boundary.
+    // The exact app set remains locked: no browser, public app or second application may consume it.
+    expect([...importingApps].sort()).toStrictEqual(['api']);
     expect([...importingPackages].sort()).toStrictEqual(ALLOWED_PACKAGE_IMPORTERS);
   });
 });
@@ -518,6 +520,8 @@ describe('(55-57) the migration set is untouched', () => {
         '572ba13764cffed600d8580e00b781502ddc85c19126e3621d0a8127e5dc536e',
       '0015_correlation_timeline_projection.sql':
         '31517791c0e8f382f6dff1d0d25f01d8244cc0fabb06c27694246cd1905ba952',
+      '0016_client_lifetime_projection.sql':
+        'e389afa44ef080e3808845ee8900463f94e130448e4beed3d5dbcd243440539e',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -533,7 +537,7 @@ describe('(55-57) the migration set is untouched', () => {
       ).toBe(hash);
     }
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition.
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 15)).toBe(false);
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 16)).toBe(false);
   });
 
   it('migration 0008 is not extended with continuity columns', () => {

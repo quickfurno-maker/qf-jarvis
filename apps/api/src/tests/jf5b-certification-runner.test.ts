@@ -111,6 +111,7 @@ function answerFor(body: string, replyBody: string, citeGrounded = true): string
         questionPhase: 'NEED',
         questionFields: [],
       },
+      profile: { name: null, provenance: null },
     });
   }
   // The GENERIC wire shape: every property present, the semantically-optional one explicitly null.

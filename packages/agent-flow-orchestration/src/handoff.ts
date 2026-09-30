@@ -19,9 +19,7 @@ export function assessAgentFlowHumanHandoff(input: {
   readonly profile: AgentFlowSoftOrchestrationProfile;
   readonly registry?: JaoActionRegistry;
   readonly maturityDecision:
-    | 'KEEP_DEFAULT_OFF'
-    | 'SHADOW_EVIDENCE_SUFFICIENT'
-    | 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE';
+    'KEEP_DEFAULT_OFF' | 'SHADOW_EVIDENCE_SUFFICIENT' | 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE';
   readonly authorityEvidenceRef?: string;
   readonly approvalEvidenceRef?: string;
 }): AgentFlowHumanHandoffAssessment {

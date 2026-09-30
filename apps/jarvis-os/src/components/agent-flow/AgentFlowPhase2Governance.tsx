@@ -47,8 +47,14 @@ export function AgentFlowPhase2Governance() {
           </div>
           <dl className="mt-4 grid gap-2 text-[10.5px] sm:grid-cols-2">
             <Fact label="Version" value={RIYA_PHASE2_DRAFT_MANIFEST_V2.versionId} />
-            <Fact label="Registry baseline" value={RIYA_PHASE2_DRAFT_MANIFEST_V2.registryBaselineRef} />
-            <Fact label="Configuration digest" value={RIYA_PHASE2_DRAFT_MANIFEST_V2.configurationDigest.slice(0, 24) + '…'} />
+            <Fact
+              label="Registry baseline"
+              value={RIYA_PHASE2_DRAFT_MANIFEST_V2.registryBaselineRef}
+            />
+            <Fact
+              label="Configuration digest"
+              value={RIYA_PHASE2_DRAFT_MANIFEST_V2.configurationDigest.slice(0, 24) + '…'}
+            />
             <Fact
               label="Next gate"
               value={next.allowed ? 'DRAFT → SIMULATION allowed' : next.reasons.join(', ')}
@@ -65,8 +71,12 @@ export function AgentFlowPhase2Governance() {
           subtitle="Machine-checkable boundaries are evaluated before any promotion."
         >
           <div className="flex flex-wrap gap-2">
-            <Tag tone={lint.errors === 0 ? 'healthy' : 'critical'}>{`${String(lint.errors)} errors`}</Tag>
-            <Tag tone={lint.warnings === 0 ? 'healthy' : 'shadow'}>{`${String(lint.warnings)} warnings`}</Tag>
+            <Tag
+              tone={lint.errors === 0 ? 'healthy' : 'critical'}
+            >{`${String(lint.errors)} errors`}</Tag>
+            <Tag
+              tone={lint.warnings === 0 ? 'healthy' : 'shadow'}
+            >{`${String(lint.warnings)} warnings`}</Tag>
             <Tag tone={lint.promotable ? 'healthy' : 'critical'}>
               {lint.promotable ? 'Structurally promotable' : 'HOLD'}
             </Tag>
@@ -122,7 +132,9 @@ export function AgentFlowPhase2Governance() {
                 {profile.description}
               </p>
               <p className="mt-2 text-[8.5px] font-semibold text-[var(--color-ink-muted)]">
-                {profile.productionEligible ? 'Production-eligible reference' : 'Activation locked until Phase 3'}
+                {profile.productionEligible
+                  ? 'Production-eligible reference'
+                  : 'Activation locked until Phase 3'}
               </p>
             </div>
           ))}
@@ -164,7 +176,10 @@ export function AgentFlowPhase2Governance() {
             <li>• Simulation rejects provider, Core, channel, workflow and database effects.</li>
             <li>• No arbitrary JavaScript, SQL or unrestricted HTTP node exists.</li>
             <li>• Prompt/model/context/tool selection is profile-bound and versioned.</li>
-            <li>• Wait, retry and human-handoff profiles are defined but activation-locked until Phase 3.</li>
+            <li>
+              • Wait, retry and human-handoff profiles are defined but activation-locked until Phase
+              3.
+            </li>
             <li>• QuickFurno Core remains the final business authority.</li>
           </ul>
         </Panel>
@@ -179,7 +194,9 @@ function Fact({ label, value }: { readonly label: string; readonly value: string
       <dt className="text-[8.5px] font-semibold tracking-[0.06em] text-[var(--color-ink-faint)] uppercase">
         {label}
       </dt>
-      <dd className="mt-1 break-all font-mono text-[9.5px] text-[var(--color-ink-muted)]">{value}</dd>
+      <dd className="mt-1 break-all font-mono text-[9.5px] text-[var(--color-ink-muted)]">
+        {value}
+      </dd>
     </div>
   );
 }

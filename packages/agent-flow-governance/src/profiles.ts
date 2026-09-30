@@ -14,9 +14,9 @@ import type { AgentFlowProfileDefinition, AgentFlowProfileSet } from './contract
 const riyaContextRefs = RIYA_WHATSAPP_CLIENT_FLOW_V1.nodes
   .filter((node) => node.kind === 'CONTEXT' || node.kind === 'MEMORY')
   .map((node) => node.implementationRef);
-const riyaActionRefs = AGENT_FLOW_ACTION_CATALOG_V1
-  .filter((action) => action.actor === 'RIYA')
-  .map((action) => action.implementationRef);
+const riyaActionRefs = AGENT_FLOW_ACTION_CATALOG_V1.filter((action) => action.actor === 'RIYA').map(
+  (action) => action.implementationRef,
+);
 
 export const RIYA_CONTEXT_PROFILE_V1: AgentFlowProfileDefinition = Object.freeze({
   profileId: 'riya.context.standard.v1',
@@ -28,7 +28,8 @@ export const RIYA_CONTEXT_PROFILE_V1: AgentFlowProfileDefinition = Object.freeze
   configurableFields: Object.freeze(['approvedContextModules']),
   lockedFields: Object.freeze(['rawDatabaseQueries', 'vendorPrivateData', 'paymentDataByDefault']),
   productionEligible: true,
-  description: 'Selects only code-backed context and memory projections already present in the Riya flow.',
+  description:
+    'Selects only code-backed context and memory projections already present in the Riya flow.',
 });
 export const RIYA_PROMPT_PROFILE_V1: AgentFlowProfileDefinition = Object.freeze({
   profileId: 'riya.prompt.client-sales.v1',
@@ -60,9 +61,14 @@ export const RIYA_MODEL_ROUTING_PROFILE_V1: AgentFlowProfileDefinition = Object.
     `capability:${JARVIS_V1_PRODUCTION_CAPABILITY_PROFILE_REF}`,
   ]),
   configurableFields: Object.freeze(['approvedRoutingPolicyRef']),
-  lockedFields: Object.freeze(['providerCredentials', 'uncertifiedModelRelease', 'directProviderCalls']),
+  lockedFields: Object.freeze([
+    'providerCredentials',
+    'uncertifiedModelRelease',
+    'directProviderCalls',
+  ]),
   productionEligible: true,
-  description: 'References existing certified provider/profile controls without exposing credentials or arbitrary model IDs.',
+  description:
+    'References existing certified provider/profile controls without exposing credentials or arbitrary model IDs.',
 });
 export const RIYA_TOOL_PROFILE_V1: AgentFlowProfileDefinition = Object.freeze({
   profileId: 'riya.tools.governed-actions.v1',
@@ -72,9 +78,15 @@ export const RIYA_TOOL_PROFILE_V1: AgentFlowProfileDefinition = Object.freeze({
   label: 'Riya governed action set',
   implementationRefs: Object.freeze(riyaActionRefs),
   configurableFields: Object.freeze(['enabledApprovedActionIds']),
-  lockedFields: Object.freeze(['arbitraryHttp', 'directSql', 'arbitraryJavascript', 'coreAuthority']),
+  lockedFields: Object.freeze([
+    'arbitraryHttp',
+    'directSql',
+    'arbitraryJavascript',
+    'coreAuthority',
+  ]),
   productionEligible: true,
-  description: 'Tool availability is limited to the approved Riya action catalog and cannot create new capabilities.',
+  description:
+    'Tool availability is limited to the approved Riya action catalog and cannot create new capabilities.',
 });
 
 export const RIYA_WAIT_PROFILE_V1: AgentFlowProfileDefinition = Object.freeze({
@@ -87,7 +99,8 @@ export const RIYA_WAIT_PROFILE_V1: AgentFlowProfileDefinition = Object.freeze({
   configurableFields: Object.freeze(['durationPolicyRef', 'expiryFallbackRef']),
   lockedFields: Object.freeze(['unboundedWait', 'providerTimerImplementation']),
   productionEligible: false,
-  description: 'A validated configuration surface reserved for controlled orchestration activation in Phase 3.',
+  description:
+    'A validated configuration surface reserved for controlled orchestration activation in Phase 3.',
 });
 
 export const RIYA_RETRY_PROFILE_V1: AgentFlowProfileDefinition = Object.freeze({
@@ -100,7 +113,8 @@ export const RIYA_RETRY_PROFILE_V1: AgentFlowProfileDefinition = Object.freeze({
   configurableFields: Object.freeze(['retryPolicyRef', 'fallbackNodeId']),
   lockedFields: Object.freeze(['effectfulBlindRetry', 'idempotencyImplementation']),
   productionEligible: false,
-  description: 'Defines safe retry configuration metadata; effectful retry execution stays code-controlled.',
+  description:
+    'Defines safe retry configuration metadata; effectful retry execution stays code-controlled.',
 });
 export const RIYA_HANDOFF_PROFILE_V1: AgentFlowProfileDefinition = Object.freeze({
   profileId: 'riya.handoff.phase2.v1',
@@ -112,7 +126,8 @@ export const RIYA_HANDOFF_PROFILE_V1: AgentFlowProfileDefinition = Object.freeze
   configurableFields: Object.freeze(['handoffPolicyRef']),
   lockedFields: Object.freeze(['humanIdentity', 'businessAuthority', 'directStateMutation']),
   productionEligible: false,
-  description: 'Declares the handoff configuration boundary before Phase 3 flow-controlled activation.',
+  description:
+    'Declares the handoff configuration boundary before Phase 3 flow-controlled activation.',
 });
 
 export const RIYA_AGENT_FLOW_PROFILES_V1: readonly AgentFlowProfileDefinition[] = Object.freeze([
@@ -135,8 +150,6 @@ export const RIYA_PHASE2_PROFILE_SET_V1: AgentFlowProfileSet = Object.freeze({
   handoffPolicyRef: RIYA_HANDOFF_PROFILE_V1.profileId,
 });
 
-export function findAgentFlowProfile(
-  profileRef: string,
-): AgentFlowProfileDefinition | undefined {
+export function findAgentFlowProfile(profileRef: string): AgentFlowProfileDefinition | undefined {
   return RIYA_AGENT_FLOW_PROFILES_V1.find((profile) => profile.profileId === profileRef);
 }

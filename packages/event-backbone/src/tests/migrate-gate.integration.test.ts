@@ -130,6 +130,7 @@ describe('db:migrate runs the preflight automatically', () => {
       '0013_communication_state_projection.sql',
       '0014_conversation_prospect_party_type.sql',
       '0015_correlation_timeline_projection.sql',
+      '0016_client_lifetime_projection.sql',
     ]);
     expect(await tableExists(MIGRATION_SCHEMA, 'event')).toBe(true);
   });
@@ -153,6 +154,8 @@ describe('db:migrate runs the preflight automatically', () => {
       14,
       // ADR-0167: privacy-bounded correlation timeline projection. LOCAL/CI only.
       15,
+      // Client-OS v2: bounded client lifetime projection. LOCAL/CI only.
+      16,
     ]);
   });
 

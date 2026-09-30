@@ -72,6 +72,7 @@
   "spoolDirectory": "/var/lib/qfj-turns",
   "killSwitchFile": "/var/run/qfj-control/DISABLE_MODEL",
   "operationalSnapshotFile": "/var/run/qfj-observability/whatsapp-worker.json",
+  "agentFlowTraceSnapshotFile": "/var/run/qfj-observability/agent-flow-trace.json",
   "runtimeId": "qfj.whatsapp.production.v1",
   "policyRevision": "policy.quickfurno.production.v1",
   "idlePollMs": 500,

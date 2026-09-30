@@ -62,7 +62,10 @@ const POSITIONS: Readonly<Record<string, { readonly x: number; readonly y: numbe
 };
 
 const GROUP_BOUNDS: Readonly<
-  Record<string, { readonly x: number; readonly y: number; readonly width: number; readonly height: number }>
+  Record<
+    string,
+    { readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+  >
 > = {
   'riya.inbound': { x: -70, y: -90, width: 590, height: 690 },
   'riya.context': { x: 560, y: -90, width: 600, height: 690 },
@@ -226,8 +229,7 @@ export function AgentFlowCanvas() {
   const [selectedId, setSelectedId] = useState('riya.agent.specialist-runtime');
   const [query, setQuery] = useState('');
   const [kindFilter, setKindFilter] = useState<FilterValue<AgentFlowNodeKind>>('ALL');
-  const [authorityFilter, setAuthorityFilter] =
-    useState<FilterValue<AgentFlowAuthority>>('ALL');
+  const [authorityFilter, setAuthorityFilter] = useState<FilterValue<AgentFlowAuthority>>('ALL');
   const [edgeKindFilter, setEdgeKindFilter] = useState<FilterValue<AgentFlowEdgeKind>>('ALL');
   const [traceState, setTraceState] = useState<AgentFlowTraceReadResult | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
@@ -324,7 +326,9 @@ export function AgentFlowCanvas() {
 
   const selected = flow.nodes.find((node) => node.nodeId === selectedId) ?? flow.nodes[0];
   const selectedNodeReplay =
-    selected === undefined ? undefined : selectedRun?.nodes.find((node) => node.nodeId === selected.nodeId);
+    selected === undefined
+      ? undefined
+      : selectedRun?.nodes.find((node) => node.nodeId === selected.nodeId);
   const governedActions = flow.nodes.filter(
     (node) => node.effect === 'GOVERNED_ACTION' || node.effect === 'CHANNEL_REQUEST',
   ).length;
@@ -587,13 +591,18 @@ export function AgentFlowCanvas() {
             <p className="text-[9px] font-semibold tracking-[0.08em] text-[var(--color-ink-faint)] uppercase">
               Edge legend
             </p>
-            <span className="text-[8.5px] text-[var(--color-ink-faint)]">{visibleEdges} visible</span>
+            <span className="text-[8.5px] text-[var(--color-ink-faint)]">
+              {visibleEdges} visible
+            </span>
           </div>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-2">
             {AGENT_FLOW_EDGE_KINDS.map((kind) => {
               const style = EDGE_STYLE[kind];
               return (
-                <span key={kind} className="flex items-center gap-1.5 text-[8.5px] text-[var(--color-ink-muted)]">
+                <span
+                  key={kind}
+                  className="flex items-center gap-1.5 text-[8.5px] text-[var(--color-ink-muted)]"
+                >
                   <span
                     className="inline-block w-5"
                     style={{
@@ -708,7 +717,9 @@ export function AgentFlowCanvas() {
                 ].map(([term, detail]) => (
                   <div key={term} className="grid grid-cols-[98px_minmax(0,1fr)] gap-3">
                     <dt className="text-[var(--color-ink-faint)]">{term}</dt>
-                    <dd className="break-words font-medium text-[var(--color-ink-muted)]">{detail}</dd>
+                    <dd className="break-words font-medium text-[var(--color-ink-muted)]">
+                      {detail}
+                    </dd>
                   </div>
                 ))}
               </dl>
@@ -720,7 +731,9 @@ export function AgentFlowCanvas() {
                   </p>
                   <dl className="mt-2 grid grid-cols-[98px_minmax(0,1fr)] gap-2 text-[9.5px]">
                     <dt className="text-[var(--color-ink-faint)]">Status</dt>
-                    <dd className="text-[var(--color-ink-muted)]">{selectedNodeReplay.terminalStatus}</dd>
+                    <dd className="text-[var(--color-ink-muted)]">
+                      {selectedNodeReplay.terminalStatus}
+                    </dd>
                     <dt className="text-[var(--color-ink-faint)]">Duration</dt>
                     <dd className="text-[var(--color-ink-muted)]">
                       {selectedNodeReplay.durationMs === undefined
@@ -768,12 +781,15 @@ export function AgentFlowCanvas() {
                 </p>
                 {selected.canvasEditable.length === 0 ? (
                   <p className="mt-2 text-[11px] leading-relaxed text-[var(--color-ink-muted)]">
-                    Code-locked. This node is visible but exposes no safe profile-selectable configuration.
+                    Code-locked. This node is visible but exposes no safe profile-selectable
+                    configuration.
                   </p>
                 ) : (
                   <>
                     <p className="mt-2 text-[10px] leading-relaxed text-[var(--color-ink-faint)]">
-                      Safe configuration keys are profile-bound in Phase 2. This live/replay surface remains read-only; repository-governed Draft manifests carry selections through certification.
+                      Safe configuration keys are profile-bound in Phase 2. This live/replay surface
+                      remains read-only; repository-governed Draft manifests carry selections
+                      through certification.
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {selected.canvasEditable.map((key) => (

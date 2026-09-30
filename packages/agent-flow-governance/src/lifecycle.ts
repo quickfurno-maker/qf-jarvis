@@ -15,6 +15,21 @@ const NEXT_STAGE: Readonly<Record<AgentFlowLifecycleStage, AgentFlowLifecycleSta
     RETIRED: undefined,
   });
 
+function profileSetMatches(
+  left: AgentFlowVersionManifest['profileSet'],
+  right: AgentFlowVersionManifest['profileSet'],
+): boolean {
+  return (
+    left.contextProfileRef === right.contextProfileRef &&
+    left.promptProfileRef === right.promptProfileRef &&
+    left.modelRoutingProfileRef === right.modelRoutingProfileRef &&
+    left.toolProfileRef === right.toolProfileRef &&
+    left.waitPolicyRef === right.waitPolicyRef &&
+    left.retryPolicyRef === right.retryPolicyRef &&
+    left.handoffPolicyRef === right.handoffPolicyRef
+  );
+}
+
 function certificationReady(manifest: AgentFlowVersionManifest): readonly string[] {
   const reasons: string[] = [];
   const certification = manifest.certification;
@@ -24,6 +39,17 @@ function certificationReady(manifest: AgentFlowVersionManifest): readonly string
   }
   if (certification.failedScenarioCount !== 0) reasons.push('regression-failures-present');
   if (certification.passedScenarioCount <= 0) reasons.push('no-regression-scenarios-passed');
+  if (
+    certification.versionId !== manifest.versionId ||
+    certification.flowId !== manifest.flowId ||
+    certification.flowVersion !== manifest.flowVersion ||
+    certification.registryBaselineRef !== manifest.registryBaselineRef ||
+    certification.configurationDigest !== manifest.configurationDigest ||
+    certification.sourceRevision !== manifest.sourceRevision ||
+    !profileSetMatches(certification.profileSet, manifest.profileSet)
+  ) {
+    reasons.push('certification-binding-mismatch');
+  }
   if (manifest.rollbackTargetVersionId === undefined) reasons.push('rollback-target-missing');
   return Object.freeze(reasons);
 }
@@ -79,13 +105,49 @@ export function compareAgentFlowVersions(
   addDiff(changes, 'lifecycle', before.lifecycle, after.lifecycle);
   addDiff(changes, 'registryBaselineRef', before.registryBaselineRef, after.registryBaselineRef);
   addDiff(changes, 'configurationDigest', before.configurationDigest, after.configurationDigest);
-  addDiff(changes, 'contextProfileRef', before.profileSet.contextProfileRef, after.profileSet.contextProfileRef);
-  addDiff(changes, 'promptProfileRef', before.profileSet.promptProfileRef, after.profileSet.promptProfileRef);
-  addDiff(changes, 'modelRoutingProfileRef', before.profileSet.modelRoutingProfileRef, after.profileSet.modelRoutingProfileRef);
-  addDiff(changes, 'toolProfileRef', before.profileSet.toolProfileRef, after.profileSet.toolProfileRef);
-  addDiff(changes, 'waitPolicyRef', before.profileSet.waitPolicyRef, after.profileSet.waitPolicyRef);
-  addDiff(changes, 'retryPolicyRef', before.profileSet.retryPolicyRef, after.profileSet.retryPolicyRef);
-  addDiff(changes, 'handoffPolicyRef', before.profileSet.handoffPolicyRef, after.profileSet.handoffPolicyRef);
+  addDiff(changes, 'sourceRevision', before.sourceRevision, after.sourceRevision);
+  addDiff(
+    changes,
+    'contextProfileRef',
+    before.profileSet.contextProfileRef,
+    after.profileSet.contextProfileRef,
+  );
+  addDiff(
+    changes,
+    'promptProfileRef',
+    before.profileSet.promptProfileRef,
+    after.profileSet.promptProfileRef,
+  );
+  addDiff(
+    changes,
+    'modelRoutingProfileRef',
+    before.profileSet.modelRoutingProfileRef,
+    after.profileSet.modelRoutingProfileRef,
+  );
+  addDiff(
+    changes,
+    'toolProfileRef',
+    before.profileSet.toolProfileRef,
+    after.profileSet.toolProfileRef,
+  );
+  addDiff(
+    changes,
+    'waitPolicyRef',
+    before.profileSet.waitPolicyRef,
+    after.profileSet.waitPolicyRef,
+  );
+  addDiff(
+    changes,
+    'retryPolicyRef',
+    before.profileSet.retryPolicyRef,
+    after.profileSet.retryPolicyRef,
+  );
+  addDiff(
+    changes,
+    'handoffPolicyRef',
+    before.profileSet.handoffPolicyRef,
+    after.profileSet.handoffPolicyRef,
+  );
   addDiff(
     changes,
     'rollbackTargetVersionId',

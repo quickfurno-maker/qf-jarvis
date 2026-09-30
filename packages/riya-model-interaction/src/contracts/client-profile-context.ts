@@ -22,9 +22,7 @@ const schema = z
   })
   .strict();
 
-export function parseRiyaClientProfileContextV1(
-  value: unknown,
-): RiyaClientProfileContextV1 {
+export function parseRiyaClientProfileContextV1(value: unknown): RiyaClientProfileContextV1 {
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
     throw new Error('riya-client-profile-context-invalid');
@@ -34,8 +32,6 @@ export function parseRiyaClientProfileContextV1(
     version: 1 as const,
     isFirstContact: data.isFirstContact,
     ...(data.name === undefined ? {} : { name: data.name }),
-    ...(data.preferredLanguage === undefined
-      ? {}
-      : { preferredLanguage: data.preferredLanguage }),
+    ...(data.preferredLanguage === undefined ? {} : { preferredLanguage: data.preferredLanguage }),
   });
 }

@@ -46,6 +46,8 @@ export {
 export { createAgentFlowVersionManifest, RIYA_PHASE2_DRAFT_MANIFEST_V2 } from './manifest.js';
 export { createAgentFlowCertification } from './certification.js';
 export {
+  RIYA_CLIENT_INTELLIGENCE_REGRESSION_CANDIDATE_REF,
   RIYA_PHASE2_REGRESSION_SCENARIOS,
+  createRiyaClientIntelligenceRegressionCandidate,
   runRiyaAgentFlowRegression,
 } from './scenarios.js';

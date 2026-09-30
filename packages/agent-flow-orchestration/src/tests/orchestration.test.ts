@@ -21,6 +21,7 @@ import {
   evaluateAgentFlowRoute,
   prepareAgentFlowCrossAgentHandoff,
   validateAgentFlowSoftOrchestrationProfile,
+  type AgentFlowSoftOrchestrationProfile,
 } from '../index.js';
 
 describe('Agent Flow Studio Phase 3 orchestration', () => {
@@ -79,7 +80,7 @@ describe('Agent Flow Studio Phase 3 orchestration', () => {
 
   it('maps Anisha and Aarohi to their existing durable journey kinds', () => {
     const build = (
-      profile: typeof ANISHA_PHASE3_ORCHESTRATION_V1 | typeof AAROHI_PHASE3_ORCHESTRATION_V1,
+      profile: AgentFlowSoftOrchestrationProfile,
       waitPolicyId: string,
       subjectRef: string,
     ) =>
@@ -91,12 +92,13 @@ describe('Agent Flow Studio Phase 3 orchestration', () => {
         startedFromEventRef: 'event-2',
         policyRevision: 'phase3-v1',
       });
-    expect(build(ANISHA_PHASE3_ORCHESTRATION_V1, 'anisha.wait.vendor-followup.24h.v1', 'vendor-1').start.kind).toBe(
-      'VENDOR_SUCCESS',
-    );
-    expect(build(AAROHI_PHASE3_ORCHESTRATION_V1, 'aarohi.wait.nurture.24h.v1', 'prospect-1').start.kind).toBe(
-      'PROSPECT_GROWTH',
-    );
+    expect(
+      build(ANISHA_PHASE3_ORCHESTRATION_V1, 'anisha.wait.vendor-followup.24h.v1', 'vendor-1').start
+        .kind,
+    ).toBe('VENDOR_SUCCESS');
+    expect(
+      build(AAROHI_PHASE3_ORCHESTRATION_V1, 'aarohi.wait.nurture.24h.v1', 'prospect-1').start.kind,
+    ).toBe('PROSPECT_GROWTH');
   });
 
   it('keeps retry plans bounded and inert', () => {
@@ -207,6 +209,6 @@ describe('Agent Flow Studio Phase 3 orchestration', () => {
           ],
         },
       }),
-    ).toThrowError('agent-flow-soft-orchestration-profile-invalid');
+    ).toThrow('agent-flow-soft-orchestration-profile-invalid');
   });
 });

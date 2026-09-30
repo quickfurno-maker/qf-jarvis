@@ -34,10 +34,7 @@ function validateDecision(input: ClientDecisionContextV1): void {
     input.missingMandatoryFieldRefs,
     'client-intelligence-context-missing-field-invalid',
   );
-  if (
-    input.explicitReassignmentRequested &&
-    input.extraVendorReviewRequested
-  ) {
+  if (input.explicitReassignmentRequested && input.extraVendorReviewRequested) {
     throw new TypeError('client-intelligence-context-conflicting-vendor-request');
   }
 }

@@ -3,7 +3,7 @@ import type {
   QuickFurnoWhatsAppTurnMaterialV2,
 } from './contracts.js';
 
-const ORDINAL_PATTERNS: ReadonlyArray<readonly [RegExp, number]> = [
+const ORDINAL_PATTERNS: readonly (readonly [RegExp, number])[] = [
   [/\b(?:vendor|vendors?)\s*(?:#\s*)?1\b|\b(?:first|1st)\s+vendor\b/iu, 1],
   [/\b(?:vendor|vendors?)\s*(?:#\s*)?2\b|\b(?:second|2nd)\s+vendor\b/iu, 2],
   [/\b(?:vendor|vendors?)\s*(?:#\s*)?3\b|\b(?:third|3rd)\s+vendor\b/iu, 3],
@@ -68,6 +68,7 @@ export function feedbackForMaterial(
     material.subjectType !== 'client' ||
     material.clientJourney === undefined ||
     material.clientVendorJourney === undefined
-  ) return null;
+  )
+    return null;
   return detectExplicitClientVendorFeedback(material.normalizedText);
 }

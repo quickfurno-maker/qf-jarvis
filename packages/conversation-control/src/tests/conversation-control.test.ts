@@ -959,6 +959,7 @@ describe('vocabularies, API surface and containment', () => {
       '0013_communication_state_projection.sql',
       '0014_conversation_prospect_party_type.sql',
       '0015_correlation_timeline_projection.sql',
+      '0016_client_lifetime_projection.sql',
     ]);
   });
 });

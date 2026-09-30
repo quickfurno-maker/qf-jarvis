@@ -39,6 +39,7 @@ const wire = {
     questionPhase: decided.questionPlan.phase,
     questionFields: [...decided.questionPlan.questionFields],
   },
+  profile: { name: null, provenance: null },
 } as const;
 
 describe('JF-5B-R30 Riya simplified provider evolution wire', () => {

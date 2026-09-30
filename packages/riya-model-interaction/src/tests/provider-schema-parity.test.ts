@@ -25,11 +25,12 @@ import { z } from 'zod';
 
 import {
   riyaGroundedReplyOutputSchema,
+  riyaProviderWireSchema,
   riyaStructuredOutputSchema,
 } from '../internal/output-schema.js';
 
-const SCHEMAS = [
-  ['riyaStructuredOutputSchema', riyaStructuredOutputSchema],
+const PROVIDER_SCHEMAS = [
+  ['riyaProviderWireSchema', riyaProviderWireSchema],
   ['riyaGroundedReplyOutputSchema', riyaGroundedReplyOutputSchema],
 ] as const;
 
@@ -88,7 +89,7 @@ function findViolations(root: Node): string[] {
 }
 
 describe('the rendered Riya schemas satisfy the real Groq strict subset', () => {
-  it.each(SCHEMAS)('%s has NO structural violation at any path', (_name, schema) => {
+  it.each(PROVIDER_SCHEMAS)('%s has NO structural violation at any path', (_name, schema) => {
     expect(findViolations(render(schema))).toStrictEqual([]);
   });
 
@@ -98,7 +99,7 @@ describe('the rendered Riya schemas satisfy the real Groq strict subset', () => 
   // contract to a provider package, which is exactly the direction this codebase keeps separate.
   // The walker above enforces the same rules independently, so neither side is trusting the other.
 
-  it.each(SCHEMAS)('%s renders no $defs and no $ref', (_name, schema) => {
+  it.each(PROVIDER_SCHEMAS)('%s renders no $defs and no $ref', (_name, schema) => {
     const rendered = render(schema);
     expect(Object.keys(rendered)).not.toContain('$defs');
     expect(JSON.stringify(rendered)).not.toContain('$ref');
@@ -106,7 +107,7 @@ describe('the rendered Riya schemas satisfy the real Groq strict subset', () => 
 });
 
 describe('reply.reasonCode is REQUIRED and nullable, in both schemas', () => {
-  it.each(SCHEMAS)('%s requires reasonCode rather than omitting it', (_name, schema) => {
+  it.each(PROVIDER_SCHEMAS)('%s requires reasonCode rather than omitting it', (_name, schema) => {
     const reply = (render(schema)['properties'] as Node)['reply'] as Node;
     expect(reply['required']).toContain('reasonCode');
     // The exact pre-HF4 defect, stated as an assertion: the property existed and was not required.
@@ -115,13 +116,16 @@ describe('reply.reasonCode is REQUIRED and nullable, in both schemas', () => {
     );
   });
 
-  it.each(SCHEMAS)('%s expresses "no reason code" as an explicit null branch', (_name, schema) => {
-    const reply = (render(schema)['properties'] as Node)['reply'] as Node;
-    const reasonCode = (reply['properties'] as Node)['reasonCode'] as Node;
-    const branches = reasonCode['anyOf'] as Node[];
-    expect(Array.isArray(branches)).toBe(true);
-    expect(branches.map((one) => one['type']).sort()).toStrictEqual(['null', 'string']);
-  });
+  it.each(PROVIDER_SCHEMAS)(
+    '%s expresses "no reason code" as an explicit null branch',
+    (_name, schema) => {
+      const reply = (render(schema)['properties'] as Node)['reply'] as Node;
+      const reasonCode = (reply['properties'] as Node)['reasonCode'] as Node;
+      const branches = reasonCode['anyOf'] as Node[];
+      expect(Array.isArray(branches)).toBe(true);
+      expect(branches.map((one) => one['type']).sort()).toStrictEqual(['null', 'string']);
+    },
+  );
 });
 
 describe('POST-SDH4 — the observation SET/CLEAR rules are provider-visible WITHOUT anyOf items', () => {

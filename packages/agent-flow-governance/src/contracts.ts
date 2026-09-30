@@ -50,6 +50,14 @@ export interface AgentFlowCertificationEvidence {
   readonly failedScenarioCount: number;
   readonly certifiedAt: string;
   readonly certifiedBy: 'REPOSITORY_TESTS' | 'HUMAN_REVIEW';
+  /** Exact immutable release identity this evidence certified. */
+  readonly versionId: string;
+  readonly flowId: string;
+  readonly flowVersion: number;
+  readonly registryBaselineRef: string;
+  readonly configurationDigest: string;
+  readonly sourceRevision: string;
+  readonly profileSet: AgentFlowProfileSet;
 }
 
 export interface AgentFlowVersionManifest {
@@ -61,6 +69,7 @@ export interface AgentFlowVersionManifest {
   readonly registryBaselineRef: string;
   readonly profileSet: AgentFlowProfileSet;
   readonly configurationDigest: string;
+  readonly sourceRevision: string;
   readonly createdAt: string;
   readonly certification?: AgentFlowCertificationEvidence;
   readonly rollbackTargetVersionId?: string;
@@ -165,6 +174,7 @@ export interface AgentFlowRegressionScenarioDefinition {
 export interface AgentFlowRegressionSummary {
   readonly reportId: string;
   readonly protocol: 'qfj.agent-flow-regression.v1';
+  readonly candidateRef: string;
   readonly scenarioCount: number;
   readonly passed: number;
   readonly failed: number;

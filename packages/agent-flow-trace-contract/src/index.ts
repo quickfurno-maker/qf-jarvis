@@ -12,12 +12,7 @@ export const AGENT_FLOW_TRACE_EVENT_KINDS = [
 ] as const;
 export type AgentFlowTraceEventKind = (typeof AGENT_FLOW_TRACE_EVENT_KINDS)[number];
 
-export const AGENT_FLOW_TRACE_STATUSES = [
-  'RUNNING',
-  'SUCCEEDED',
-  'FAILED',
-  'OBSERVED',
-] as const;
+export const AGENT_FLOW_TRACE_STATUSES = ['RUNNING', 'SUCCEEDED', 'FAILED', 'OBSERVED'] as const;
 export type AgentFlowTraceStatus = (typeof AGENT_FLOW_TRACE_STATUSES)[number];
 
 export const AGENT_FLOW_TRACE_ACTORS = ['RIYA', 'ANISHA', 'AAROHI'] as const;

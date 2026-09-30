@@ -6,8 +6,6 @@ import {
   CLIENT_REASSIGNMENT_STATES,
   CLIENT_SATISFACTION_STATES,
   SERVICE_RELEVANCE,
-  type ClientBehaviourSignalType,
-  type ClientBehaviourValue,
   type ClientIntelligenceSnapshotV1,
   type ClientNextBestAction,
 } from './contracts.js';
@@ -70,14 +68,14 @@ function parseBehaviour(value: unknown): ClientIntelligenceSnapshotV1['behaviour
     );
     return Object.freeze({
       signalType,
-      value: signalValue as ClientBehaviourValue,
+      value: signalValue,
       confidence: unit(row['confidence'], 'client-intelligence-behaviour-invalid'),
     });
   });
   parsed.sort(
     (left, right) =>
-      CLIENT_BEHAVIOUR_SIGNAL_TYPES.indexOf(left.signalType as ClientBehaviourSignalType) -
-      CLIENT_BEHAVIOUR_SIGNAL_TYPES.indexOf(right.signalType as ClientBehaviourSignalType),
+      CLIENT_BEHAVIOUR_SIGNAL_TYPES.indexOf(left.signalType) -
+      CLIENT_BEHAVIOUR_SIGNAL_TYPES.indexOf(right.signalType),
   );
   return Object.freeze(parsed);
 }

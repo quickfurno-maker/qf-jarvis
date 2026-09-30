@@ -30,6 +30,13 @@ export const RIYA_PHASE3_ORCHESTRATION_V1 = createAgentFlowSoftOrchestrationProf
     ],
     routes: [
       {
+        routeId: 'riya.next.reply',
+        fromNodeId: 'riya.condition.next-step',
+        conditionRef: 'riya.route.reply',
+        whenTrueNodeId: 'riya.action.write-reply',
+        whenFalseNodeId: 'riya.human.handoff',
+      },
+      {
         routeId: 'riya.next.human',
         fromNodeId: 'riya.condition.next-step',
         conditionRef: 'riya.route.human',
@@ -86,6 +93,13 @@ export const ANISHA_PHASE3_ORCHESTRATION_V1 = createAgentFlowSoftOrchestrationPr
     ],
     routes: [
       {
+        routeId: 'anisha.next.reply',
+        fromNodeId: 'anisha.condition.next-step',
+        conditionRef: 'anisha.route.reply',
+        whenTrueNodeId: 'anisha.action.write-reply',
+        whenFalseNodeId: 'anisha.human.handoff',
+      },
+      {
         routeId: 'anisha.next.human',
         fromNodeId: 'anisha.condition.next-step',
         conditionRef: 'anisha.route.human',
@@ -141,6 +155,13 @@ export const AAROHI_PHASE3_ORCHESTRATION_V1 = createAgentFlowSoftOrchestrationPr
       { conditionId: 'aarohi.route.reply', signalRef: 'control.replyReady', operator: 'TRUTHY' },
     ],
     routes: [
+      {
+        routeId: 'aarohi.next.reply',
+        fromNodeId: 'aarohi.condition.next-step',
+        conditionRef: 'aarohi.route.reply',
+        whenTrueNodeId: 'aarohi.action.write-reply',
+        whenFalseNodeId: 'aarohi.human.handoff',
+      },
       {
         routeId: 'aarohi.next.human',
         fromNodeId: 'aarohi.condition.next-step',

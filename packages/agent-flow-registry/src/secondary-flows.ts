@@ -73,11 +73,46 @@ function edge(
 
 function createSecondaryFlow(spec: SecondaryFlowSpec): AgentFlowDefinition {
   const groups: readonly AgentFlowGroupDefinition[] = Object.freeze([
-    group(spec, 'inbound', 'Inbound & durable claim', 'SHARED', 'Shared WhatsApp admission and turn claim.', 10),
-    group(spec, 'context', spec.contextLabel, spec.actor, 'Revision-bound Core material and bounded conversation context.', 20),
-    group(spec, 'intelligence', spec.intelligenceLabel, spec.actor, 'Domain reasoning plus the existing shared specialist runtime.', 30),
-    group(spec, 'orchestration', 'Controlled soft orchestration', spec.actor, 'Typed route, wait, event-resume and human-handoff control only.', 40),
-    group(spec, 'response', 'Governed response', 'SHARED', 'Core-bound reply request and durable turn completion.', 50),
+    group(
+      spec,
+      'inbound',
+      'Inbound & durable claim',
+      'SHARED',
+      'Shared WhatsApp admission and turn claim.',
+      10,
+    ),
+    group(
+      spec,
+      'context',
+      spec.contextLabel,
+      spec.actor,
+      'Revision-bound Core material and bounded conversation context.',
+      20,
+    ),
+    group(
+      spec,
+      'intelligence',
+      spec.intelligenceLabel,
+      spec.actor,
+      'Domain reasoning plus the existing shared specialist runtime.',
+      30,
+    ),
+    group(
+      spec,
+      'orchestration',
+      'Controlled soft orchestration',
+      spec.actor,
+      'Typed route, wait, event-resume and human-handoff control only.',
+      40,
+    ),
+    group(
+      spec,
+      'response',
+      'Governed response',
+      'SHARED',
+      'Core-bound reply request and durable turn completion.',
+      50,
+    ),
   ]);
 
   const nodes: readonly AgentFlowNodeDefinition[] = Object.freeze([
@@ -146,7 +181,8 @@ function createSecondaryFlow(spec: SecondaryFlowSpec): AgentFlowDefinition {
       authority: 'READ_ONLY',
       effect: 'READ_ONLY',
       status: 'IMPLEMENTED',
-      implementationRef: 'apps.api.quickfurno-whatsapp.QuickFurnoWhatsAppConversationContextReader.read',
+      implementationRef:
+        'apps.api.quickfurno-whatsapp.QuickFurnoWhatsAppConversationContextReader.read',
       description: 'Loads non-authoritative bounded conversation context from the existing reader.',
       codeLocked: true,
       canvasEditable: ['contextProfileRef', 'timeoutPolicyRef'],
@@ -165,7 +201,8 @@ function createSecondaryFlow(spec: SecondaryFlowSpec): AgentFlowDefinition {
       effect: 'READ_ONLY',
       status: 'IMPLEMENTED',
       implementationRef: 'apps.api.quickfurno-whatsapp.contracts.QuickFurnoWhatsAppTurnMaterialV2',
-      description: 'Uses Core-supplied assigned actor, subject type, party type and control posture.',
+      description:
+        'Uses Core-supplied assigned actor, subject type, party type and control posture.',
       codeLocked: true,
       canvasEditable: ['contextProfileRef'],
       groupId: `${spec.prefix}.context`,
@@ -183,7 +220,8 @@ function createSecondaryFlow(spec: SecondaryFlowSpec): AgentFlowDefinition {
       effect: 'NONE',
       status: 'IMPLEMENTED',
       implementationRef: spec.intelligenceRef,
-      description: 'Uses the existing domain package; it cannot authorize or execute business effects.',
+      description:
+        'Uses the existing domain package; it cannot authorize or execute business effects.',
       codeLocked: true,
       canvasEditable: ['contextProfileRef', 'toolProfileRef'],
       groupId: `${spec.prefix}.intelligence`,
@@ -203,7 +241,12 @@ function createSecondaryFlow(spec: SecondaryFlowSpec): AgentFlowDefinition {
       implementationRef: 'apps.api.quickfurno-whatsapp.createQuickFurnoWhatsAppSpecialistRuntime',
       description: 'Reuses the shared three-agent runtime and versioned prompt/model routing.',
       codeLocked: true,
-      canvasEditable: ['promptProfileRef', 'modelRoutingProfileRef', 'toolProfileRef', 'fallbackNodeId'],
+      canvasEditable: [
+        'promptProfileRef',
+        'modelRoutingProfileRef',
+        'toolProfileRef',
+        'fallbackNodeId',
+      ],
       groupId: `${spec.prefix}.intelligence`,
       tags: [spec.prefix, 'model', 'proposal'],
     }),
@@ -219,7 +262,8 @@ function createSecondaryFlow(spec: SecondaryFlowSpec): AgentFlowDefinition {
       effect: 'NONE',
       status: 'SHADOW',
       implementationRef: 'packages.agent-flow-orchestration.evaluateAgentFlowRoute',
-      description: 'Evaluates only closed typed conditions over supplied signals; no arbitrary expressions.',
+      description:
+        'Evaluates only closed typed conditions over supplied signals; no arbitrary expressions.',
       codeLocked: true,
       canvasEditable: ['conditionRef', 'fallbackNodeId'],
       groupId: `${spec.prefix}.orchestration`,
@@ -237,7 +281,8 @@ function createSecondaryFlow(spec: SecondaryFlowSpec): AgentFlowDefinition {
       effect: 'NONE',
       status: 'SHADOW',
       implementationRef: 'packages.agent-flow-orchestration.createAgentFlowDurableWaitPlan',
-      description: 'Compiles a bounded Temporal journey wait with no execution authority in the canvas.',
+      description:
+        'Compiles a bounded Temporal journey wait with no execution authority in the canvas.',
       codeLocked: true,
       canvasEditable: ['waitPolicyRef', 'fallbackNodeId'],
       groupId: `${spec.prefix}.orchestration`,
@@ -255,7 +300,8 @@ function createSecondaryFlow(spec: SecondaryFlowSpec): AgentFlowDefinition {
       effect: 'NONE',
       status: 'SHADOW',
       implementationRef: 'packages.agent-flow-orchestration.createAgentFlowResumeSignal',
-      description: 'Creates a validated content-free wake signal for the existing durable workflow.',
+      description:
+        'Creates a validated content-free wake signal for the existing durable workflow.',
       codeLocked: true,
       canvasEditable: ['conditionRef', 'fallbackNodeId'],
       groupId: `${spec.prefix}.orchestration`,
@@ -273,7 +319,8 @@ function createSecondaryFlow(spec: SecondaryFlowSpec): AgentFlowDefinition {
       effect: 'GOVERNED_ACTION',
       status: 'DISABLED',
       implementationRef: 'packages.jao-action-registry.request_human_takeover',
-      description: 'Governed proposal remains registry-gated; the canvas cannot enable or execute it.',
+      description:
+        'Governed proposal remains registry-gated; the canvas cannot enable or execute it.',
       codeLocked: true,
       canvasEditable: ['fallbackNodeId'],
       groupId: `${spec.prefix}.orchestration`,
@@ -320,7 +367,9 @@ function createSecondaryFlow(spec: SecondaryFlowSpec): AgentFlowDefinition {
   const edges: readonly AgentFlowEdgeDefinition[] = Object.freeze([
     edge(spec, 1, 'trigger.whatsapp-inbound', 'queue.claim-turn', 'CONTROL'),
     edge(spec, 2, 'queue.claim-turn', 'context.turn-material', 'CONTROL'),
-    edge(spec, 3, 'queue.claim-turn', 'context.conversation', 'CONTROL', { label: 'parallel context' }),
+    edge(spec, 3, 'queue.claim-turn', 'context.conversation', 'CONTROL', {
+      label: 'parallel context',
+    }),
     edge(spec, 4, 'context.turn-material', 'context.authority-scope', 'DATA'),
     edge(spec, 5, 'context.authority-scope', 'intelligence.domain', 'DATA'),
     edge(spec, 6, 'intelligence.domain', 'agent.specialist-runtime', 'DATA'),
@@ -367,7 +416,8 @@ export const ANISHA_VENDOR_FLOW_V1 = createSecondaryFlow({
   prefix: 'anisha',
   flowId: 'agent-flow.anisha.whatsapp-vendor.v1',
   label: 'Anisha — registered-vendor journey',
-  description: 'Phase 3 controlled vendor journey built on the existing shared runtime; soft orchestration remains shadow until deployment.',
+  description:
+    'Phase 3 controlled vendor journey built on the existing shared runtime; soft orchestration remains shadow until deployment.',
   contextLabel: 'Vendor context',
   intelligenceLabel: 'Vendor journey intelligence',
   intelligenceRef: 'packages.anisha-agent.decideAnishaTurn',
@@ -379,7 +429,8 @@ export const AAROHI_ACQUISITION_FLOW_V1 = createSecondaryFlow({
   prefix: 'aarohi',
   flowId: 'agent-flow.aarohi.whatsapp-prospect.v1',
   label: 'Aarohi — acquisition journey',
-  description: 'Phase 3 acquisition journey over existing prospect-domain contracts; orchestration remains shadow and Core-gated.',
+  description:
+    'Phase 3 acquisition journey over existing prospect-domain contracts; orchestration remains shadow and Core-gated.',
   contextLabel: 'Prospect context',
   intelligenceLabel: 'Acquisition intelligence',
   intelligenceRef: 'packages.aarohi-agent.evaluateAcquisitionContactEligibility',

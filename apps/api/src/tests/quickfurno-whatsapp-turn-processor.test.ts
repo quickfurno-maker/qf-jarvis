@@ -51,7 +51,6 @@ const material: QuickFurnoWhatsAppTurnMaterialV2 = Object.freeze({
   normalizedText: 'hello',
 });
 
-
 const readyMaterial: QuickFurnoWhatsAppTurnMaterialV2 = Object.freeze({
   ...material,
   normalizedText: 'Please send me 3 vendors nearby',
@@ -111,7 +110,6 @@ const matchedMaterial: QuickFurnoWhatsAppTurnMaterialV2 = Object.freeze({
     executionAuthorized: false as const,
   }),
 });
-
 
 const vendorFeedbackMaterial: QuickFurnoWhatsAppTurnMaterialV2 = Object.freeze({
   ...matchedMaterial,
@@ -202,10 +200,8 @@ function fixture(
         });
       }),
   );
-  const vendorFeedback =
-    over.vendorFeedback === undefined ? undefined : vi.fn(over.vendorFeedback);
-  const matchRequest =
-    over.matchRequest === undefined ? undefined : vi.fn(over.matchRequest);
+  const vendorFeedback = over.vendorFeedback === undefined ? undefined : vi.fn(over.vendorFeedback);
+  const matchRequest = over.matchRequest === undefined ? undefined : vi.fn(over.matchRequest);
   const write = vi.fn(over.write ?? (() => Promise.resolve('queued' as const)));
   const traceEvents: AgentFlowTraceEvent[] = [];
   const traceRecord = vi.fn(
@@ -435,7 +431,6 @@ describe('QuickFurno WhatsApp turn processor', () => {
     expect(f.write).not.toHaveBeenCalled();
     expect(f.complete).toHaveBeenCalledOnce();
   });
-
 
   it('records explicit client vendor feedback before Riya and refreshes Core journey', async () => {
     let reads = 0;

@@ -8,10 +8,11 @@
  * adds `0009`. Neither introduces a projection at all — both are written by separate packages, and by
  * no projection in this one.
  *
- * The still-load-bearing properties they protect are unchanged:
- *   - NO production projection source performs a destructive read-model operation
- *     (`TRUNCATE`/`DELETE FROM`/`DROP TABLE`) — rebuild/reset destroy remains a trusted admin/test
- *     operation, and the projection role holds no `DELETE`/`TRUNCATE` grant (migrations 0004/0007);
+ * The still-load-bearing properties they protect are unchanged except for one reviewed privacy
+ * erasure path introduced by the offline Client Lifetime projection:
+ *   - `TRUNCATE` and `DROP TABLE` remain forbidden in every production projection source;
+ *   - `DELETE FROM` remains forbidden everywhere except exactly two client-scoped deletes in
+ *     `handlers/client-lifetime.ts`, reached only for `qf.privacy.erasure-recorded`;
  *   - the migration set is bounded and gap-free;
  *   - the package-root exports map stays narrow (no wildcard, nothing reaching persistence/migration).
  *
@@ -58,7 +59,12 @@ function discoverProductionSource(dir: URL): string[] {
  * source (QFJ-P03.08). Note: the subject-activity reducer legitimately WRITES `rm_subject_activity`
  * (INSERT/UPSERT and NULL-clears on a tombstone), which is not destructive and is not scanned here.
  */
-const PROHIBITED_SQL = [/\bTRUNCATE\b/i, /\bDELETE\s+FROM\b/i, /\bDROP\s+TABLE\b/i];
+const ALWAYS_PROHIBITED_SQL = [/\bTRUNCATE\b/i, /\bDROP\s+TABLE\b/i];
+const DELETE_SQL = /\bDELETE\s+FROM\b/gi;
+const CLIENT_LIFETIME_ERASURE_TARGETS = [
+  'qf_jarvis.rm_client_lifetime_timeline',
+  'qf_jarvis.rm_client_service_opportunity',
+] as const;
 
 describe('destructive/reset operations are absent from ALL production projection source', () => {
   const sources = discoverProductionSource(PROJECTIONS_DIR);
@@ -79,24 +85,38 @@ describe('destructive/reset operations are absent from ALL production projection
     expect(asNames.some((p) => p.endsWith('/projections/handlers/subject-activity.ts'))).toBe(true);
   });
 
-  it('the guard actually fires — a destructive statement in ANY file would be caught (positive control)', () => {
-    const wouldBeAddedFile =
-      "await client.query('TRUNCATE TABLE qf_jarvis.rm_event_type_activity');";
-    expect(PROHIBITED_SQL.some((re) => re.test(wouldBeAddedFile))).toBe(true);
+  it('the guard actually fires for globally forbidden destructive statements', () => {
+    const truncate = "await client.query('TRUNCATE TABLE qf_jarvis.rm_event_type_activity');";
+    expect(ALWAYS_PROHIBITED_SQL.some((re) => re.test(truncate))).toBe(true);
     expect(
-      PROHIBITED_SQL.some((re) => re.test('DELETE FROM qf_jarvis.rm_daily_event_acceptance')),
+      ALWAYS_PROHIBITED_SQL.some((re) => re.test('DROP TABLE qf_jarvis.rm_subject_activity')),
     ).toBe(true);
-    expect(PROHIBITED_SQL.some((re) => re.test('DROP TABLE qf_jarvis.rm_subject_activity'))).toBe(
-      true,
-    );
+    expect('DELETE FROM qf_jarvis.rm_daily_event_acceptance'.match(DELETE_SQL)).toHaveLength(1);
   });
 
-  it('no production projection source contains TRUNCATE / DELETE FROM / DROP TABLE', () => {
+  it('forbids TRUNCATE/DROP everywhere and permits only the two reviewed client-erasure deletes', () => {
     for (const file of sources) {
       const text = readFileSync(file, 'utf8');
-      for (const pattern of PROHIBITED_SQL) {
+      for (const pattern of ALWAYS_PROHIBITED_SQL) {
         expect({ file, matched: pattern.test(text) }).toEqual({ file, matched: false });
       }
+
+      const deletes = text.match(DELETE_SQL) ?? [];
+      const normalised = file.replace(/\\/gu, '/');
+      if (!normalised.endsWith('/projections/handlers/client-lifetime.ts')) {
+        expect(deletes, file).toHaveLength(0);
+        continue;
+      }
+
+      expect(deletes).toHaveLength(2);
+      for (const target of CLIENT_LIFETIME_ERASURE_TARGETS) {
+        expect(text).toContain(`DELETE FROM ${target} WHERE client_id = $1`);
+      }
+      expect(text).toContain("if (evidence.eventType === 'qf.privacy.erasure-recorded')");
+      expect(text).toContain('await applyErasure(client, event, evidence);');
+      expect(text.match(/client\.query\(ERASE_(?:TIMELINE|OPPORTUNITIES)_SQL/g) ?? []).toHaveLength(
+        2,
+      );
     }
   });
 });
@@ -105,7 +125,7 @@ describe('destructive/reset operations are absent from ALL production projection
 // (QFJ-P08-B2), 0009 (QFJ-P08 durable approval queue) and now 0010 (QFJ-P09.03 durable execution
 // replay claim). This guard bounds it at 0001–0011.
 describe('migrations are bounded at 0001–0012 with no 0014', () => {
-  it('the migrations directory holds exactly the approved SQL files through 0015', () => {
+  it('the migrations directory holds exactly the approved SQL files through 0016', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((name) => name.endsWith('.sql'))
       .sort();
@@ -126,17 +146,18 @@ describe('migrations are bounded at 0001–0012 with no 0014', () => {
       '0013_communication_state_projection.sql',
       '0014_conversation_prospect_party_type.sql',
       '0015_correlation_timeline_projection.sql',
+      '0016_client_lifetime_projection.sql',
     ]);
   });
 
-  it('no migration numbered 0016 or higher exists', () => {
+  it('no migration numbered 0017 or higher exists', () => {
     // Compared NUMERICALLY rather than by prefix. The previous form was `/^0010|^0[1-9]\d\d/`,
     // which named 0010 and 0100–0999 but silently missed everything from 0011 to 0099 — the exact
     // range the very next migration would land in. Moving the bound is the moment to close that.
     const files = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql'));
     // RWC-P8 (ADR-0104): the bound moves to 0012, the ONE owner-authorized addition. The lock
     // still says exactly what it said -- no unauthorized migration exists.
-    const beyond = files.filter((name) => Number.parseInt(name.slice(0, 4), 10) > 15);
+    const beyond = files.filter((name) => Number.parseInt(name.slice(0, 4), 10) > 16);
     expect(beyond).toEqual([]);
   });
 });

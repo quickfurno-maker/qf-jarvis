@@ -244,7 +244,6 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
     });
   });
 
-
   it('accepts a Core match-readiness decision bound to the active requirement revision', async () => {
     const post: QuickFurnoWhatsAppHttpPost = (_url, init) => {
       const request = JSON.parse(init.body) as Record<string, unknown>;
@@ -322,8 +321,6 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
       assignmentCount: 0,
     });
   });
-
-
 
   it('signs a bounded client match request with no vendor selection or count', async () => {
     let captured: Record<string, unknown> | undefined;
@@ -430,7 +427,14 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
       },
     };
 
-    const result = await createQuickFurnoClientMatchRequestWriter(config(post)).request({ material });
+    const result = await createQuickFurnoClientMatchRequestWriter(config(post)).request({
+      material,
+    });
+    const journey = material.clientJourney;
+    const matchDecision = material.clientMatchDecision;
+    if (journey === undefined || matchDecision === undefined) {
+      throw new Error('test-match-material-missing');
+    }
     expect(result).toMatchObject({ outcome: 'matched', assignmentCount: 3 });
     expect(captured).toMatchObject({
       protocol: 'qfj.client-match.request',
@@ -438,11 +442,11 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
       conversationId: material.conversationId,
       inboundMessageId: material.inboundMessageId,
       expectedConversationRevision: 7,
-      profileId: material.clientJourney!.profileId,
+      profileId: journey.profileId,
       expectedProfileRevision: 5,
-      requirementId: material.clientJourney!.activeRequirement.requirementId,
+      requirementId: journey.activeRequirement.requirementId,
       expectedRequirementRevision: 7,
-      leadId: material.clientMatchDecision!.leadId,
+      leadId: matchDecision.leadId,
       reasonCode: 'CLIENT_MATCH_REQUEST_READY',
     });
     const serialized = JSON.stringify(captured).toLowerCase();

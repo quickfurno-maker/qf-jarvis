@@ -7,7 +7,8 @@ import type {
   AgentFlowVersionManifest,
 } from './contracts.js';
 
-const UNSAFE_IMPLEMENTATION = /(?:arbitrary|unrestricted|direct[-_. ]?(?:sql|http|javascript|js))/iu;
+const UNSAFE_IMPLEMENTATION =
+  /(?:arbitrary|unrestricted|direct[-_. ]?(?:sql|http|javascript|js))/iu;
 
 function issue(
   severity: AgentFlowLintIssue['severity'],
@@ -93,18 +94,30 @@ export function lintAgentFlow(input: {
       );
     }
   }
-  const profileById = new Map(input.profiles.map((profile) => [profile.profileId, profile] as const));
+  const profileById = new Map(
+    input.profiles.map((profile) => [profile.profileId, profile] as const),
+  );
   for (const ref of profileRefs(input.manifest)) {
     const profile = profileById.get(ref);
     if (profile === undefined) {
       issues.push(
-        issue('ERROR', 'UNKNOWN_PROFILE_REF', ref, 'Version manifest references an unknown Agent Flow profile.'),
+        issue(
+          'ERROR',
+          'UNKNOWN_PROFILE_REF',
+          ref,
+          'Version manifest references an unknown Agent Flow profile.',
+        ),
       );
       continue;
     }
     if (profile.actor !== input.manifest.actor && profile.actor !== 'SHARED') {
       issues.push(
-        issue('ERROR', 'PROFILE_ACTOR_MISMATCH', ref, 'Profile actor does not match the flow manifest actor.'),
+        issue(
+          'ERROR',
+          'PROFILE_ACTOR_MISMATCH',
+          ref,
+          'Profile actor does not match the flow manifest actor.',
+        ),
       );
     }
     if (input.manifest.lifecycle === 'LIVE' && !profile.productionEligible) {
@@ -133,7 +146,12 @@ export function lintAgentFlow(input: {
   if (input.manifest.lifecycle === 'LIVE') {
     if (input.manifest.certification === undefined) {
       issues.push(
-        issue('ERROR', 'LIVE_WITHOUT_CERTIFICATION', input.manifest.versionId, 'LIVE requires certification evidence.'),
+        issue(
+          'ERROR',
+          'LIVE_WITHOUT_CERTIFICATION',
+          input.manifest.versionId,
+          'LIVE requires certification evidence.',
+        ),
       );
     } else if (input.manifest.certification.failedScenarioCount !== 0) {
       issues.push(

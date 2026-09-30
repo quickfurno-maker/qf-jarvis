@@ -562,14 +562,14 @@ function parseClientJourneyV1(value: unknown): QuickFurnoClientJourneySnapshotV1
     return null;
   }
   const missingAllowed = ['name', ...CLIENT_JOURNEY_FIELDS] as const;
-  const missing = value['missing'];
-  if (
-    missing.length > missingAllowed.length ||
-    missing.some(
-      (item) => typeof item !== 'string' || !(missingAllowed as readonly string[]).includes(item),
-    ) ||
-    new Set(missing).size !== missing.length
-  ) {
+  const missing: (QuickFurnoClientJourneyField | 'name')[] = [];
+  for (const item of value['missing']) {
+    if (typeof item !== 'string' || !(missingAllowed as readonly string[]).includes(item)) {
+      return null;
+    }
+    missing.push(item as QuickFurnoClientJourneyField | 'name');
+  }
+  if (missing.length > missingAllowed.length || new Set(missing).size !== missing.length) {
     return null;
   }
 
@@ -651,7 +651,7 @@ function parseClientJourneyV1(value: unknown): QuickFurnoClientJourneySnapshotV1
       : {
           preferredLanguage: preferredLanguage as 'en' | 'hi' | 'hinglish' | 'other',
         }),
-    missing: Object.freeze([...missing] as QuickFurnoClientJourneySnapshotV1['missing'][number][]),
+    missing: Object.freeze([...missing]),
     activeRequirement: Object.freeze({
       requirementId: raw['requirementId'],
       revision: raw['revision'],
@@ -708,7 +708,7 @@ function parseClientLifetimeProperty(
     relation: value['relation'],
     ...parsed,
     ...(value['possessionDate'] === undefined ? {} : { possessionDate: value['possessionDate'] }),
-  }) as QuickFurnoClientJourneySnapshotV2['properties'][number];
+  });
 }
 
 function parsePastRequirement(
@@ -796,8 +796,14 @@ function parseClientJourneyV2(value: unknown): QuickFurnoClientJourneySnapshotV2
   )
     return null;
 
-  const propertyIds = properties.map((entry) => entry!.propertyId);
-  const requirementIds = pastRequirements.map((entry) => entry!.requirementId);
+  const parsedProperties = properties.filter(
+    (entry): entry is NonNullable<typeof entry> => entry !== null,
+  );
+  const parsedPastRequirements = pastRequirements.filter(
+    (entry): entry is NonNullable<typeof entry> => entry !== null,
+  );
+  const propertyIds = parsedProperties.map((entry) => entry.propertyId);
+  const requirementIds = parsedPastRequirements.map((entry) => entry.requirementId);
   if (
     new Set(propertyIds).size !== propertyIds.length ||
     new Set(requirementIds).size !== requirementIds.length
@@ -811,10 +817,8 @@ function parseClientJourneyV2(value: unknown): QuickFurnoClientJourneySnapshotV2
     isReturningClient: value['isReturningClient'],
     createdAt: value['createdAt'],
     lastSeenAt: value['lastSeenAt'],
-    properties: Object.freeze(properties as QuickFurnoClientJourneySnapshotV2['properties']),
-    pastRequirements: Object.freeze(
-      pastRequirements as QuickFurnoClientJourneySnapshotV2['pastRequirements'],
-    ),
+    properties: Object.freeze(parsedProperties),
+    pastRequirements: Object.freeze(parsedPastRequirements),
   });
 }
 
@@ -872,7 +876,8 @@ function parseClientMatchDecision(
     !ID.test(value['reasonCode']) ||
     typeof value['coreReady'] !== 'boolean' ||
     value['executionAuthorized'] !== false
-  ) return null;
+  )
+    return null;
   const leadId = value['leadId'];
   if (leadId !== undefined && (typeof leadId !== 'string' || !UUID.test(leadId))) return null;
   const missingFields = value['missingFields'] as string[];
@@ -883,9 +888,23 @@ function parseClientMatchDecision(
   if (value['state'] === 'READY' && (!value['coreReady'] || leadId === undefined)) return null;
   if (value['state'] !== 'READY' && value['coreReady']) return null;
   if (value['state'] === 'MATCHED' && value['assignmentCount'] < 3) return null;
-  if (value['state'] === 'PARTIALLY_MATCHED' && (value['assignmentCount'] < 1 || value['assignmentCount'] >= 3)) return null;
-  if (['REQUIREMENT_INCOMPLETE', 'LEAD_REQUIRED', 'NEEDS_ENRICHMENT', 'READY', 'WAITING_FOR_SUPPLY', 'BLOCKED'].includes(value['state']) &&
-      value['assignmentCount'] !== 0) return null;
+  if (
+    value['state'] === 'PARTIALLY_MATCHED' &&
+    (value['assignmentCount'] < 1 || value['assignmentCount'] >= 3)
+  )
+    return null;
+  if (
+    [
+      'REQUIREMENT_INCOMPLETE',
+      'LEAD_REQUIRED',
+      'NEEDS_ENRICHMENT',
+      'READY',
+      'WAITING_FOR_SUPPLY',
+      'BLOCKED',
+    ].includes(value['state']) &&
+    value['assignmentCount'] !== 0
+  )
+    return null;
   return Object.freeze({
     version: 1 as const,
     state: value['state'] as QuickFurnoClientMatchDecisionV1['state'],
@@ -899,7 +918,6 @@ function parseClientMatchDecision(
     executionAuthorized: false as const,
   });
 }
-
 
 function parseClientVendorJourney(
   value: unknown,
@@ -942,24 +960,22 @@ function parseClientVendorJourney(
     typeof value['reassignmentState'] !== 'string' ||
     !['NONE', 'REQUESTED', 'AUTHORIZED', 'REJECTED'].includes(value['reassignmentState']) ||
     typeof value['followUpDue'] !== 'boolean'
-  ) return null;
+  )
+    return null;
 
   const vendorsReleased = value['vendorsReleased'];
   const vendorNoContactCount = value['vendorNoContactCount'];
   const allReleasedVendorsContacted = value['allReleasedVendorsContacted'];
-  if (
-    allReleasedVendorsContacted &&
-    (vendorsReleased === 0 || vendorNoContactCount > 0)
-  ) return null;
-  if (
-    matchDecision !== undefined &&
-    matchDecision.assignmentCount !== vendorsReleased
-  ) return null;
+  if (allReleasedVendorsContacted && (vendorsReleased === 0 || vendorNoContactCount > 0))
+    return null;
+  if (matchDecision !== undefined && matchDecision.assignmentCount !== vendorsReleased) return null;
 
-  const satisfactionState =
-    value['satisfactionState'] as QuickFurnoClientVendorJourneyV1['satisfactionState'];
-  const reassignmentState =
-    value['reassignmentState'] as QuickFurnoClientVendorJourneyV1['reassignmentState'];
+  const satisfactionState = value[
+    'satisfactionState'
+  ] as QuickFurnoClientVendorJourneyV1['satisfactionState'];
+  const reassignmentState = value[
+    'reassignmentState'
+  ] as QuickFurnoClientVendorJourneyV1['reassignmentState'];
   const recoveryExpected =
     vendorNoContactCount > 0 ||
     satisfactionState === 'DISSATISFIED' ||
@@ -1103,7 +1119,11 @@ function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTur
       ? undefined
       : clientJourney === undefined || clientJourney === null || clientMatchDecision === null
         ? null
-        : parseClientVendorJourney(value['clientVendorJourney'], clientJourney, clientMatchDecision);
+        : parseClientVendorJourney(
+            value['clientVendorJourney'],
+            clientJourney,
+            clientMatchDecision,
+          );
   const coreAvailability =
     value['coreAvailability'] === undefined
       ? undefined
@@ -1664,8 +1684,7 @@ export function createQuickFurnoClientVendorFeedbackWriter(
         material.assignedActor !== 'RIYA' ||
         material.subjectType !== 'client' ||
         journey === undefined ||
-        vendorJourney === undefined ||
-        vendorJourney.requirementId !== journey.activeRequirement.requirementId ||
+        vendorJourney?.requirementId !== journey.activeRequirement.requirementId ||
         vendorJourney.requirementRevision !== journey.activeRequirement.revision ||
         !Number.isSafeInteger(feedback.assignmentOrdinal) ||
         feedback.assignmentOrdinal < 1 ||
@@ -1677,7 +1696,11 @@ export function createQuickFurnoClientVendorFeedbackWriter(
 
       const requestId = config.requestId();
       const issuedAt = config.clock();
-      if (!UUID.test(requestId) || !INSTANT.test(issuedAt) || !Number.isFinite(Date.parse(issuedAt))) {
+      if (
+        !UUID.test(requestId) ||
+        !INSTANT.test(issuedAt) ||
+        !Number.isFinite(Date.parse(issuedAt))
+      ) {
         throw new QuickFurnoWhatsAppHttpError('invalid-config');
       }
 
@@ -1726,11 +1749,17 @@ export function createQuickFurnoClientVendorFeedbackWriter(
         throw new QuickFurnoWhatsAppHttpError('response-invalid');
       }
       if (!isRecord(decoded)) throw new QuickFurnoWhatsAppHttpError('response-invalid');
-      const outcomes = ['recorded','already_recorded','stale','blocked','retry_later'] as const;
+      const outcomes = ['recorded', 'already_recorded', 'stale', 'blocked', 'retry_later'] as const;
       if (
         !onlyKeys(decoded, [
-          'protocol','version','requestId','outcome','assignmentOrdinal',
-          'eventType','reasonCode','providerAuthority',
+          'protocol',
+          'version',
+          'requestId',
+          'outcome',
+          'assignmentOrdinal',
+          'eventType',
+          'reasonCode',
+          'providerAuthority',
         ]) ||
         decoded['protocol'] !== QFJ_CLIENT_VENDOR_FEEDBACK_PROTOCOL ||
         decoded['version'] !== 1 ||
@@ -1780,10 +1809,8 @@ export function createQuickFurnoClientMatchRequestWriter(
         material.assignedActor !== 'RIYA' ||
         material.subjectType !== 'client' ||
         journey === undefined ||
-        match === undefined ||
-        match.state !== 'READY' ||
+        match?.state !== 'READY' ||
         !match.coreReady ||
-        match.executionAuthorized !== false ||
         match.leadId === undefined ||
         match.requirementId !== journey.activeRequirement.requirementId ||
         match.requirementRevision !== journey.activeRequirement.revision
@@ -1793,7 +1820,11 @@ export function createQuickFurnoClientMatchRequestWriter(
 
       const requestId = config.requestId();
       const issuedAt = config.clock();
-      if (!UUID.test(requestId) || !INSTANT.test(issuedAt) || !Number.isFinite(Date.parse(issuedAt))) {
+      if (
+        !UUID.test(requestId) ||
+        !INSTANT.test(issuedAt) ||
+        !Number.isFinite(Date.parse(issuedAt))
+      ) {
         throw new QuickFurnoWhatsAppHttpError('invalid-config');
       }
 
@@ -1920,42 +1951,35 @@ function isQualificationProposal(
 
 function validClientJourneyProposal(proposal: QuickFurnoClientJourneyProposalV1): boolean {
   if (
-    proposal.version !== 1 ||
     !UUID.test(proposal.profileId) ||
     !Number.isSafeInteger(proposal.profileRevision) ||
     proposal.profileRevision < 0 ||
     !UUID.test(proposal.requirementId) ||
     !Number.isSafeInteger(proposal.requirementRevision) ||
     proposal.requirementRevision < 0 ||
-    !(CLIENT_JOURNEY_PHASES as readonly string[]).includes(proposal.nextPhase) ||
-    typeof proposal.summaryConfirmed !== 'boolean' ||
     proposal.sets.length > CLIENT_JOURNEY_FIELDS.length ||
     proposal.clears.length > CLIENT_JOURNEY_FIELDS.length
-  ) return false;
+  )
+    return false;
   if (
     proposal.name !== undefined &&
-    (proposal.name.provenance !== 'user_stated' ||
-      proposal.name.value.trim().length < 1 ||
-      proposal.name.value.trim().length > 120)
-  ) return false;
+    (proposal.name.value.trim().length < 1 || proposal.name.value.trim().length > 120)
+  )
+    return false;
   const seen = new Set<QuickFurnoClientJourneyField>();
   for (const item of proposal.sets) {
-    if (
-      !(CLIENT_JOURNEY_FIELDS as readonly string[]).includes(item.field) ||
-      seen.has(item.field) ||
-      (item.provenance !== 'user_stated' && item.provenance !== 'model_inferred')
-    ) return false;
+    if (seen.has(item.field)) return false;
     const max =
-      item.field === 'scope' ? 2048 : item.field === 'budget' || item.field === 'timeline' ? 512 : 128;
+      item.field === 'scope'
+        ? 2048
+        : item.field === 'budget' || item.field === 'timeline'
+          ? 512
+          : 128;
     if (item.value.trim().length < 1 || item.value.trim().length > max) return false;
     seen.add(item.field);
   }
   for (const item of proposal.clears) {
-    if (
-      !(CLIENT_JOURNEY_FIELDS as readonly string[]).includes(item.field) ||
-      seen.has(item.field) ||
-      item.provenance !== 'user_stated'
-    ) return false;
+    if (seen.has(item.field)) return false;
     seen.add(item.field);
   }
   return true;

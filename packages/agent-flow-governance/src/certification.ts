@@ -2,9 +2,11 @@ import type {
   AgentFlowCertificationEvidence,
   AgentFlowLintReport,
   AgentFlowRegressionSummary,
+  AgentFlowVersionManifest,
 } from './contracts.js';
 
 export function createAgentFlowCertification(input: {
+  readonly manifest: AgentFlowVersionManifest;
   readonly lint: AgentFlowLintReport;
   readonly regression: AgentFlowRegressionSummary;
   readonly certifiedAt: string;
@@ -27,5 +29,12 @@ export function createAgentFlowCertification(input: {
     failedScenarioCount: input.regression.failed,
     certifiedAt: input.certifiedAt,
     certifiedBy: input.certifiedBy,
+    versionId: input.manifest.versionId,
+    flowId: input.manifest.flowId,
+    flowVersion: input.manifest.flowVersion,
+    registryBaselineRef: input.manifest.registryBaselineRef,
+    configurationDigest: input.manifest.configurationDigest,
+    sourceRevision: input.manifest.sourceRevision,
+    profileSet: Object.freeze({ ...input.manifest.profileSet }),
   });
 }

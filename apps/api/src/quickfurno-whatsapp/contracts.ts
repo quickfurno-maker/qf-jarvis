@@ -32,15 +32,13 @@ export const QFJ_WHATSAPP_REPLY_PATH = '/api/internal/jarvis/whatsapp-reply' as 
 export const QFJ_WHATSAPP_REPLY_SIGNING_DOMAIN = 'qfj.whatsapp.reply.http.sig.v2' as const;
 export const QFJ_WHATSAPP_REPLY_QUALIFICATION_SIGNING_DOMAIN =
   'qfj.whatsapp.reply.http.sig.v3' as const;
-export const QFJ_WHATSAPP_REPLY_JOURNEY_SIGNING_DOMAIN =
-  'qfj.whatsapp.reply.http.sig.v4' as const;
+export const QFJ_WHATSAPP_REPLY_JOURNEY_SIGNING_DOMAIN = 'qfj.whatsapp.reply.http.sig.v4' as const;
 export const QFJ_CLIENT_MATCH_REQUEST_PROTOCOL = 'qfj.client-match.request' as const;
 export const QFJ_CLIENT_MATCH_REQUEST_VERSION = 1 as const;
 export const QFJ_CLIENT_MATCH_REQUEST_PATH = '/api/internal/jarvis/client-match-request' as const;
 export const QFJ_CLIENT_MATCH_REQUEST_SIGNING_DOMAIN =
   'qfj.client-match.request.http.sig.v1' as const;
-export const QFJ_CLIENT_VENDOR_FEEDBACK_PROTOCOL =
-  'qfj.client-vendor-feedback.request' as const;
+export const QFJ_CLIENT_VENDOR_FEEDBACK_PROTOCOL = 'qfj.client-vendor-feedback.request' as const;
 export const QFJ_CLIENT_VENDOR_FEEDBACK_VERSION = 1 as const;
 export const QFJ_CLIENT_VENDOR_FEEDBACK_PATH =
   '/api/internal/jarvis/client-vendor-feedback' as const;
@@ -263,11 +261,7 @@ export interface QuickFurnoExplicitClientVendorFeedback {
 }
 
 export type QuickFurnoClientVendorFeedbackOutcome =
-  | 'recorded'
-  | 'already_recorded'
-  | 'stale'
-  | 'blocked'
-  | 'retry_later';
+  'recorded' | 'already_recorded' | 'stale' | 'blocked' | 'retry_later';
 
 export interface QuickFurnoClientVendorFeedbackResultV1 {
   readonly protocol: typeof QFJ_CLIENT_VENDOR_FEEDBACK_PROTOCOL;
@@ -281,16 +275,10 @@ export interface QuickFurnoClientVendorFeedbackResultV1 {
 }
 
 export type QuickFurnoClientVendorSatisfactionState =
-  | 'UNKNOWN'
-  | 'SATISFIED'
-  | 'DISSATISFIED'
-  | 'COMPLAINT';
+  'UNKNOWN' | 'SATISFIED' | 'DISSATISFIED' | 'COMPLAINT';
 
 export type QuickFurnoClientVendorReassignmentState =
-  | 'NONE'
-  | 'REQUESTED'
-  | 'AUTHORIZED'
-  | 'REJECTED';
+  'NONE' | 'REQUESTED' | 'AUTHORIZED' | 'REJECTED';
 
 export interface QuickFurnoClientVendorJourneyV1 {
   readonly version: 1;

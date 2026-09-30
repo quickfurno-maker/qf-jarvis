@@ -93,9 +93,7 @@ describe('agent-flow-registry', () => {
     expect(RIYA_WHATSAPP_CLIENT_FLOW_V1.registrySchemaVersion).toBe(
       AGENT_FLOW_REGISTRY_SCHEMA_VERSION,
     );
-    expect(RIYA_WHATSAPP_CLIENT_FLOW_V1.implementationBaselineRef).toBe(
-      'qf-jarvis@2423e3d5',
-    );
+    expect(RIYA_WHATSAPP_CLIENT_FLOW_V1.implementationBaselineRef).toBe('qf-jarvis@2423e3d5');
     expect(RIYA_WHATSAPP_CLIENT_FLOW_V1.verifiedAt).toBe('2026-09-30');
     expect(RIYA_WHATSAPP_CLIENT_FLOW_V1.nodes).toHaveLength(18);
     expect(RIYA_WHATSAPP_CLIENT_FLOW_V1.edges).toHaveLength(24);

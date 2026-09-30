@@ -114,6 +114,7 @@ const JF7_KILL_SWITCH = 'src/quickfurno-whatsapp/production-kill-switch.ts';
 const JF7_NETWORK = 'src/quickfurno-whatsapp/production-network.ts';
 const JF7_WORKER = 'src/quickfurno-whatsapp/production-worker.ts';
 const JF7_OBSERVATION = 'src/quickfurno-whatsapp/production-observation.ts';
+const AGENT_FLOW_TRACE_OBSERVATION = 'src/quickfurno-whatsapp/agent-flow-trace-observation.ts';
 const JF7_FILES: readonly string[] = Object.freeze([
   JF7_BIN,
   JF7_CONFIG,
@@ -329,9 +330,19 @@ describe('(68) node:fs is confined to one designated adapter', () => {
         expect(code, file).toMatch(
           /import \{ mkdir, rename, writeFile \} from 'node:fs\/promises'/,
         );
-        // This is the ONE reviewed production file writer: it emits only the strict, content-free
-        // worker observation contract and has no credential-reading primitive.
+        // Reviewed content-free worker observation writer; it has no credential-reading primitive.
         expect(code, file).not.toMatch(/readFile|open\(|createReadStream/);
+        continue;
+      }
+      if (normalise(file).endsWith(`/${AGENT_FLOW_TRACE_OBSERVATION}`)) {
+        expect(code, file).toMatch(
+          /import \{ mkdir, readFile, rename, writeFile \} from 'node:fs\/promises'/,
+        );
+        // Phase 2 trace persistence may hydrate only its own strict content-free snapshot. It holds
+        // no secret, provider, network, database or business-authority surface.
+        expect(code, file).not.toMatch(
+          /credential|secret|provider|fetch\s*\(|postgres|process\.env/i,
+        );
         continue;
       }
       if (normalise(file).endsWith(`/${OPENAI_LAUNCH_SMOKE_CLI}`)) {
@@ -700,6 +711,8 @@ describe('the staging smoke stays out of the production boundary', () => {
       // ADR-0153: the shared Action Kernel is the deterministic proposal-submission firewall used by
       // API/Temporal composition. It adds no authority and is a workspace-only dependency.
       '@qf-jarvis/action-kernel',
+      // Agent Flow Phase 2: strict content-free observational trace contract only.
+      '@qf-jarvis/agent-flow-trace-contract',
       // ADR-0097 adds exactly two, both genuinely used by the private ingress: the conversation
       // SERVICE it delegates to, and `agent-runtime` for the closed `RUNTIME_DATA_CLASSES`
       // vocabulary its classification-policy output is validated against. No web framework, and no
@@ -712,6 +725,8 @@ describe('the staging smoke stays out of the production boundary', () => {
       // reference them, not because a line of either executes here. Still an EXACT set match, and
       // still no new third-party resolution.
       '@qf-jarvis/approval-core-adapter',
+      // Client OS: pure read-only next-best-action/context projection; no execution authority.
+      '@qf-jarvis/client-intelligence',
       '@qf-jarvis/contracts',
       // JF-5B-R1 (ADR-0152): the offline certification executable, and nothing else, needs these six.
       // Every one is an existing workspace package -- there is no new third-party resolution, and the
@@ -790,6 +805,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       // JF-7 reuses only the durable-turn-spool subpath from the signed QuickFurno gateway package.
       '@qf-jarvis/quickfurno-gateway',
       '@qf-jarvis/rag-provisioning',
+      // Client OS: canonical continuity/evolution contracts consumed by the private Riya serving seam.
+      '@qf-jarvis/riya-conversation-continuity',
+      '@qf-jarvis/riya-conversation-evolution',
       '@qf-jarvis/riya-prompts',
       '@qf-jarvis/riya-web-conversation-service',
       // ADR-0174: context compression and the bounded public-knowledge cache are authority-free
@@ -1078,6 +1096,8 @@ describe('(78, 79, 80, 81) repository invariants', () => {
         '572ba13764cffed600d8580e00b781502ddc85c19126e3621d0a8127e5dc536e',
       '0015_correlation_timeline_projection.sql':
         '31517791c0e8f382f6dff1d0d25f01d8244cc0fabb06c27694246cd1905ba952',
+      '0016_client_lifetime_projection.sql':
+        'e389afa44ef080e3808845ee8900463f94e130448e4beed3d5dbcd243440539e',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -1094,7 +1114,7 @@ describe('(78, 79, 80, 81) repository invariants', () => {
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((name) => name.startsWith('0016'))).toBe(false);
+    expect(sql.some((name) => name.startsWith('0017'))).toBe(false);
   });
 
   it('(80) no source references the protected reconciliation directory', () => {

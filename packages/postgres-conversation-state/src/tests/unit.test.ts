@@ -815,7 +815,7 @@ describe('API surface, dependencies and containment', () => {
     }
   });
 
-  it('locks the complete migration ledger through 0015', () => {
+  it('locks the complete migration ledger through 0016', () => {
     const dir = fileURLToPath(
       new URL('packages/event-backbone/src/persistence/migrations/', REPO_ROOT),
     );
@@ -840,6 +840,7 @@ describe('API surface, dependencies and containment', () => {
       '0013_communication_state_projection.sql',
       '0014_conversation_prospect_party_type.sql',
       '0015_correlation_timeline_projection.sql',
+      '0016_client_lifetime_projection.sql',
     ]);
   });
 

@@ -72,9 +72,7 @@ function validateNode(node: AgentFlowNodeDefinition): void {
   }
 }
 
-function assertReachable(
-  input: Pick<AgentFlowDefinition, 'rootNodeId' | 'nodes' | 'edges'>,
-): void {
+function assertReachable(input: Pick<AgentFlowDefinition, 'rootNodeId' | 'nodes' | 'edges'>): void {
   const adjacency = new Map<string, string[]>();
   for (const node of input.nodes) adjacency.set(node.nodeId, []);
   for (const edge of input.edges) adjacency.get(edge.sourceNodeId)?.push(edge.targetNodeId);
@@ -118,7 +116,8 @@ export function createAgentFlowDefinition(input: AgentFlowDefinitionInput): Agen
     assertRef(group.groupId, 'agent-flow-group-id-invalid');
     assertText(group.label, 'agent-flow-group-label-invalid');
     assertText(group.description, 'agent-flow-group-description-invalid');
-    if (!AGENT_FLOW_ACTORS.includes(group.actor)) throw new TypeError('agent-flow-group-actor-invalid');
+    if (!AGENT_FLOW_ACTORS.includes(group.actor))
+      throw new TypeError('agent-flow-group-actor-invalid');
     if (!Number.isInteger(group.order) || group.order < 0) {
       throw new TypeError('agent-flow-group-order-invalid');
     }
@@ -154,7 +153,12 @@ export function createAgentFlowDefinition(input: AgentFlowDefinitionInput): Agen
     if (!nodeIds.has(edge.sourceNodeId) || !nodeIds.has(edge.targetNodeId)) {
       throw new TypeError('agent-flow-edge-node-unknown');
     }
-    const signature = [edge.sourceNodeId, edge.targetNodeId, edge.kind, edge.conditionRef ?? ''].join('|');
+    const signature = [
+      edge.sourceNodeId,
+      edge.targetNodeId,
+      edge.kind,
+      edge.conditionRef ?? '',
+    ].join('|');
     if (edgeSignatures.has(signature)) throw new TypeError('agent-flow-edge-semantic-duplicate');
     edgeIds.add(edge.edgeId);
     edgeSignatures.add(signature);
