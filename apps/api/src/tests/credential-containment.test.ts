@@ -108,6 +108,20 @@ const OPENAI_LAUNCH_FILES: readonly string[] = Object.freeze([
 const isOpenAILaunchFile = (f: string): boolean =>
   OPENAI_LAUNCH_FILES.some((one) => normalise(f).endsWith(`/${one}`));
 
+// ADR-0176: offline knowledge-release operators. They prepare/activate one exact owner-approved
+// corpus revision and are never imported by the serving worker. Keep their process/filesystem/database
+// permissions explicit rather than inheriting JF-7's serving permissions.
+const KNOWLEDGE_BUILD_BIN = 'src/bin/run-quickfurno-knowledge-candidate-build.ts';
+const KNOWLEDGE_ACTIVATE_BIN = 'src/bin/run-quickfurno-knowledge-activate.ts';
+const KNOWLEDGE_OPERATOR_CONFIG = 'src/knowledge-production/knowledge-candidate-config.ts';
+const KNOWLEDGE_OPERATOR_FILES: readonly string[] = Object.freeze([
+  KNOWLEDGE_BUILD_BIN,
+  KNOWLEDGE_ACTIVATE_BIN,
+  KNOWLEDGE_OPERATOR_CONFIG,
+]);
+const isKnowledgeOperatorFile = (f: string, only: readonly string[] = KNOWLEDGE_OPERATOR_FILES): boolean =>
+  only.some((one) => normalise(f).endsWith(`/${one}`));
+
 const JF7_BIN = 'src/bin/run-quickfurno-whatsapp-production-worker.ts';
 const JF7_CONFIG = 'src/quickfurno-whatsapp/production-worker-config.ts';
 const JF7_KILL_SWITCH = 'src/quickfurno-whatsapp/production-kill-switch.ts';
@@ -148,6 +162,18 @@ const PROCESS_ALLOWLIST: Readonly<Record<string, readonly string[]>> = Object.fr
   'src/bin/run-jf5b-live-certification.ts': ['process.exitCode', 'process.argv'],
   'src/composition/jf5b-live-composition.ts': ['process.stdout', 'process.stderr', 'process.stdin'],
   [OPENAI_LAUNCH_SMOKE_BIN]: [
+    'process.argv',
+    'process.stdout',
+    'process.stderr',
+    'process.exitCode',
+  ],
+  [KNOWLEDGE_BUILD_BIN]: [
+    'process.argv',
+    'process.stdout',
+    'process.stderr',
+    'process.exitCode',
+  ],
+  [KNOWLEDGE_ACTIVATE_BIN]: [
     'process.argv',
     'process.stdout',
     'process.stderr',
@@ -349,6 +375,10 @@ describe('(68) node:fs is confined to one designated adapter', () => {
         expect(code, file).toMatch(/import \{ mkdirSync, writeFileSync \} from 'node:fs'/);
         continue;
       }
+      if (isKnowledgeOperatorFile(file, [KNOWLEDGE_OPERATOR_CONFIG])) {
+        expect(code, file).toMatch(/import \{ readFileSync \} from 'node:fs'/);
+        continue;
+      }
       expect(code).not.toMatch(/from ['"]node:fs(\/promises)?['"]/);
     }
   });
@@ -481,6 +511,17 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         // floating alias would be the real one. The narrow exception is the model-id constant.
         if (
           forbidden === 'openai' &&
+          isKnowledgeOperatorFile(file, [KNOWLEDGE_BUILD_BIN]) &&
+          code.includes('@qf-jarvis/openai-compatible-embedding-adapter')
+        ) {
+          // ADR-0176 candidate construction uses the same provider-neutral embedding adapter as the
+          // serving worker. The operator owns no vendor SDK/client and hard-codes no provider host.
+          expect(code, file).not.toContain("from 'openai'");
+          expect(code, file).not.toContain('openai.com');
+          continue;
+        }
+        if (
+          forbidden === 'openai' &&
           isJf7File(file, [JF7_WORKER]) &&
           code.includes('@qf-jarvis/openai-compatible-embedding-adapter')
         ) {
@@ -540,7 +581,7 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         }
         expect(code, `${file}: ${forbidden}`).not.toContain(forbidden);
       }
-      // Database vocabulary is confined to five exact modules. JF-7 adds a bounded config parser
+      // Database vocabulary is confined to an exact reviewed set. JF-7 adds a bounded config parser
       // (the only new connection-string seam) and the worker composition (the only new pool creator).
       // Both still go through event-backbone; neither imports `pg`, embeds SQL or owns migrations.
       if (
@@ -548,14 +589,15 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         !isJf6RiyaServiceComposition(file) &&
         normalise(file).split('/apps/api/')[1] !== KNOWLEDGE_FRESHNESS_COMPOSITION_MODULE &&
         !isDesignatedQueueTypeModule(file) &&
-        !isJf7File(file, [JF7_CONFIG, JF7_WORKER])
+        !isJf7File(file, [JF7_CONFIG, JF7_WORKER]) &&
+        !isKnowledgeOperatorFile(file)
       ) {
         expect(code, file).not.toContain('postgres');
       }
     }
   });
 
-  it('exactly six production modules name a database, with only reviewed config/pool seams', () => {
+  it('exactly nine production modules name a database, with only reviewed config/pool seams', () => {
     const touching = productionFiles().filter((file) => {
       const code = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
       return (
@@ -564,7 +606,7 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         code.includes('conversation-state')
       );
     });
-    // An EXACT set, not a superset. JF-7 adds one bounded database-config parser and one worker
+    // An EXACT set, not a superset. JF-7 plus ADR-0176 add only the reviewed config/composition
     // composition that creates a pool through event-backbone. No other app module gains persistence.
     expect(touching.map((f) => normalise(f).split('/apps/api/')[1] ?? '').sort()).toEqual(
       [
@@ -574,10 +616,13 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         DESIGNATED_QUEUE_TYPE_MODULE,
         JF7_CONFIG,
         JF7_WORKER,
+        KNOWLEDGE_BUILD_BIN,
+        KNOWLEDGE_ACTIVATE_BIN,
+        KNOWLEDGE_OPERATOR_CONFIG,
       ].sort(),
     );
 
-    // All five reach persistence only through public workspace APIs: no `pg`, raw Pool constructor,
+    // Every reviewed module reaches persistence only through public workspace APIs: no `pg`, raw Pool constructor,
     // SQL, migrations or HTTP server. Only the JF-7 config parser may handle a connection string,
     // and only the two reviewed composition roots may call createDatabasePool.
     for (const file of touching) {
@@ -587,7 +632,10 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       expect(code, label).not.toMatch(/\bnew\s+Pool\b/);
       expect(code, label).not.toMatch(/\b(SELECT|INSERT|UPDATE|DELETE|CREATE TABLE|ALTER TABLE)\b/);
       expect(code, label).not.toMatch(/migrat/i);
-      if (!isJf7File(file, [JF7_CONFIG])) {
+      if (
+        !isJf7File(file, [JF7_CONFIG]) &&
+        !isKnowledgeOperatorFile(file, [KNOWLEDGE_OPERATOR_CONFIG])
+      ) {
         expect(code, label).not.toMatch(/connectionString/);
       }
       expect(code, label).not.toMatch(/createServer|express|fastify/i);
@@ -596,11 +644,21 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     expect(codeOnly(readFileSync(jf7Config, 'utf8'))).toContain('createDatabaseConfig');
     expect(codeOnly(readFileSync(jf7Config, 'utf8'))).not.toContain('createDatabasePool');
 
+    const knowledgeConfig =
+      touching.find((file) => isKnowledgeOperatorFile(file, [KNOWLEDGE_OPERATOR_CONFIG])) ?? '';
+    expect(codeOnly(readFileSync(knowledgeConfig, 'utf8'))).toContain('createDatabaseConfig');
+    expect(codeOnly(readFileSync(knowledgeConfig, 'utf8'))).not.toContain('createDatabasePool');
+
     const poolCreators = touching.filter((file) =>
       codeOnly(readFileSync(file, 'utf8')).includes('createDatabasePool'),
     );
     expect(poolCreators.map((f) => normalise(f).split('/apps/api/')[1] ?? '').sort()).toEqual(
-      [DESIGNATED_DATABASE_MODULE, JF7_WORKER].sort(),
+      [
+        DESIGNATED_DATABASE_MODULE,
+        JF7_WORKER,
+        KNOWLEDGE_BUILD_BIN,
+        KNOWLEDGE_ACTIVATE_BIN,
+      ].sort(),
     );
 
     // And the operator boundary names the queue as a TYPE ONLY -- erased at compile time, so it
