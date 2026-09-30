@@ -259,6 +259,11 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     // authority still comes from signed authority-v2 reads, never from this database.
     'src/quickfurno-whatsapp/production-worker-config.ts',
     'src/quickfurno-whatsapp/production-worker.ts',
+    // ADR-0176: offline knowledge release operators. The config validates the ingestor connection;
+    // the two bins create bounded pools only for staging/sealing or activating an exact release.
+    'src/knowledge-production/knowledge-candidate-config.ts',
+    'src/bin/run-quickfurno-knowledge-candidate-build.ts',
+    'src/bin/run-quickfurno-knowledge-activate.ts',
     'src/runtime/durable-jarvis-runtime.ts',
     'src/tests/durable-database-harness.ts',
   ]);
@@ -444,16 +449,16 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     }
   });
 
-  it('(130, 131) exactly five reviewed files name persistence, and four are production', () => {
+  it('(130, 131) exactly eight reviewed files name persistence, and seven are production', () => {
     const naming = allFiles().filter((file) =>
       codeOnly(readFileSync(file, 'utf8')).toLowerCase().includes('event-backbone'),
     );
     expect(naming.map((f) => normalise(f).split('/apps/api/')[1] ?? '').sort()).toEqual([
       ...DATABASE_COMPOSITION_FILES,
     ]);
-    // JF-6 durable composition + JF-7 worker config/pool + the existing durable runtime are
-    // production seams; the harness remains test-only and excluded.
-    expect(naming.filter((f) => !normalise(f).includes('/tests/'))).toHaveLength(4);
+    // JF-6 durable composition, JF-7 worker config/pool, ADR-0176 offline knowledge operators and
+    // the existing durable runtime are production seams; the harness remains test-only and excluded.
+    expect(naming.filter((f) => !normalise(f).includes('/tests/'))).toHaveLength(7);
   });
 
   it('(132) the prompt and schema are fixed in source and not configurable', () => {
@@ -914,8 +919,25 @@ describe('(133-148) the declared budget and every prior lock', () => {
           // Comments stripped, as every scanner in this file does. A doc comment that says a
           // taxonomy label looks like "Pune" is documentation, not a constant Jarvis relies on --
           // and forcing the contracts package to stop illustrating its own primitives would make the
-          // rule cost more than it buys. What is forbidden is a NAME IN CODE.
-          const text = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
+          // rule cost more than it buys. What is forbidden is an invented runtime fallback.
+          const source = codeOnly(readFileSync(file, 'utf8'));
+          const text = source.toLowerCase();
+          if (
+            normalised.endsWith(
+              '/apps/api/src/knowledge-production/quickfurno-production-corpus.ts',
+            )
+          ) {
+            // ADR-0176 is the opposite of invention: it is an immutable, source-pinned reference
+            // corpus whose records cannot become ACTIVE until attributable owner approval is supplied.
+            expect(source).toContain(
+              "'c567b58a2c380b53d98a246a1b87b13f92e4aeda' as const",
+            );
+            expect(source).toContain('createApprovedQuickFurnoKnowledgeSourceManifest');
+            expect(text).not.toContain('defaultcity');
+            expect(text).not.toContain('fallbackcity');
+            expect(text).not.toContain('assumeavailable');
+            continue;
+          }
           for (const forbidden of [
             'pune',
             'mumbai',
@@ -1033,7 +1055,7 @@ describe('(133-148) the declared budget and every prior lock', () => {
     // budget rather than left to lose a race with whatever runs beside it.
   }, 30_000);
 
-  it('the four executables are declared as bins and each runs nothing on import', () => {
+  it('the six executables are declared as bins and non-bin modules stay import-safe', () => {
     const manifest = JSON.parse(readFileSync(join(APP_DIR, 'package.json'), 'utf8')) as {
       bin?: Record<string, string>;
     };
@@ -1044,6 +1066,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
     expect(manifest.bin).toEqual({
       'qfj-generate-shadow-evidence': './dist/bin/generate-shadow-evidence.js',
       'qfj-jf5b-certify': './dist/bin/run-jf5b-live-certification.js',
+      'qfj-knowledge-activate': './dist/bin/run-quickfurno-knowledge-activate.js',
+      'qfj-knowledge-build-candidate':
+        './dist/bin/run-quickfurno-knowledge-candidate-build.js',
       'qfj-openai-launch-smoke': './dist/bin/run-openai-launch-smoke.js',
       'qfj-run-shadow-once': './dist/bin/run-shadow-once.js',
     });
