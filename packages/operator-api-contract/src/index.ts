@@ -25,6 +25,7 @@ export const operatorModuleSchema = z
       'riya',
       'aarohi',
       'anisha',
+      'agent-flows',
       'operations',
       'approvals',
       'conversations',
@@ -98,6 +99,14 @@ export const OPERATOR_MODULES = Object.freeze([
     label: 'Anisha',
     scope: 'Registered-vendor relationship and success',
     webPath: '/agents/anisha',
+    mobilePrimary: false,
+  },
+  {
+    id: 'agent-flows',
+    group: 'AGENTS',
+    label: 'Agent Flow Studio',
+    scope: 'Read-only Riya, Anisha and Aarohi journey architecture and governed capability map',
+    webPath: '/agent-flows',
     mobilePrimary: false,
   },
   {
