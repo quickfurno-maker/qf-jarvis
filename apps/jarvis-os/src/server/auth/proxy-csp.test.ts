@@ -200,6 +200,9 @@ describe('secret containment in application source', () => {
     // Every environment value is a path or the public immutable release SHA, never secret material.
     expect(loader).toContain("AUTH_CONFIG_PATH_VAR = 'QFJ_JOS_AUTH_CONFIG_FILE'");
     expect(loader).toContain("WORKER_OBSERVATION_PATH_VAR = 'QFJ_WORKER_OBSERVATION_FILE'");
+    expect(loader).toContain(
+      "AOS_OWNER_ATTENTION_OBSERVATION_PATH_VAR = 'QFJ_AOS_OWNER_ATTENTION_OBSERVATION_FILE'",
+    );
     expect(loader).toContain("AGENT_FLOW_TRACE_PATH_VAR = 'QFJ_AGENT_FLOW_TRACE_FILE'");
     expect(loader).toContain("CORE_READ_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_READ_CONFIG_FILE'");
     expect(loader).toContain("CORE_COMMAND_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_COMMAND_CONFIG_FILE'");
@@ -209,7 +212,7 @@ describe('secret containment in application source', () => {
     expect(loader).toContain("LIVEKIT_CONFIG_PATH_VAR = 'QFJ_JOS_LIVEKIT_CONFIG_FILE'");
     expect(loader).toContain("RELEASE_SHA_VAR = 'QFJ_JOS_RELEASE_SHA'");
     const envReads = loader.match(/process\.env\[/gu) ?? [];
-    expect(envReads).toHaveLength(8);
+    expect(envReads).toHaveLength(9);
   });
 
   it('imports node:fs only in the auth config loader', () => {
@@ -224,6 +227,7 @@ describe('secret containment in application source', () => {
         /from '(node:)?fs/u.test(code) &&
         relative !== 'server/auth/config/loader.ts' &&
         relative !== 'server/control-plane/sources/worker-observation-source.ts' &&
+        relative !== 'server/control-plane/sources/aos-owner-attention-source.ts' &&
         relative !== 'server/control-plane/sources/agent-flow-trace-source.ts' &&
         relative !== 'server/control-plane/sources/release-assurance-source.ts'
       ) {

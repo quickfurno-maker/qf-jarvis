@@ -24,6 +24,8 @@ import { controlPlane } from '@/lib/control-plane';
 import { operationalAttention } from '@/lib/control-plane/operational-attention';
 import { decisionLineage } from '@/lib/control-plane/decision-lineage';
 import { proactiveNowBrief } from '@/lib/control-plane/proactive';
+import { readAosOwnerAttentionObservationPathFromEnvironment } from '@/server/auth/config/loader';
+import { readAosOwnerAttentionObservation } from '@/server/control-plane/sources/aos-owner-attention-source';
 import { operatorBootstrap } from '@/server/operator/bootstrap';
 
 /**
@@ -44,18 +46,27 @@ export default async function OverviewPage() {
   const health = plane.systemHealth();
   const provenance = plane.provenance();
   const baseAttention = plane.attention();
+  const aosAttentionRead = await readAosOwnerAttentionObservation(
+    readAosOwnerAttentionObservationPathFromEnvironment(),
+  );
   const attention = {
     ...baseAttention,
-    availability: provenance.liveOperationalData
-      ? ('AVAILABLE' as const)
-      : baseAttention.availability,
-    reason: provenance.liveOperationalData
-      ? 'Repository notices plus live operational attention derived from governed snapshot sections.'
-      : baseAttention.reason,
-    expectedSource: provenance.liveOperationalData
-      ? 'Governed control-plane sections observed in this request.'
-      : baseAttention.expectedSource,
-    items: operationalAttention(plane),
+    availability:
+      provenance.liveOperationalData || aosAttentionRead.status === 'AVAILABLE'
+        ? ('AVAILABLE' as const)
+        : baseAttention.availability,
+    reason:
+      provenance.liveOperationalData || aosAttentionRead.status === 'AVAILABLE'
+        ? 'Repository notices plus governed request-time and AOS shadow attention observations.'
+        : baseAttention.reason,
+    expectedSource:
+      provenance.liveOperationalData || aosAttentionRead.status === 'AVAILABLE'
+        ? 'Governed control-plane sources and the AOS shadow attention observation.'
+        : baseAttention.expectedSource,
+    items: operationalAttention(
+      plane,
+      aosAttentionRead.status === 'AVAILABLE' ? aosAttentionRead.observation : undefined,
+    ),
   };
   const bootstrap = operatorBootstrap();
 

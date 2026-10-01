@@ -1,0 +1,25 @@
+{
+  "name": "@qf-jarvis/aos-model-reasoning",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Provider-neutral governed model reasoning adapter for AOS evidence packets. Produces advisory recommendation candidates only.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/aos-intelligence": "workspace:*",
+    "@qf-jarvis/model-gateway": "workspace:*",
+    "@qf-jarvis/model-reply-adapter": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

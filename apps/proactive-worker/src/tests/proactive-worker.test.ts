@@ -62,6 +62,13 @@ describe('proactive worker boundary', () => {
       cyclesAttempted: 0,
       cyclesCompleted: 0,
       attentionCreated: 0,
+      aosCyclesCompleted: 0,
+      aosCasesObserved: 0,
+      aosRecommendationsCreated: 0,
+      aosAdjudicationHolds: 0,
+      aosCanonicalRecommendations: 0,
+      aosCanonicalProjectionFailures: 0,
+      aosModelCalls: 0,
       consecutiveFailures: 0,
       executionAuthority: 'NONE',
       businessEffect: false,
@@ -153,6 +160,89 @@ describe('proactive worker boundary', () => {
     expect(ambient.run).toHaveBeenCalledTimes(2);
     expect(fakes.sleep).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(result)).not.toContain('hostile detail');
+  });
+
+  it('runs the AOS v2 supervisor only after explicit SHADOW opt-in and a bounded source is provided', async () => {
+    ambient.run.mockReset();
+    ambient.run.mockResolvedValue({ attentionCreated: 0 });
+    const controller = new AbortController();
+    const fakes = dependencies({
+      onSleep: () => {
+        controller.abort();
+      },
+    });
+    const readAosSupervisorSnapshot = vi.fn(() =>
+      Promise.resolve({
+        canonicalEvents: [],
+        leadDeliveries: [],
+        clients: [],
+        vendors: [],
+        marketplaceSlices: [],
+      }),
+    );
+    const writeAosOwnerAttention = vi.fn(() => Promise.resolve());
+
+    const result = await runProactiveWorker(
+      {
+        mode: 'SHADOW',
+        cadenceMs: PROACTIVE_WORKER_BOUNDS.recommendedCadenceMs,
+        maxConsecutiveFailures: 3,
+        monitorInstanceIds: ['jao5.monitor.instance.health'],
+        aosV2ShadowEnabled: true,
+      },
+      {
+        ...fakes.deps,
+        readAosSupervisorSnapshot,
+        aosOwnerAttentionObservation: { write: writeAosOwnerAttention },
+      },
+      controller.signal,
+    );
+
+    expect(result).toMatchObject({
+      state: 'STOPPED',
+      cyclesCompleted: 1,
+      aosCyclesCompleted: 1,
+      aosCasesObserved: 0,
+      aosRecommendationsCreated: 0,
+      aosAdjudicationHolds: 0,
+      aosCanonicalRecommendations: 0,
+      aosCanonicalProjectionFailures: 0,
+      aosModelCalls: 0,
+      executionAuthority: 'NONE',
+      businessEffect: false,
+      productionMutation: false,
+    });
+    expect(writeAosOwnerAttention).toHaveBeenCalledTimes(1);
+    expect(writeAosOwnerAttention).toHaveBeenCalledWith(
+      expect.objectContaining({ protocol: 'qfj.aos.supervisor-cycle.v1' }),
+      new Date(900_000).toISOString(),
+    );
+    expect(readAosSupervisorSnapshot).toHaveBeenCalledTimes(1);
+    expect(readAosSupervisorSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cycleId: 'aos.proactive.cycle.1',
+        generatedAt: new Date(900_000).toISOString(),
+      }),
+      controller.signal,
+    );
+  });
+
+  it('refuses AOS v2 SHADOW opt-in when no authoritative source adapter is wired', async () => {
+    ambient.run.mockReset();
+    const fakes = dependencies();
+    await expect(
+      runProactiveWorker(
+        {
+          mode: 'SHADOW',
+          cadenceMs: PROACTIVE_WORKER_BOUNDS.recommendedCadenceMs,
+          maxConsecutiveFailures: 3,
+          monitorInstanceIds: ['jao5.monitor.instance.health'],
+          aosV2ShadowEnabled: true,
+        },
+        fakes.deps,
+      ),
+    ).rejects.toThrow('proactive-worker-aos-source-required');
+    expect(ambient.run).not.toHaveBeenCalled();
   });
 
   it('has no ACTIVE mode and refuses malformed or unsafe activation config', async () => {

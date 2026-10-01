@@ -74,6 +74,13 @@ const SMART_INTENTS: readonly SmartIntent[] = Object.freeze([
     keywords: ['jarvis', 'ask', 'why', 'attention', 'explain', 'intelligence'],
   },
   {
+    href: '/aos',
+    label: 'Open AOS Intelligence',
+    reason:
+      'Marketplace sentry, cases, lead delivery, client/vendor journeys and governed behaviour.',
+    keywords: ['aos', 'sentry', 'case', 'lead', 'vendor', 'client', 'behaviour', 'recovery'],
+  },
+  {
     href: '/memory',
     label: 'Inspect governed memory',
     reason: 'Long-term memory activation, retention and erasure posture.',

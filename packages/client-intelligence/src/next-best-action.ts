@@ -99,7 +99,11 @@ export function planClientNextBestAction(input: ClientNextBestActionInput): Clie
   const opportunity = [...input.opportunities].sort(
     (left, right) => right.score - left.score || left.serviceRef.localeCompare(right.serviceRef),
   )[0];
-  if (opportunity !== undefined) {
+  if (
+    opportunity !== undefined &&
+    input.allReleasedVendorsContacted &&
+    input.satisfactionPositive
+  ) {
     return action('SURFACE_ADDITIONAL_SERVICE', 'NURTURE_OPPORTUNITY_READY', false, {
       serviceRef: opportunity.serviceRef,
     });

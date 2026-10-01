@@ -17,6 +17,11 @@
     "typecheck:tests": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@qf-jarvis/aos-behaviour-control": "workspace:*",
+    "@qf-jarvis/aos-core-event-bridge": "workspace:*",
+    "@qf-jarvis/aos-governance-integration": "workspace:*",
+    "@qf-jarvis/aos-intelligence": "workspace:*",
+    "@qf-jarvis/aos-model-reasoning": "workspace:*",
     "@qf-jarvis/event-backbone": "workspace:*",
     "@qf-jarvis/model-gateway": "workspace:*",
     "@qf-jarvis/worker": "workspace:*"
