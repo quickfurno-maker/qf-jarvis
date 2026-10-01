@@ -206,6 +206,18 @@ describe('QuickFurno WhatsApp Client OS adapter', () => {
             serviceInterest: 'INTERIOR_DESIGN',
           },
         },
+        clientVendorJourney: {
+          version: 1,
+          requirementId: 'requirement.1',
+          requirementRevision: 7,
+          vendorsReleased: 3,
+          vendorNoContactCount: 0,
+          allReleasedVendorsContacted: true,
+          satisfactionState: 'SATISFIED',
+          serviceRecoveryNeeded: false,
+          reassignmentState: 'NONE',
+          followUpDue: false,
+        },
       }),
       { serviceBlueprintRegistry: registry },
     );

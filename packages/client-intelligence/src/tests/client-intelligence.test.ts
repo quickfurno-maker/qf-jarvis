@@ -242,6 +242,7 @@ const nbaInput = (over: Partial<ClientNextBestActionInput> = {}): ClientNextBest
   vendorNoContactCount: 0,
   allReleasedVendorsContacted: false,
   satisfactionKnown: false,
+  satisfactionPositive: false,
   followUpDue: false,
   opportunities: [],
   ...over,
@@ -317,9 +318,34 @@ describe('next best action', () => {
       registry: registry(),
       context: context({ propertyStageRef: 'layout-final' }),
     });
-    const result = planClientNextBestAction(nbaInput({ opportunities }));
+    const result = planClientNextBestAction(
+      nbaInput({
+        opportunities,
+        vendorsReleased: 3,
+        allReleasedVendorsContacted: true,
+        satisfactionKnown: true,
+        satisfactionPositive: true,
+      }),
+    );
     expect(result.action).toBe('SURFACE_ADDITIONAL_SERVICE');
     expect(result.serviceRef).toBe('painting');
+  });
+
+  it('does not proactively cross-sell before the client is positively satisfied', () => {
+    const opportunities = evaluateClientServiceOpportunities({
+      registry: registry(),
+      context: context({ propertyStageRef: 'layout-final' }),
+    });
+    const result = planClientNextBestAction(
+      nbaInput({
+        opportunities,
+        vendorsReleased: 3,
+        allReleasedVendorsContacted: true,
+        satisfactionKnown: true,
+        satisfactionPositive: false,
+      }),
+    );
+    expect(result.action).toBe('ANSWER_CLIENT');
   });
 
   it('answers the current client question before progressing the workflow', () => {
