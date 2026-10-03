@@ -367,6 +367,13 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     // E2E certification of the reviewed seam. Test-only: it may name WhatsApp while exercising
     // the already-authorized reader/specialist/reply/processor composition and gains no provider authority.
     'src/tests/quickfurno-whatsapp-riya-e2e.test.ts',
+    // Aarohi Phase 2's channel-neutral social continuation seam may name WhatsApp only as the
+    // prospect-selected continuation destination. These files own no Meta/WhatsApp send authority:
+    // Core still authorizes the job and the dedicated QuickFurno lane performs WhatsApp delivery.
+    'src/aarohi-phase2/http-json-social-provider.ts',
+    'src/aarohi-phase2/social-provider-port.ts',
+    'src/aarohi-phase2/worker.ts',
+    'src/tests/aarohi-phase2-social-reply.test.ts',
   ]);
   const QUICKFURNO_WHATSAPP_WORKFLOW_FILES: readonly string[] = Object.freeze([
     // The specialist seam reuses the existing bounded Mastra turn wrapper; it does not define a new workflow.

@@ -15,6 +15,7 @@
     "typecheck": "tsc --build tsconfig.build.json",
     "typecheck:tests": "tsc --noEmit -p tsconfig.json",
     "start:quickfurno-whatsapp-worker": "node ./dist/bin/run-quickfurno-whatsapp-production-worker.js",
+    "start:aarohi-phase2-worker": "node ./dist/bin/run-aarohi-phase2-worker.js",
     "openai:launch-smoke": "node ./dist/bin/run-openai-launch-smoke.js"
   },
   "dependencies": {

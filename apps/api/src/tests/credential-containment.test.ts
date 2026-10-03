@@ -126,6 +126,14 @@ const JF7_FILES: readonly string[] = Object.freeze([
 const isJf7File = (f: string, only: readonly string[] = JF7_FILES): boolean =>
   only.some((one) => normalise(f).endsWith(`/${one}`));
 
+const AAROHI_PHASE2_BIN = 'src/bin/run-aarohi-phase2-worker.ts';
+const AAROHI_PHASE2_CONFIG = 'src/aarohi-phase2/config.ts';
+const AAROHI_PHASE2_CORE_CLIENT = 'src/aarohi-phase2/core-client.ts';
+const AAROHI_PHASE2_DISCOVERY_HTTP = 'src/aarohi-phase2/http-json-provider.ts';
+const AAROHI_PHASE2_SOCIAL_HTTP = 'src/aarohi-phase2/http-json-social-provider.ts';
+const AAROHI_PHASE2_NETWORK = 'src/aarohi-phase2/network.ts';
+const isAarohiPhase2File = (f: string, one: string): boolean => normalise(f).endsWith(`/${one}`);
+
 /**
  * The files permitted to touch `process` at all, and the exact member each may touch.
  *
@@ -156,6 +164,16 @@ const PROCESS_ALLOWLIST: Readonly<Record<string, readonly string[]>> = Object.fr
   // JF-7 production worker process boundary. It reads only argv, writes fixed status lines, and owns
   // signal registration/removal plus the exit code. It never reads environment variables.
   [JF7_BIN]: [
+    'process.argv',
+    'process.stdout',
+    'process.stderr',
+    'process.once',
+    'process.removeListener',
+    'process.exitCode',
+  ],
+  // Aarohi Phase 2 has one reviewed process boundary. It reads only argv, writes fixed status
+  // lines, owns signal registration/removal and the exit code, and never reads process.env.
+  [AAROHI_PHASE2_BIN]: [
     'process.argv',
     'process.stdout',
     'process.stderr',
@@ -349,6 +367,22 @@ describe('(68) node:fs is confined to one designated adapter', () => {
         expect(code, file).toMatch(/import \{ mkdirSync, writeFileSync \} from 'node:fs'/);
         continue;
       }
+      if (isAarohiPhase2File(file, AAROHI_PHASE2_CONFIG)) {
+        expect(code, file).toMatch(/from 'node:fs'/);
+        for (const primitive of [
+          'lstatSync',
+          'openSync',
+          'fstatSync',
+          'readFileSync',
+          'closeSync',
+        ]) {
+          expect(code, file).toContain(primitive);
+        }
+        expect(code, file).not.toMatch(
+          /writeFile|appendFile|unlink|rm\(|rmdir|mkdir|rename|chmod|chown|copyFile|createWriteStream|truncate/,
+        );
+        continue;
+      }
       expect(code).not.toMatch(/from ['"]node:fs(\/promises)?['"]/);
     }
   });
@@ -444,6 +478,8 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       // remains forbidden in apps/api.
       if (isJf7File(file, [JF7_NETWORK])) {
         expect(code.match(/\bfetch\s*\(/g), file).toHaveLength(2);
+      } else if (isAarohiPhase2File(file, AAROHI_PHASE2_NETWORK)) {
+        expect(code.match(/\bfetch\s*\(/g), file).toHaveLength(1);
       } else {
         expect(code, file).not.toMatch(/\bfetch\s*\(/);
       }
@@ -650,6 +686,12 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       'src/quickfurno-whatsapp/parallel-turn-scheduler.ts': 1,
       // Offline OpenAI launch smoke owns one hard provider-call deadline and clears it in finally.
       [OPENAI_LAUNCH_SMOKE_CLI]: 1,
+      // Aarohi Phase 2: one abortable Core call, one discovery provider call, one social provider
+      // call, and one abortable worker idle delay. Every timer is one-shot and cleared exactly once.
+      [AAROHI_PHASE2_CORE_CLIENT]: 1,
+      [AAROHI_PHASE2_DISCOVERY_HTTP]: 1,
+      [AAROHI_PHASE2_SOCIAL_HTTP]: 1,
+      [AAROHI_PHASE2_BIN]: 1,
     });
     const timerFiles = productionFiles().filter((file) =>
       codeOnly(readFileSync(file, 'utf8')).includes('setTimeout'),
