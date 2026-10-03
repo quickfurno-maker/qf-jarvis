@@ -58,7 +58,9 @@ export function createAarohiSocialProviderRegistry(
       return map.get(channel);
     },
     polling() {
-      return Object.freeze([...map.values()].filter((provider) => provider.pollReplies !== undefined));
+      return Object.freeze(
+        [...map.values()].filter((provider) => provider.pollReplies !== undefined),
+      );
     },
   });
 }

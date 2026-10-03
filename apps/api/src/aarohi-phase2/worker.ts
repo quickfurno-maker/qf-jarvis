@@ -165,31 +165,35 @@ export function createAarohiPhase2Worker(config: AarohiPhase2WorkerConfig) {
       }
     },
     async runSocialInboxOnce(): Promise<AarohiPhase2CycleResult> {
-      const polling=config.socialProviders?.polling()??[];
-      if(polling.length===0) return Object.freeze({state:'idle' as const});
-      let replyCount=0;
-      try{
-        for(const provider of polling){
-          const replies=await provider.pollReplies!(25);
-          for(const reply of replies){
-            await config.core.call('SUBMIT_SOCIAL_REPLY',{
-              prospectId:reply.prospectId,
-              channel:reply.channel,
-              threadRef:reply.threadRef,
-              messageRef:reply.messageRef,
-              replyKind:reply.replyKind,
-              safeSummary:reply.safeSummary,
-              occurredAt:reply.occurredAt,
-              ...(reply.phoneE164?{phoneE164:reply.phoneE164}:{}),
+      const polling = config.socialProviders?.polling() ?? [];
+      if (polling.length === 0) return Object.freeze({ state: 'idle' as const });
+      let replyCount = 0;
+      try {
+        for (const provider of polling) {
+          const replies = await provider.pollReplies!(25);
+          for (const reply of replies) {
+            await config.core.call('SUBMIT_SOCIAL_REPLY', {
+              prospectId: reply.prospectId,
+              channel: reply.channel,
+              threadRef: reply.threadRef,
+              messageRef: reply.messageRef,
+              replyKind: reply.replyKind,
+              safeSummary: reply.safeSummary,
+              occurredAt: reply.occurredAt,
+              ...(reply.phoneE164 ? { phoneE164: reply.phoneE164 } : {}),
             });
-            replyCount+=1;
+            replyCount += 1;
           }
         }
-        return replyCount===0
-          ?Object.freeze({state:'idle' as const})
-          :Object.freeze({state:'social-ingested' as const,replyCount,providerCount:polling.length});
-      }catch(error){
-        return Object.freeze({state:'refused' as const,code:safeCode(error)});
+        return replyCount === 0
+          ? Object.freeze({ state: 'idle' as const })
+          : Object.freeze({
+              state: 'social-ingested' as const,
+              replyCount,
+              providerCount: polling.length,
+            });
+      } catch (error) {
+        return Object.freeze({ state: 'refused' as const, code: safeCode(error) });
       }
     },
     async runSocialOnce(): Promise<AarohiPhase2CycleResult> {
