@@ -132,18 +132,14 @@ describe('AVG-13 live omnichannel sales contract', () => {
   });
 
   it('refuses a plan timestamp before the interpretation', () => {
-    const result = evaluateAarohiOmnichannelSalesTurn(
-      input({ plannedAt: '2026-10-03T02:20:00Z' }),
-    );
+    const result = evaluateAarohiOmnichannelSalesTurn(input({ plannedAt: '2026-10-03T02:20:00Z' }));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.refusal).toBe('STALE_INTERPRETATION');
   });
 
   it('refuses every Core status that means Aarohi no longer owns acquisition', () => {
     for (const status of ['REGISTERED', 'ACTIVE', 'DO_NOT_CONTACT', 'UNKNOWN']) {
-      const result = evaluateAarohiOmnichannelSalesTurn(
-        input({ coreObservation: core(status) }),
-      );
+      const result = evaluateAarohiOmnichannelSalesTurn(input({ coreObservation: core(status) }));
       expect(result.ok, status).toBe(false);
       if (!result.ok) expect(result.refusal, status).toBe('CORE_GATE_REFUSED');
     }
