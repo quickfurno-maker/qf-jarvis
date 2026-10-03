@@ -864,6 +864,14 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // ADR-0162: privacy-bounded public-knowledge semantic cache primitives and deterministic
       // extractive context compression/retrieval planning. No subject/conversation cache exists.
       'semantic-context-engine',
+      // ADR-0171: the provider-neutral System-One policy and runtime plus the TypeSafe Jev adapter.
+      // These packages are intentionally disconnected from every application in this foundation
+      // slice. They classify/score bounded injected state only, carry immutable zero-authority
+      // results, fall back to the legacy path, and the adapter owns the one pinned TypeSafe HTTPS
+      // boundary. Recording them here preserves the exact-set containment lock.
+      'system-one-decision-policy',
+      'system-one-decision-runtime',
+      'typesafe-jev-adapter',
       // ADR-0159: pure content-free wire contract for read-only worker observations.
       'worker-observation-contract',
     ]);
