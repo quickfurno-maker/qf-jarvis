@@ -35,6 +35,7 @@ on:
       - 'apps/api/src/jf6-private-process/create-core-data-tools.ts'
       - 'apps/api/src/jf6-private-process/create-riya-service-boundary.ts'
       - 'apps/api/src/knowledge-freshness/**'
+      - 'apps/api/src/knowledge-production/**'
       - 'apps/api/src/runtime/durable-jarvis-runtime.ts'
       - 'apps/worker/src/jao/**'
       - 'apps/api/src/composition/jf5b-**'
@@ -72,6 +73,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Format preview for knowledge activation files
+        run: |
+          pnpm exec prettier --write \
+            apps/api/src/knowledge-production/quickfurno-production-corpus.ts \
+            apps/api/src/tests/credential-containment.test.ts \
+            apps/api/src/tests/quickfurno-production-knowledge.test.ts \
+            apps/api/src/tests/shadow-containment.test.ts
+          git diff --no-ext-diff --unified=120 -- \
+            apps/api/src/knowledge-production/quickfurno-production-corpus.ts \
+            apps/api/src/tests/credential-containment.test.ts \
+            apps/api/src/tests/quickfurno-production-knowledge.test.ts \
+            apps/api/src/tests/shadow-containment.test.ts
+          git checkout -- \
+            apps/api/src/knowledge-production/quickfurno-production-corpus.ts \
+            apps/api/src/tests/credential-containment.test.ts \
+            apps/api/src/tests/quickfurno-production-knowledge.test.ts \
+            apps/api/src/tests/shadow-containment.test.ts
       - name: Build workspace packages
         run: pnpm build
 
@@ -96,6 +114,9 @@ jobs:
           apps/api/src/tests/governed-memory-runtime.test.ts
           apps/api/src/tests/knowledge-freshness-coordinator.test.ts
           apps/api/src/tests/knowledge-freshness-manifest-source.test.ts
+          apps/api/src/tests/quickfurno-production-knowledge.test.ts
+          apps/api/src/tests/quickfurno-knowledge-candidate-build.test.ts
+          apps/api/src/tests/quickfurno-knowledge-activation.test.ts
           apps/worker/src/tests/jao-action-registry-binding.test.ts
           apps/worker/src/tests/jao-maturity-gate.test.ts
           packages/jarvis-runtime/src/tests/hybrid-grounding.test.ts
