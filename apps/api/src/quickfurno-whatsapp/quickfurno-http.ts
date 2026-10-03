@@ -1650,7 +1650,11 @@ export function createQuickFurnoAarohiBehaviourInputReader(
       }
       const requestId = config.requestId();
       const issuedAt = config.clock();
-      if (!UUID.test(requestId) || !INSTANT.test(issuedAt) || !Number.isFinite(Date.parse(issuedAt))) {
+      if (
+        !UUID.test(requestId) ||
+        !INSTANT.test(issuedAt) ||
+        !Number.isFinite(Date.parse(issuedAt))
+      ) {
         throw new QuickFurnoWhatsAppHttpError('invalid-input');
       }
       const body = JSON.stringify({
@@ -1679,7 +1683,10 @@ export function createQuickFurnoAarohiBehaviourInputReader(
       if (response.status !== 200) throw new QuickFurnoWhatsAppHttpError('request-failed');
 
       const text = await response.text();
-      if (Buffer.byteLength(text, 'utf8') < 2 || Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES) {
+      if (
+        Buffer.byteLength(text, 'utf8') < 2 ||
+        Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES
+      ) {
         throw new QuickFurnoWhatsAppHttpError('response-invalid');
       }
       let decoded: unknown;
@@ -1690,7 +1697,7 @@ export function createQuickFurnoAarohiBehaviourInputReader(
       }
       if (
         !isRecord(decoded) ||
-        !onlyKeys(decoded, ['protocol','version','requestId','status','input']) ||
+        !onlyKeys(decoded, ['protocol', 'version', 'requestId', 'status', 'input']) ||
         decoded['protocol'] !== QFJ_AAROHI_RUNTIME_PROTOCOL ||
         decoded['version'] !== 1 ||
         decoded['requestId'] !== requestId ||
@@ -1704,7 +1711,6 @@ export function createQuickFurnoAarohiBehaviourInputReader(
     },
   });
 }
-
 
 export interface QuickFurnoAarohiProjectionWriter {
   projectTurn(input: {
@@ -1725,11 +1731,17 @@ export function createQuickFurnoAarohiProjectionWriter(
         material.subjectType !== 'prospect' ||
         typeof material.subjectRef !== 'string' ||
         !UUID.test(material.subjectRef)
-      ) return;
+      ) {
+        return;
+      }
 
       const requestId = config.requestId();
       const issuedAt = config.clock();
-      if (!UUID.test(requestId) || !INSTANT.test(issuedAt) || !Number.isFinite(Date.parse(issuedAt))) {
+      if (
+        !UUID.test(requestId) ||
+        !INSTANT.test(issuedAt) ||
+        !Number.isFinite(Date.parse(issuedAt))
+      ) {
         throw new QuickFurnoWhatsAppHttpError('invalid-input');
       }
       const operationBase = digestHex(
@@ -1752,7 +1764,8 @@ export function createQuickFurnoAarohiProjectionWriter(
               channel: 'WHATSAPP',
               externalThreadReference: material.conversationId,
               orchestrationReference: material.conversationId + ':' + String(material.revision),
-              nextAction: input.outcome === 'PROPOSAL_CREATED' ? 'AWAIT_CORE_SEND' : 'AWAIT_NEXT_SIGNAL',
+              nextAction:
+                input.outcome === 'PROPOSAL_CREATED' ? 'AWAIT_CORE_SEND' : 'AWAIT_NEXT_SIGNAL',
               summary: 'Governed Aarohi WhatsApp acquisition turn processed.',
             },
           },
@@ -1786,11 +1799,18 @@ export function createQuickFurnoAarohiProjectionWriter(
       });
       if (response.status !== 200) throw new QuickFurnoWhatsAppHttpError('request-failed');
       const text = await response.text();
-      if (Buffer.byteLength(text, 'utf8') < 2 || Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES) {
+      if (
+        Buffer.byteLength(text, 'utf8') < 2 ||
+        Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES
+      ) {
         throw new QuickFurnoWhatsAppHttpError('response-invalid');
       }
       let decoded: unknown;
-      try { decoded = JSON.parse(text); } catch { throw new QuickFurnoWhatsAppHttpError('response-invalid'); }
+      try {
+        decoded = JSON.parse(text);
+      } catch {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
       if (
         !isRecord(decoded) ||
         decoded['protocol'] !== QFJ_AAROHI_PROJECTION_PROTOCOL ||
