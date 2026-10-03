@@ -79,7 +79,7 @@ export function createHttpJsonAarohiSocialProvider(
           }
           return Object.freeze({providerMessageRef:ref.trim()});
         }
-        const safe=typeof value?.['code']==='string'?value.code:'HTTP_'+String(response.status);
+        const safe=typeof value?.['code']==='string'?value['code']:'HTTP_'+String(response.status);
         throw new AarohiSocialProviderError(
           response.status>=400&&response.status<500?'DEFINITIVE_FAILURE':'UNCERTAIN',
           safe,
