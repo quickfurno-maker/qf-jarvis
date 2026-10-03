@@ -32,7 +32,7 @@ const OPAQUE_REF = z
   .min(1)
   .max(128)
   .regex(/^[A-Za-z0-9._:-]+$/u);
-const UTC = z.string().datetime({ offset: false });
+const UTC = z.iso.datetime({ offset: false });
 
 export const aarohiOmnichannelTurnSchema = z
   .object({
