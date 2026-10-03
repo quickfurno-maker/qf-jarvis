@@ -1,5 +1,6 @@
 export type AarohiSocialChannel = 'INSTAGRAM' | 'FACEBOOK' | 'X';
 export type AarohiSocialMessageKind = 'system:request-whatsapp-continuation';
+export type AarohiSocialReplyKind = 'INTERESTED' | 'WHATSAPP_SHARED' | 'STOP' | 'OTHER';
 
 export interface AarohiSocialDispatchWork {
   readonly jobId: string;
@@ -14,10 +15,21 @@ export interface AarohiSocialDispatchWork {
 export interface AarohiSocialDispatchResult {
   readonly providerMessageRef: string;
 }
+export interface AarohiSocialReplySignal {
+  readonly prospectId: string;
+  readonly channel: AarohiSocialChannel;
+  readonly threadRef: string;
+  readonly messageRef: string;
+  readonly replyKind: AarohiSocialReplyKind;
+  readonly safeSummary: string;
+  readonly occurredAt: string;
+  readonly phoneE164?: string;
+}
 export interface AarohiSocialContinuationProvider {
   readonly key: string;
   readonly channel: AarohiSocialChannel;
   sendContinuation(work: AarohiSocialDispatchWork): Promise<AarohiSocialDispatchResult>;
+  pollReplies?(limit: number): Promise<readonly AarohiSocialReplySignal[]>;
 }
 export class AarohiSocialProviderError extends Error {
   readonly certainty: 'DEFINITIVE_FAILURE' | 'UNCERTAIN';
@@ -31,6 +43,7 @@ export class AarohiSocialProviderError extends Error {
 }
 export interface AarohiSocialProviderRegistry {
   resolve(channel: AarohiSocialChannel): AarohiSocialContinuationProvider | undefined;
+  polling(): readonly AarohiSocialContinuationProvider[];
 }
 export function createAarohiSocialProviderRegistry(
   providers: readonly AarohiSocialContinuationProvider[],
@@ -43,6 +56,9 @@ export function createAarohiSocialProviderRegistry(
   return Object.freeze({
     resolve(channel: AarohiSocialChannel) {
       return map.get(channel);
+    },
+    polling() {
+      return Object.freeze([...map.values()].filter((provider) => provider.pollReplies !== undefined));
     },
   });
 }
