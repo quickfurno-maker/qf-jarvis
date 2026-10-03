@@ -43,6 +43,7 @@ COPY packages/agent-flow-registry/package.json packages/agent-flow-registry/
 COPY packages/agent-flow-trace-contract/package.json packages/agent-flow-trace-contract/
 COPY packages/agent-runtime/package.json packages/agent-runtime/
 COPY packages/anisha-prompts/package.json packages/anisha-prompts/
+COPY packages/aos-intelligence/package.json packages/aos-intelligence/
 COPY packages/client-intelligence/package.json packages/client-intelligence/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/control-plane-read-contract/package.json packages/control-plane-read-contract/
@@ -85,6 +86,7 @@ COPY packages/agent-flow-registry packages/agent-flow-registry
 COPY packages/agent-flow-trace-contract packages/agent-flow-trace-contract
 COPY packages/agent-runtime packages/agent-runtime
 COPY packages/anisha-prompts packages/anisha-prompts
+COPY packages/aos-intelligence packages/aos-intelligence
 COPY packages/client-intelligence packages/client-intelligence
 COPY packages/contracts packages/contracts
 COPY packages/control-plane-read-contract packages/control-plane-read-contract

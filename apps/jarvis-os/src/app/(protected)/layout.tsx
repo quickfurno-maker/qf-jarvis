@@ -4,6 +4,8 @@ import { AppShell } from '@/components/shell/AppShell';
 import { controlPlane } from '@/lib/control-plane';
 import { operationalAttention } from '@/lib/control-plane/operational-attention';
 import { requireOperatorSession } from '@/server/auth/dal';
+import { readAosOwnerAttentionObservationPathFromEnvironment } from '@/server/auth/config/loader';
+import { readAosOwnerAttentionObservation } from '@/server/control-plane/sources/aos-owner-attention-source';
 
 /**
  * The protected layout (JOS-01C, ADR-0087).
@@ -52,7 +54,13 @@ export default async function ProtectedLayout({
   }
 
   const plane = await controlPlane();
-  const attention = operationalAttention(plane);
+  const aosAttentionRead = await readAosOwnerAttentionObservation(
+    readAosOwnerAttentionObservationPathFromEnvironment(),
+  );
+  const attention = operationalAttention(
+    plane,
+    aosAttentionRead.status === 'AVAILABLE' ? aosAttentionRead.observation : undefined,
+  );
 
   return (
     <AppShell operator={session.view} csrfToken={session.csrfToken} attention={attention}>

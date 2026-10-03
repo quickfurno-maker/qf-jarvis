@@ -1,0 +1,24 @@
+{
+  "name": "@qf-jarvis/aos-recommendation-adapter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Maps evidence-bound AOS suggestions into the existing inert RecommendationV1 runtime; creates no approval or execution authority.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/aos-intelligence": "workspace:*",
+    "@qf-jarvis/contracts": "workspace:*",
+    "@qf-jarvis/recommendation-runtime": "workspace:*"
+  }
+}

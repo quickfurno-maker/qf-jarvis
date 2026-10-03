@@ -69,6 +69,7 @@ function regressionPlannerInput(input: unknown): ClientNextBestActionInput {
     vendorNoContactCount: vendorNoContact ? 1 : 0,
     allReleasedVendorsContacted: contactedVendorCount > 0,
     satisfactionKnown: false,
+    satisfactionPositive: false,
     followUpDue: false,
     opportunities: Object.freeze([]),
   });

@@ -80,8 +80,18 @@ function baseInput() {
 }
 
 describe('CI-12 deterministic context builder', () => {
-  it('composes behaviour, opportunity and NBA into one bounded snapshot', () => {
-    const snapshot = buildClientIntelligenceContextV1(baseInput());
+  it('composes behaviour, opportunity and NBA after verified handoff satisfaction', () => {
+    const input = baseInput();
+    const snapshot = buildClientIntelligenceContextV1({
+      ...input,
+      journey: {
+        ...input.journey,
+        satisfactionState: 'SATISFIED',
+        vendorsReleased: 3,
+        vendorNoContactCount: 0,
+        allReleasedVendorsContacted: true,
+      },
+    });
 
     expect(snapshot.behaviour).toStrictEqual([
       { signalType: 'ENGAGEMENT', value: 'HIGH', confidence: 0.9 },
