@@ -1,5 +1,6 @@
 import { createHash, createPrivateKey, sign, type KeyObject } from 'node:crypto';
 import { parseCoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
+import type { AarohiAcquisitionBehaviourInputPort } from '@qf-jarvis/jarvis-runtime';
 import {
   QFJ_CLIENT_MATCH_REQUEST_PATH,
   QFJ_CLIENT_MATCH_REQUEST_PROTOCOL,
@@ -49,6 +50,10 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,239}$/u;
 const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u;
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_RESPONSE_BYTES = 12_288;
+
+const QFJ_AAROHI_RUNTIME_PATH = '/api/internal/jarvis/aarohi-runtime-context';
+const QFJ_AAROHI_RUNTIME_PROTOCOL = 'qfj.aarohi.runtime-context';
+const QFJ_AAROHI_RUNTIME_SIGNING_DOMAIN = 'qfj.aarohi.runtime-context.http.sig.v1';
 
 export type QuickFurnoWhatsAppHttpErrorCode =
   'invalid-config' | 'invalid-input' | 'request-failed' | 'response-invalid' | 'stale-revision';
@@ -1585,6 +1590,114 @@ export function createQuickFurnoWhatsAppConversationContextReader(
         throw new QuickFurnoWhatsAppHttpError('response-invalid');
       }
       return context;
+    },
+  });
+}
+
+
+function parseAarohiRuntimeInput(value: unknown) {
+  if (!isRecord(value)) return null;
+  if (
+    !onlyKeys(value, [
+      'mode',
+      'planRef',
+      'turn',
+      'interpretation',
+      'coreObservation',
+      'plannedAt',
+      'promptRef',
+    ]) ||
+    value['mode'] !== 'OMNICHANNEL_LIVE_V1' ||
+    typeof value['planRef'] !== 'string' ||
+    !ID.test(value['planRef']) ||
+    typeof value['promptRef'] !== 'string' ||
+    !ID.test(value['promptRef']) ||
+    typeof value['plannedAt'] !== 'string' ||
+    !INSTANT.test(value['plannedAt']) ||
+    !isRecord(value['turn']) ||
+    !isRecord(value['interpretation']) ||
+    !isRecord(value['coreObservation'])
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    mode: 'OMNICHANNEL_LIVE_V1' as const,
+    planRef: value['planRef'],
+    turn: Object.freeze({ ...value['turn'] }),
+    interpretation: Object.freeze({ ...value['interpretation'] }),
+    coreObservation: Object.freeze({ ...value['coreObservation'] }),
+    plannedAt: value['plannedAt'],
+    promptRef: value['promptRef'],
+  });
+}
+
+export function createQuickFurnoAarohiBehaviourInputReader(
+  config: QuickFurnoWhatsAppHttpConfig,
+): AarohiAcquisitionBehaviourInputPort {
+  const { key, timeoutMs } = parsePrivateKey(config);
+  return Object.freeze({
+    async read(input) {
+      if (
+        input.tenantId !== 'quickfurno' ||
+        !UUID.test(input.conversationId) ||
+        !Number.isSafeInteger(input.revision) ||
+        input.revision < 0
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
+      const requestId = config.requestId();
+      const issuedAt = config.clock();
+      if (!UUID.test(requestId) || !INSTANT.test(issuedAt) || !Number.isFinite(Date.parse(issuedAt))) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
+      const body = JSON.stringify({
+        protocol: QFJ_AAROHI_RUNTIME_PROTOCOL,
+        version: 1,
+        caller: CALLER,
+        audience: AUDIENCE,
+        requestId,
+        issuedAt,
+        tenantId: 'quickfurno',
+        conversationId: input.conversationId,
+        revision: input.revision,
+      });
+      const response = await signedPost({
+        config,
+        key,
+        timeoutMs,
+        path: QFJ_AAROHI_RUNTIME_PATH,
+        domain: QFJ_AAROHI_RUNTIME_SIGNING_DOMAIN,
+        requestId,
+        issuedAt,
+        body,
+      });
+      if (response.status === 404) return undefined;
+      if (response.status === 409) throw new QuickFurnoWhatsAppHttpError('stale-revision');
+      if (response.status !== 200) throw new QuickFurnoWhatsAppHttpError('request-failed');
+
+      const text = await response.text();
+      if (Buffer.byteLength(text, 'utf8') < 2 || Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES) {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      let decoded: unknown;
+      try {
+        decoded = JSON.parse(text);
+      } catch {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      if (
+        !isRecord(decoded) ||
+        !onlyKeys(decoded, ['protocol','version','requestId','status','input']) ||
+        decoded['protocol'] !== QFJ_AAROHI_RUNTIME_PROTOCOL ||
+        decoded['version'] !== 1 ||
+        decoded['requestId'] !== requestId ||
+        decoded['status'] !== 'ready'
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      const parsed = parseAarohiRuntimeInput(decoded['input']);
+      if (parsed === null) throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      return parsed;
     },
   });
 }
