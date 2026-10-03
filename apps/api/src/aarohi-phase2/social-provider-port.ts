@@ -40,5 +40,5 @@ export function createAarohiSocialProviderRegistry(
     if(map.has(provider.channel)) throw new Error('aarohi-social-provider-duplicate');
     map.set(provider.channel,provider);
   }
-  return Object.freeze({resolve(channel){return map.get(channel);}});
+  return Object.freeze({resolve(channel:AarohiSocialChannel){return map.get(channel);}});
 }
