@@ -10,6 +10,7 @@ import type { QuickFurnoWhatsAppWorkerMaterial } from './contracts.js';
 import type {
   QuickFurnoClientMatchRequestWriter,
   QuickFurnoClientVendorFeedbackWriter,
+  QuickFurnoAarohiProjectionWriter,
   QuickFurnoWhatsAppConversationContextReader,
   QuickFurnoWhatsAppMaterialReader,
   QuickFurnoWhatsAppReplyWriter,
