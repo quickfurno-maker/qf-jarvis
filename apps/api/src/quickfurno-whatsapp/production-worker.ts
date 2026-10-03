@@ -61,6 +61,7 @@ import {
   createQuickFurnoClientMatchRequestWriter,
   createQuickFurnoClientVendorFeedbackWriter,
   createQuickFurnoAarohiBehaviourInputReader,
+  createQuickFurnoAarohiProjectionWriter,
   createQuickFurnoWhatsAppAuthorityReader,
   createQuickFurnoWhatsAppConversationContextReader,
   createQuickFurnoWhatsAppMaterialReader,
@@ -589,6 +590,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       specialistRuntime,
       clientVendorFeedbackWriter: createQuickFurnoClientVendorFeedbackWriter(httpConfig),
       clientMatchRequestWriter: createQuickFurnoClientMatchRequestWriter(httpConfig),
+      aarohiProjectionWriter: createQuickFurnoAarohiProjectionWriter(httpConfig),
       replyWriter: createQuickFurnoWhatsAppReplyWriter(httpConfig),
       ...(traceObservation === undefined ? {} : { traceSink: traceObservation }),
     });
