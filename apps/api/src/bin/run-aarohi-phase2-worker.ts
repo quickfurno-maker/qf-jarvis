@@ -5,7 +5,9 @@ import { isAbsolute } from 'node:path';
 import { loadAarohiPhase2WorkerConfig, readSecretFile } from '../aarohi-phase2/config.js';
 import { createAarohiPhase2CoreClient } from '../aarohi-phase2/core-client.js';
 import { createHttpJsonAarohiDiscoveryProvider } from '../aarohi-phase2/http-json-provider.js';
+import { createHttpJsonAarohiSocialProvider } from '../aarohi-phase2/http-json-social-provider.js';
 import { createAarohiDiscoveryProviderRegistry } from '../aarohi-phase2/provider-port.js';
+import { createAarohiSocialProviderRegistry } from '../aarohi-phase2/social-provider-port.js';
 import { createAarohiPhase2Worker } from '../aarohi-phase2/worker.js';
 
 function configPath(argv:readonly string[]):string{
@@ -36,16 +38,30 @@ async function main():Promise<void>{
       timeoutMs:file.core.timeoutMs,
       httpPost:async(url,init)=>fetch(url,init),
     });
+    const providerSecrets=new Map(file.providers.map(provider=>[
+      provider.key,readSecretFile(provider.bearerTokenFile,4096),
+    ] as const));
     const providers=createAarohiDiscoveryProviderRegistry(file.providers.map(provider=>
       createHttpJsonAarohiDiscoveryProvider({
         key:provider.key,
         channel:provider.channel,
         endpoint:provider.endpoint,
-        bearerToken:readSecretFile(provider.bearerTokenFile,4096),
+        bearerToken:providerSecrets.get(provider.key)!,
         allowedHosts:provider.allowedHosts,
       })
     ));
-    const worker=createAarohiPhase2Worker({workerRef:file.workerRef,core,providers});
+    const socialProviders=createAarohiSocialProviderRegistry(file.providers.flatMap(provider=>
+      provider.socialContinuation&&['INSTAGRAM','FACEBOOK','X'].includes(provider.channel)
+        ?[createHttpJsonAarohiSocialProvider({
+            key:provider.key,
+            channel:provider.channel as 'INSTAGRAM'|'FACEBOOK'|'X',
+            endpoint:provider.endpoint,
+            bearerToken:providerSecrets.get(provider.key)!,
+            allowedHosts:provider.allowedHosts,
+          })]
+        :[]
+    ));
+    const worker=createAarohiPhase2Worker({workerRef:file.workerRef,core,providers,socialProviders});
     process.stdout.write(
       'qfj-aarohi-phase2-worker READY revision='+file.revision+
       ' providers='+String(file.providers.length)+'\n',
@@ -56,15 +72,20 @@ async function main():Promise<void>{
     process.once('SIGINT',stop);
     try{
       while(!controller.signal.aborted){
-        const result=await worker.runOnce();
-        if(result.state!=='idle'){
-          process.stdout.write(
-            'qfj-aarohi-phase2-worker cycle='+result.state+
-            ('runId' in result?' run='+result.runId:'')+
-            ('candidateCount' in result?' candidates='+String(result.candidateCount):'')+'\n',
-          );
+        const discovery=await worker.runOnce();
+        const social=await worker.runSocialOnce();
+        for(const result of [discovery,social]){
+          if(result.state!=='idle'){
+            process.stdout.write(
+              'qfj-aarohi-phase2-worker cycle='+result.state+
+              ('runId' in result&&result.runId?' run='+result.runId:'')+
+              ('jobId' in result&&result.jobId?' job='+result.jobId:'')+
+              ('candidateCount' in result?' candidates='+String(result.candidateCount):'')+'\n',
+            );
+          }
         }
-        if(!controller.signal.aborted) await sleep(result.state==='idle'?file.pollMs:50,controller.signal);
+        const idle=discovery.state==='idle'&&social.state==='idle';
+        if(!controller.signal.aborted) await sleep(idle?file.pollMs:50,controller.signal);
       }
     }finally{
       process.removeListener('SIGTERM',stop);
