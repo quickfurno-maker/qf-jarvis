@@ -78,28 +78,28 @@ export function createHttpJsonAarohiDiscoveryProvider(
         let decoded:unknown;
         try{decoded=JSON.parse(raw);}catch{throw new Error('aarohi-provider-response-invalid');}
         const root=safeRecord(decoded);
-        if(root.version!==1||!Array.isArray(root.candidates)||root.candidates.length>maxCandidates){
+        if(root['version']!==1||!Array.isArray(root['candidates'])||root['candidates'].length>maxCandidates){
           throw new Error('aarohi-provider-response-invalid');
         }
-        return Object.freeze(root.candidates.map((candidate)=>{
+        return Object.freeze(root['candidates'].map((candidate)=>{
           const one=safeRecord(candidate);
-          const metadata=safeRecord(one.metadata??{});
+          const metadata=safeRecord(one['metadata']??{});
           const normalized:AarohiNormalizedDiscoveryCandidate={
             sourceType:work.channel,
-            externalReference:String(one.externalReference??''),
-            businessName:String(one.businessName??''),
-            ...(optionalString(one.profileUrl,500)?{profileUrl:optionalString(one.profileUrl,500)!}:{}),
-            ...(optionalString(one.cityHint,120)?{cityHint:optionalString(one.cityHint,120)!}:{}),
-            ...(optionalString(one.categoryHint,160)?{categoryHint:optionalString(one.categoryHint,160)!}:{}),
-            ...(optionalString(one.website,500)?{website:optionalString(one.website,500)!}:{}),
-            ...(optionalString(one.phoneE164,20)?{phoneE164:optionalString(one.phoneE164,20)!}:{}),
-            ...(optionalString(one.email,254)?{email:optionalString(one.email,254)!}:{}),
-            ...(typeof one.confidence==='number'?{confidence:one.confidence}:{}),
+            externalReference:String(one['externalReference']??''),
+            businessName:String(one['businessName']??''),
+            ...(optionalString(one['profileUrl'],500)?{profileUrl:optionalString(one['profileUrl'],500)!}:{}),
+            ...(optionalString(one['cityHint'],120)?{cityHint:optionalString(one['cityHint'],120)!}:{}),
+            ...(optionalString(one['categoryHint'],160)?{categoryHint:optionalString(one['categoryHint'],160)!}:{}),
+            ...(optionalString(one['website'],500)?{website:optionalString(one['website'],500)!}:{}),
+            ...(optionalString(one['phoneE164'],20)?{phoneE164:optionalString(one['phoneE164'],20)!}:{}),
+            ...(optionalString(one['email'],254)?{email:optionalString(one['email'],254)!}:{}),
+            ...(typeof one['confidence']==='number'?{confidence:one['confidence']}:{}),
             metadata:Object.fromEntries(Object.entries(metadata).flatMap(([key,value])=>
               typeof value==='string'||typeof value==='number'||typeof value==='boolean'||value===null
                 ? [[key,value] as const]:[]
             )),
-            ...(optionalString(one.observedAt,40)?{observedAt:optionalString(one.observedAt,40)!}:{}),
+            ...(optionalString(one['observedAt'],40)?{observedAt:optionalString(one['observedAt'],40)!}:{}),
           };
           return validateNormalizedCandidate(normalized);
         }));
