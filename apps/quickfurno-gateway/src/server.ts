@@ -22,6 +22,8 @@ import {
 } from './whatsapp-turn-protocol.js';
 
 const MAX_BODY_BYTES = 8_192;
+const MAX_PROXY_RESPONSE_BYTES = 16_384;
+const PRIVATE_RIYA_PATH = '/internal/v1/riya/web-turn';
 const JSON_TYPE = 'application/json; charset=utf-8';
 
 function writeJson(
@@ -77,6 +79,71 @@ function contentTypeAllowed(request: IncomingMessage): boolean {
   return value !== null && value.toLowerCase().split(';', 1)[0]?.trim() === 'application/json';
 }
 
+async function proxyPrivateRiya(
+  config: GatewayConfig,
+  request: IncomingMessage,
+  response: ServerResponse,
+  rawBody: Uint8Array,
+): Promise<void> {
+  if (config.privateRiyaUpstreamUrl === undefined) {
+    writeJson(response, 503, { error: 'service_unavailable' });
+    return;
+  }
+  const keyId = singleHeader(request, KEY_ID_HEADER);
+  const signature = singleHeader(request, SIGNATURE_HEADER);
+  if (keyId === null || signature === null) {
+    writeJson(response, 401, { error: 'authentication_failed' });
+    return;
+  }
+
+  const upstreamUrl = new URL(PRIVATE_RIYA_PATH, config.privateRiyaUpstreamUrl);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 9_000);
+  try {
+    const upstream = await fetch(upstreamUrl, {
+      method: 'POST',
+      redirect: 'error',
+      signal: controller.signal,
+      headers: {
+        'content-type': 'application/json',
+        [KEY_ID_HEADER]: keyId,
+        [SIGNATURE_HEADER]: signature,
+      },
+      body: Buffer.from(rawBody),
+    });
+    const contentType = upstream.headers.get('content-type');
+    if (
+      contentType === null ||
+      contentType.toLowerCase().split(';', 1)[0]?.trim() !== 'application/json'
+    ) {
+      writeJson(response, 503, { error: 'service_unavailable' });
+      return;
+    }
+    const body = Buffer.from(await upstream.arrayBuffer());
+    if (body.length > MAX_PROXY_RESPONSE_BYTES) {
+      writeJson(response, 503, { error: 'service_unavailable' });
+      return;
+    }
+    const allowedStatuses = new Set([200, 400, 401, 404, 405, 409, 413, 415, 429, 503]);
+    if (!allowedStatuses.has(upstream.status)) {
+      writeJson(response, 503, { error: 'service_unavailable' });
+      return;
+    }
+    response.writeHead(upstream.status, {
+      'content-type': JSON_TYPE,
+      'content-length': body.length,
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'no-referrer',
+    });
+    response.end(body);
+  } catch {
+    writeJson(response, 503, { error: 'service_unavailable' });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export interface GatewayServerDependencies {
   readonly config: GatewayConfig;
   readonly replayGuard?: ReplayGuard;
@@ -101,6 +168,24 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
 
         if (request.method === 'GET' && url.pathname === '/healthz') {
           writeJson(response, 200, { status: 'ok', service: 'qf-jarvis-gateway', version: 1 });
+          return;
+        }
+
+        if (url.pathname === PRIVATE_RIYA_PATH) {
+          if (request.method !== 'POST') {
+            writeJson(response, 405, { error: 'method_not_allowed' });
+            return;
+          }
+          if (!contentTypeAllowed(request)) {
+            writeJson(response, 415, { error: 'invalid_request' });
+            return;
+          }
+          const rawBody = await readBoundedBody(request);
+          if (rawBody === null) {
+            writeJson(response, 413, { error: 'invalid_request' });
+            return;
+          }
+          await proxyPrivateRiya(dependencies.config, request, response, rawBody);
           return;
         }
 
