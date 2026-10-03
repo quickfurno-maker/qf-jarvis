@@ -98,9 +98,10 @@ const OUTCOME_BY_STRATEGY: Readonly<
 /**
  * Build the Aarohi behaviour port.
  *
- * Returns `undefined` from `decide` — "use the legacy default" — for any turn that is not a `PROSPECT`
- * turn assigned to `AAROHI`, and for any turn the input port has nothing to say about. Aarohi is not
- * consulted about client or vendor work, and the absence of an opinion is not a refusal.
+ * Returns `undefined` from `decide` — "use the legacy default" — only for a turn that is not a
+ * `PROSPECT` turn assigned to `AAROHI`. Once this adapter is configured for the exact Aarohi pair,
+ * absence of current Core acquisition material is a refusal: falling back to the generic path could
+ * answer a prospect after Core has registered, suppressed or otherwise invalidated the acquisition.
  */
 export function aarohiBehaviourPort(
   input: AarohiAcquisitionBehaviourInputPort,
@@ -125,7 +126,7 @@ export function aarohiBehaviourPort(
         revision: request.revision,
       });
       if (supplied === undefined) {
-        return undefined;
+        throw new Error('aarohi-input-unavailable');
       }
       for (const reference of [supplied.planRef, supplied.promptRef]) {
         if (typeof reference !== 'string' || !OPAQUE_REFERENCE.test(reference)) {
