@@ -65,6 +65,7 @@ export interface QuickFurnoWhatsAppTurnProcessorConfig {
   readonly specialistRuntime: QuickFurnoWhatsAppSpecialistRuntime;
   readonly clientVendorFeedbackWriter?: QuickFurnoClientVendorFeedbackWriter;
   readonly clientMatchRequestWriter?: QuickFurnoClientMatchRequestWriter;
+  readonly aarohiProjectionWriter?: QuickFurnoAarohiProjectionWriter;
   readonly replyWriter: QuickFurnoWhatsAppReplyWriter;
   /** Optional content-free observer. It grants no action authority and must never affect a turn. */
   readonly traceSink?: AgentFlowTraceSink;
@@ -447,8 +448,27 @@ export function createQuickFurnoWhatsAppTurnProcessor(
       return finish('failed-indeterminate');
     }
     if (proposal === null) {
+      if (
+        config.aarohiProjectionWriter !== undefined &&
+        !('purpose' in material) &&
+        material.assignedActor === 'AAROHI'
+      ) {
+        await config.aarohiProjectionWriter
+          .projectTurn({ material, outcome: 'NO_REPLY' })
+          .catch(() => undefined);
+      }
       await completeTurn();
       return finish('completed-no-reply');
+    }
+
+    if (
+      config.aarohiProjectionWriter !== undefined &&
+      !('purpose' in material) &&
+      material.assignedActor === 'AAROHI'
+    ) {
+      await config.aarohiProjectionWriter
+        .projectTurn({ material, outcome: 'PROPOSAL_CREATED' })
+        .catch(() => undefined);
     }
 
     try {
