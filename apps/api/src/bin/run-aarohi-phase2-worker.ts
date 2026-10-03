@@ -16,8 +16,8 @@ function configPath(argv: readonly string[]): string {
   }
   return argv[1];
 }
-const sleep = (ms: number, signal: AbortSignal) =>
-  new Promise<void>((resolve) => {
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve) => {
     if (signal.aborted) {
       resolve();
       return;
@@ -32,6 +32,15 @@ const sleep = (ms: number, signal: AbortSignal) =>
       { once: true },
     );
   });
+}
+
+function providerSecret(secrets: ReadonlyMap<string, string>, key: string): string {
+  const secret = secrets.get(key);
+  if (secret === undefined) {
+    throw new Error('provider-secret-missing');
+  }
+  return secret;
+}
 
 async function main(): Promise<void> {
   try {
@@ -60,7 +69,7 @@ async function main(): Promise<void> {
           key: provider.key,
           channel: provider.channel,
           endpoint: provider.endpoint,
-          bearerToken: providerSecrets.get(provider.key)!,
+          bearerToken: providerSecret(providerSecrets, provider.key),
           allowedHosts: provider.allowedHosts,
         }),
       ),
@@ -74,7 +83,7 @@ async function main(): Promise<void> {
                 key: provider.key,
                 channel: provider.channel as 'INSTAGRAM' | 'FACEBOOK' | 'X',
                 endpoint: provider.endpoint,
-                bearerToken: providerSecrets.get(provider.key)!,
+                bearerToken: providerSecret(providerSecrets, provider.key),
                 allowedHosts: provider.allowedHosts,
                 enableContinuation: provider.socialContinuation,
                 enableReplyPolling: provider.socialReplyPolling,
@@ -97,7 +106,9 @@ async function main(): Promise<void> {
         '\n',
     );
     const controller = new AbortController();
-    const stop = () => controller.abort();
+    const stop = () => {
+      controller.abort();
+    };
     process.once('SIGTERM', stop);
     process.once('SIGINT', stop);
     try {
@@ -120,7 +131,7 @@ async function main(): Promise<void> {
         }
         const idle =
           discovery.state === 'idle' && socialInbox.state === 'idle' && social.state === 'idle';
-        if (!controller.signal.aborted) await sleep(idle ? file.pollMs : 50, controller.signal);
+        await sleep(idle ? file.pollMs : 50, controller.signal);
       }
     } finally {
       process.removeListener('SIGTERM', stop);
