@@ -10,90 +10,119 @@ import { createAarohiDiscoveryProviderRegistry } from '../aarohi-phase2/provider
 import { createAarohiSocialProviderRegistry } from '../aarohi-phase2/social-provider-port.js';
 import { createAarohiPhase2Worker } from '../aarohi-phase2/worker.js';
 
-function configPath(argv:readonly string[]):string{
-  if(argv.length!==2||argv[0]!=='--config'||!argv[1]||!isAbsolute(argv[1])){
+function configPath(argv: readonly string[]): string {
+  if (argv.length !== 2 || argv[0] !== '--config' || !argv[1] || !isAbsolute(argv[1])) {
     throw new Error('invalid-usage');
   }
   return argv[1];
 }
-const sleep=(ms:number,signal:AbortSignal)=>new Promise<void>((resolve)=>{
-  if(signal.aborted){resolve();return;}
-  const timer=setTimeout(resolve,ms);
-  signal.addEventListener('abort',()=>{clearTimeout(timer);resolve();},{once:true});
-});
+const sleep = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
 
-async function main():Promise<void>{
-  try{
-    const file=loadAarohiPhase2WorkerConfig(configPath(process.argv.slice(2)));
-    if(!file.enabled){
+async function main(): Promise<void> {
+  try {
+    const file = loadAarohiPhase2WorkerConfig(configPath(process.argv.slice(2)));
+    if (!file.enabled) {
       process.stdout.write('qfj-aarohi-phase2-worker DISABLED\n');
       return;
     }
-    const core=createAarohiPhase2CoreClient({
-      baseUrl:file.core.baseUrl,
-      keyId:file.core.keyId,
-      privateKeyPem:readSecretFile(file.core.privateKeyFile,32_768),
-      clock:()=>new Date().toISOString(),
-      requestId:()=>randomUUID(),
-      timeoutMs:file.core.timeoutMs,
-      httpPost:async(url,init)=>fetch(url,init),
+    const core = createAarohiPhase2CoreClient({
+      baseUrl: file.core.baseUrl,
+      keyId: file.core.keyId,
+      privateKeyPem: readSecretFile(file.core.privateKeyFile, 32_768),
+      clock: () => new Date().toISOString(),
+      requestId: () => randomUUID(),
+      timeoutMs: file.core.timeoutMs,
+      httpPost: async (url, init) => fetch(url, init),
     });
-    const providerSecrets=new Map(file.providers.map(provider=>[
-      provider.key,readSecretFile(provider.bearerTokenFile,4096),
-    ] as const));
-    const providers=createAarohiDiscoveryProviderRegistry(file.providers.map(provider=>
-      createHttpJsonAarohiDiscoveryProvider({
-        key:provider.key,
-        channel:provider.channel,
-        endpoint:provider.endpoint,
-        bearerToken:providerSecrets.get(provider.key)!,
-        allowedHosts:provider.allowedHosts,
-      })
-    ));
-    const socialProviders=createAarohiSocialProviderRegistry(file.providers.flatMap(provider=>
-      provider.socialContinuation&&['INSTAGRAM','FACEBOOK','X'].includes(provider.channel)
-        ?[createHttpJsonAarohiSocialProvider({
-            key:provider.key,
-            channel:provider.channel as 'INSTAGRAM'|'FACEBOOK'|'X',
-            endpoint:provider.endpoint,
-            bearerToken:providerSecrets.get(provider.key)!,
-            allowedHosts:provider.allowedHosts,
-          })]
-        :[]
-    ));
-    const worker=createAarohiPhase2Worker({workerRef:file.workerRef,core,providers,socialProviders});
-    process.stdout.write(
-      'qfj-aarohi-phase2-worker READY revision='+file.revision+
-      ' providers='+String(file.providers.length)+'\n',
+    const providerSecrets = new Map(
+      file.providers.map(
+        (provider) => [provider.key, readSecretFile(provider.bearerTokenFile, 4096)] as const,
+      ),
     );
-    const controller=new AbortController();
-    const stop=()=>controller.abort();
-    process.once('SIGTERM',stop);
-    process.once('SIGINT',stop);
-    try{
-      while(!controller.signal.aborted){
-        const discovery=await worker.runOnce();
-        const social=await worker.runSocialOnce();
-        for(const result of [discovery,social]){
-          if(result.state!=='idle'){
+    const providers = createAarohiDiscoveryProviderRegistry(
+      file.providers.map((provider) =>
+        createHttpJsonAarohiDiscoveryProvider({
+          key: provider.key,
+          channel: provider.channel,
+          endpoint: provider.endpoint,
+          bearerToken: providerSecrets.get(provider.key)!,
+          allowedHosts: provider.allowedHosts,
+        }),
+      ),
+    );
+    const socialProviders = createAarohiSocialProviderRegistry(
+      file.providers.flatMap((provider) =>
+        provider.socialContinuation && ['INSTAGRAM', 'FACEBOOK', 'X'].includes(provider.channel)
+          ? [
+              createHttpJsonAarohiSocialProvider({
+                key: provider.key,
+                channel: provider.channel as 'INSTAGRAM' | 'FACEBOOK' | 'X',
+                endpoint: provider.endpoint,
+                bearerToken: providerSecrets.get(provider.key)!,
+                allowedHosts: provider.allowedHosts,
+              }),
+            ]
+          : [],
+      ),
+    );
+    const worker = createAarohiPhase2Worker({
+      workerRef: file.workerRef,
+      core,
+      providers,
+      socialProviders,
+    });
+    process.stdout.write(
+      'qfj-aarohi-phase2-worker READY revision=' +
+        file.revision +
+        ' providers=' +
+        String(file.providers.length) +
+        '\n',
+    );
+    const controller = new AbortController();
+    const stop = () => controller.abort();
+    process.once('SIGTERM', stop);
+    process.once('SIGINT', stop);
+    try {
+      while (!controller.signal.aborted) {
+        const discovery = await worker.runOnce();
+        const social = await worker.runSocialOnce();
+        for (const result of [discovery, social]) {
+          if (result.state !== 'idle') {
             process.stdout.write(
-              'qfj-aarohi-phase2-worker cycle='+result.state+
-              ('runId' in result&&result.runId?' run='+result.runId:'')+
-              ('jobId' in result&&result.jobId?' job='+result.jobId:'')+
-              ('candidateCount' in result?' candidates='+String(result.candidateCount):'')+'\n',
+              'qfj-aarohi-phase2-worker cycle=' +
+                result.state +
+                ('runId' in result && result.runId ? ' run=' + result.runId : '') +
+                ('jobId' in result && result.jobId ? ' job=' + result.jobId : '') +
+                ('candidateCount' in result ? ' candidates=' + String(result.candidateCount) : '') +
+                '\n',
             );
           }
         }
-        const idle=discovery.state==='idle'&&social.state==='idle';
-        if(!controller.signal.aborted) await sleep(idle?file.pollMs:50,controller.signal);
+        const idle = discovery.state === 'idle' && social.state === 'idle';
+        if (!controller.signal.aborted) await sleep(idle ? file.pollMs : 50, controller.signal);
       }
-    }finally{
-      process.removeListener('SIGTERM',stop);
-      process.removeListener('SIGINT',stop);
+    } finally {
+      process.removeListener('SIGTERM', stop);
+      process.removeListener('SIGINT', stop);
     }
-  }catch{
+  } catch {
     process.stderr.write('qfj-aarohi-phase2-worker REFUSED\n');
-    process.exitCode=1;
+    process.exitCode = 1;
   }
 }
 await main();
