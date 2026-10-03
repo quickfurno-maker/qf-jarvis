@@ -30,16 +30,18 @@ export type AarohiOmnichannelChannel = (typeof AAROHI_OMNICHANNEL_CHANNELS)[numb
 const OPAQUE_REF = z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/u);
 const UTC = z.string().datetime({ offset: false });
 
-export const aarohiOmnichannelTurnSchema = z.object({
-  contractVersion: z.literal(AAROHI_OMNICHANNEL_LIVE_CONTRACT_VERSION),
-  prospectRef: OPAQUE_REF,
-  channel: z.enum(AAROHI_OMNICHANNEL_CHANNELS),
-  channelConversationRef: OPAQUE_REF,
-  channelThreadRef: OPAQUE_REF,
-  channelParticipantRef: OPAQUE_REF,
-  channelMessageRef: OPAQUE_REF,
-  observedAt: UTC,
-}).strict();
+export const aarohiOmnichannelTurnSchema = z
+  .object({
+    contractVersion: z.literal(AAROHI_OMNICHANNEL_LIVE_CONTRACT_VERSION),
+    prospectRef: OPAQUE_REF,
+    channel: z.enum(AAROHI_OMNICHANNEL_CHANNELS),
+    channelConversationRef: OPAQUE_REF,
+    channelThreadRef: OPAQUE_REF,
+    channelParticipantRef: OPAQUE_REF,
+    channelMessageRef: OPAQUE_REF,
+    observedAt: UTC,
+  })
+  .strict();
 
 export interface AarohiOmnichannelTurn {
   readonly contractVersion: 1;
@@ -52,20 +54,22 @@ export interface AarohiOmnichannelTurn {
   readonly observedAt: string;
 }
 
-export const aarohiOmnichannelInterpretationSchema = z.object({
-  contractVersion: z.literal(AAROHI_OMNICHANNEL_LIVE_CONTRACT_VERSION),
-  interpretationRef: OPAQUE_REF,
-  prospectRef: OPAQUE_REF,
-  channel: z.enum(AAROHI_OMNICHANNEL_CHANNELS),
-  channelConversationRef: OPAQUE_REF,
-  channelThreadRef: OPAQUE_REF,
-  channelParticipantRef: OPAQUE_REF,
-  channelMessageRef: OPAQUE_REF,
-  intent: z.enum(AAROHI_SALES_CONVERSATION_INTENTS),
-  objectionKind: z.enum(AAROHI_SALES_OBJECTION_KINDS),
-  interpretedAt: UTC,
-  sourcePosture: z.literal('QUICKFURNO_STRUCTURED_LIVE_INTERPRETATION'),
-}).strict();
+export const aarohiOmnichannelInterpretationSchema = z
+  .object({
+    contractVersion: z.literal(AAROHI_OMNICHANNEL_LIVE_CONTRACT_VERSION),
+    interpretationRef: OPAQUE_REF,
+    prospectRef: OPAQUE_REF,
+    channel: z.enum(AAROHI_OMNICHANNEL_CHANNELS),
+    channelConversationRef: OPAQUE_REF,
+    channelThreadRef: OPAQUE_REF,
+    channelParticipantRef: OPAQUE_REF,
+    channelMessageRef: OPAQUE_REF,
+    intent: z.enum(AAROHI_SALES_CONVERSATION_INTENTS),
+    objectionKind: z.enum(AAROHI_SALES_OBJECTION_KINDS),
+    interpretedAt: UTC,
+    sourcePosture: z.literal('QUICKFURNO_STRUCTURED_LIVE_INTERPRETATION'),
+  })
+  .strict();
 
 export interface AarohiOmnichannelInterpretation {
   readonly contractVersion: 1;
@@ -82,22 +86,26 @@ export interface AarohiOmnichannelInterpretation {
   readonly sourcePosture: 'QUICKFURNO_STRUCTURED_LIVE_INTERPRETATION';
 }
 
-export const aarohiOmnichannelPlanSchema = z.object({
-  contractVersion: z.literal(AAROHI_OMNICHANNEL_LIVE_CONTRACT_VERSION),
-  planRef: OPAQUE_REF,
-  prospectRef: OPAQUE_REF,
-  channel: z.enum(AAROHI_OMNICHANNEL_CHANNELS),
-  channelConversationRef: OPAQUE_REF,
-  channelThreadRef: OPAQUE_REF,
-  channelParticipantRef: OPAQUE_REF,
-  channelMessageRef: OPAQUE_REF,
-  interpretationRef: OPAQUE_REF,
-  coreStatus: z.literal('NOT_REGISTERED'),
-  coreLookupRef: OPAQUE_REF,
-  plannedAt: UTC,
-  brief: salesReplyBriefSchema,
-  posture: z.custom<AarohiSalesBrainPosture>((value) => value === AAROHI_SALES_BRAIN_POSTURE),
-}).strict();
+export const aarohiOmnichannelPlanSchema = z
+  .object({
+    contractVersion: z.literal(AAROHI_OMNICHANNEL_LIVE_CONTRACT_VERSION),
+    planRef: OPAQUE_REF,
+    prospectRef: OPAQUE_REF,
+    channel: z.enum(AAROHI_OMNICHANNEL_CHANNELS),
+    channelConversationRef: OPAQUE_REF,
+    channelThreadRef: OPAQUE_REF,
+    channelParticipantRef: OPAQUE_REF,
+    channelMessageRef: OPAQUE_REF,
+    interpretationRef: OPAQUE_REF,
+    coreStatus: z.literal('NOT_REGISTERED'),
+    coreLookupRef: OPAQUE_REF,
+    plannedAt: UTC,
+    brief: salesReplyBriefSchema,
+    posture: z.custom<AarohiSalesBrainPosture>(
+      (value) => value === AAROHI_SALES_BRAIN_POSTURE,
+    ),
+  })
+  .strict();
 
 export interface AarohiOmnichannelSalesPlan {
   readonly contractVersion: 1;
@@ -118,29 +126,45 @@ export interface AarohiOmnichannelSalesPlan {
 
 export type AarohiOmnichannelSalesPlanResult =
   | { readonly ok: true; readonly plan: AarohiOmnichannelSalesPlan }
-  | { readonly ok: false; readonly refusal:
-      | 'INPUT_INVALID'
-      | 'TURN_INVALID'
-      | 'INTERPRETATION_INVALID'
-      | 'BINDING_MISMATCH'
-      | 'STALE_INTERPRETATION'
-      | 'CORE_GATE_REFUSED'
-      | 'PLAN_INVALID' };
+  | {
+      readonly ok: false;
+      readonly refusal:
+        | 'INPUT_INVALID'
+        | 'TURN_INVALID'
+        | 'INTERPRETATION_INVALID'
+        | 'BINDING_MISMATCH'
+        | 'STALE_INTERPRETATION'
+        | 'CORE_GATE_REFUSED'
+        | 'PLAN_INVALID';
+    };
 
-export function evaluateAarohiOmnichannelSalesTurn(value: unknown): AarohiOmnichannelSalesPlanResult {
-  const input = z.object({
-    planRef: OPAQUE_REF,
-    turn: z.unknown(),
-    interpretation: z.unknown(),
-    coreObservation: z.unknown(),
-    plannedAt: UTC,
-  }).strict().safeParse(value);
-  if (!input.success) return Object.freeze({ ok: false as const, refusal: 'INPUT_INVALID' as const });
+export function evaluateAarohiOmnichannelSalesTurn(
+  value: unknown,
+): AarohiOmnichannelSalesPlanResult {
+  const input = z
+    .object({
+      planRef: OPAQUE_REF,
+      turn: z.unknown(),
+      interpretation: z.unknown(),
+      coreObservation: z.unknown(),
+      plannedAt: UTC,
+    })
+    .strict()
+    .safeParse(value);
+  if (!input.success) {
+    return Object.freeze({ ok: false as const, refusal: 'INPUT_INVALID' as const });
+  }
 
   const turnParsed = aarohiOmnichannelTurnSchema.safeParse(input.data.turn);
-  if (!turnParsed.success) return Object.freeze({ ok: false as const, refusal: 'TURN_INVALID' as const });
-  const interpretationParsed = aarohiOmnichannelInterpretationSchema.safeParse(input.data.interpretation);
-  if (!interpretationParsed.success) return Object.freeze({ ok: false as const, refusal: 'INTERPRETATION_INVALID' as const });
+  if (!turnParsed.success) {
+    return Object.freeze({ ok: false as const, refusal: 'TURN_INVALID' as const });
+  }
+  const interpretationParsed = aarohiOmnichannelInterpretationSchema.safeParse(
+    input.data.interpretation,
+  );
+  if (!interpretationParsed.success) {
+    return Object.freeze({ ok: false as const, refusal: 'INTERPRETATION_INVALID' as const });
+  }
 
   const turn = turnParsed.data;
   const interpretation = interpretationParsed.data;
