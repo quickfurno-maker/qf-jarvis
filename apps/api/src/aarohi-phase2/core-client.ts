@@ -64,13 +64,13 @@ function parseResponse(raw:string,status:number,requestId:string):Readonly<Recor
   const object=value as Record<string,unknown>;
   if(status>=200&&status<300){
     if(
-      object.protocol!==AAROHI_PHASE2_CORE_PROTOCOL||
-      object.version!==1||
-      object.requestId!==requestId
+      object['protocol']!==AAROHI_PHASE2_CORE_PROTOCOL||
+      object['version']!==1||
+      object['requestId']!==requestId
     ) throw new Error('aarohi-phase2-core-response-invalid');
     return Object.freeze({...object});
   }
-  const code=typeof object.code==='string'?object.code:'http-'+String(status);
+  const code=typeof object['code']==='string'?object['code']:'http-'+String(status);
   throw new Error('aarohi-phase2-core-refused:'+code);
 }
 
