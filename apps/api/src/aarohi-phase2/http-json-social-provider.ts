@@ -73,13 +73,13 @@ export function createHttpJsonAarohiSocialProvider(
         }
         const value=record(decoded);
         if(response.ok){
-          const ref=value?.providerMessageRef;
-          if(value?.version!==1||value?.status!=='accepted'||typeof ref!=='string'||ref.trim().length<1||ref.length>300){
+          const ref=value?.['providerMessageRef'];
+          if(value?.['version']!==1||value?.['status']!=='accepted'||typeof ref!=='string'||ref.trim().length<1||ref.length>300){
             throw new AarohiSocialProviderError('UNCERTAIN','SOCIAL_ACCEPT_RESPONSE_INVALID');
           }
           return Object.freeze({providerMessageRef:ref.trim()});
         }
-        const safe=typeof value?.code==='string'?value.code:'HTTP_'+String(response.status);
+        const safe=typeof value?.['code']==='string'?value.code:'HTTP_'+String(response.status);
         throw new AarohiSocialProviderError(
           response.status>=400&&response.status<500?'DEFINITIVE_FAILURE':'UNCERTAIN',
           safe,
