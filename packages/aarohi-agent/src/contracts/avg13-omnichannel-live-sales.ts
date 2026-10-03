@@ -27,7 +27,11 @@ export const AAROHI_OMNICHANNEL_CHANNELS = [
 
 export type AarohiOmnichannelChannel = (typeof AAROHI_OMNICHANNEL_CHANNELS)[number];
 
-const OPAQUE_REF = z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/u);
+const OPAQUE_REF = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9._:-]+$/u);
 const UTC = z.string().datetime({ offset: false });
 
 export const aarohiOmnichannelTurnSchema = z
@@ -101,9 +105,7 @@ export const aarohiOmnichannelPlanSchema = z
     coreLookupRef: OPAQUE_REF,
     plannedAt: UTC,
     brief: salesReplyBriefSchema,
-    posture: z.custom<AarohiSalesBrainPosture>(
-      (value) => value === AAROHI_SALES_BRAIN_POSTURE,
-    ),
+    posture: z.custom<AarohiSalesBrainPosture>((value) => value === AAROHI_SALES_BRAIN_POSTURE),
   })
   .strict();
 

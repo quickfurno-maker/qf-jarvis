@@ -1597,7 +1597,6 @@ export function createQuickFurnoWhatsAppConversationContextReader(
   });
 }
 
-
 function parseAarohiRuntimeInput(value: unknown) {
   if (!isRecord(value)) return null;
   if (

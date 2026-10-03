@@ -81,8 +81,7 @@ export interface AarohiOmnichannelAcquisitionBehaviourInput {
 }
 
 export type AarohiAcquisitionBehaviourInput =
-  | AarohiLegacyAcquisitionBehaviourInput
-  | AarohiOmnichannelAcquisitionBehaviourInput;
+  AarohiLegacyAcquisitionBehaviourInput | AarohiOmnichannelAcquisitionBehaviourInput;
 
 /**
  * Supplies certified Aarohi acquisition artifacts, or `undefined` when this turn has none.
