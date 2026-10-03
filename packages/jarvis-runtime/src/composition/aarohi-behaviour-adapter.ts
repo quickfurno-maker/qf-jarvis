@@ -41,7 +41,10 @@ import type {
   BehaviourDecisionPort,
   BehaviourDecisionRequest,
 } from '@qf-jarvis/agent-runtime';
-import { evaluateAarohiOmnichannelSalesTurn, evaluateAarohiSalesTurn } from '@qf-jarvis/aarohi-agent';
+import {
+  evaluateAarohiOmnichannelSalesTurn,
+  evaluateAarohiSalesTurn,
+} from '@qf-jarvis/aarohi-agent';
 import type { AarohiSalesStrategy } from '@qf-jarvis/aarohi-agent';
 
 import type {
