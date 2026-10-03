@@ -1639,7 +1639,7 @@ export function createQuickFurnoAarohiBehaviourInputReader(
 ): AarohiAcquisitionBehaviourInputPort {
   const { key, timeoutMs } = parsePrivateKey(config);
   return Object.freeze({
-    async read(input) {
+    async read(input: Parameters<AarohiAcquisitionBehaviourInputPort['read']>[0]) {
       if (
         input.tenantId !== 'quickfurno' ||
         !UUID.test(input.conversationId) ||
@@ -1718,7 +1718,7 @@ export function createQuickFurnoAarohiProjectionWriter(
 ): QuickFurnoAarohiProjectionWriter {
   const { key, timeoutMs } = parsePrivateKey(config);
   return Object.freeze({
-    async projectTurn(input) {
+    async projectTurn(input: Parameters<QuickFurnoAarohiProjectionWriter['projectTurn']>[0]) {
       const material = input.material;
       if (
         material.assignedActor !== 'AAROHI' ||
