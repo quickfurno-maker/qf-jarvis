@@ -60,7 +60,7 @@ export interface AarohiAcquisitionBehaviourInputRequest {
  */
 export interface AarohiLegacyAcquisitionBehaviourInput {
   /** Absent/legacy means the certified AVG-7 + AVG-5 Instagram contract. */
-  readonly mode?: "AVG7_OFFLINE";
+  readonly mode?: 'AVG7_OFFLINE';
   readonly planRef: string;
   readonly conversation: unknown;
   readonly interpretation: unknown;
@@ -71,7 +71,7 @@ export interface AarohiLegacyAcquisitionBehaviourInput {
 
 export interface AarohiOmnichannelAcquisitionBehaviourInput {
   /** Live channel-neutral acquisition contract used by production WhatsApp/social adapters. */
-  readonly mode: "OMNICHANNEL_LIVE_V1";
+  readonly mode: 'OMNICHANNEL_LIVE_V1';
   readonly planRef: string;
   readonly turn: unknown;
   readonly interpretation: unknown;
