@@ -39,44 +39,44 @@ export function loadAarohiPhase2WorkerConfig(path:string):AarohiPhase2WorkerFile
   if(!isAbsolute(path)) throw new Error('aarohi-phase2-config-invalid');
   let parsed:unknown;
   try{parsed=JSON.parse(readFileSync(path,'utf8'));}catch{throw new Error('aarohi-phase2-config-invalid');}
-  if(!record(parsed)||!record(parsed.core)||!Array.isArray(parsed.providers)) throw new Error('aarohi-phase2-config-invalid');
+  if(!record(parsed)||!record(parsed['core'])||!Array.isArray(parsed['providers'])) throw new Error('aarohi-phase2-config-invalid');
   if(
-    typeof parsed.revision!=='string'||!REF.test(parsed.revision)||
-    typeof parsed.enabled!=='boolean'||
-    typeof parsed.workerRef!=='string'||!REF.test(parsed.workerRef)||
-    !Number.isInteger(parsed.pollMs)||Number(parsed.pollMs)<1000||Number(parsed.pollMs)>300000
+    typeof parsed['revision']!=='string'||!REF.test(parsed['revision'])||
+    typeof parsed['enabled']!=='boolean'||
+    typeof parsed['workerRef']!=='string'||!REF.test(parsed['workerRef'])||
+    !Number.isInteger(parsed['pollMs'])||Number(parsed['pollMs'])<1000||Number(parsed['pollMs'])>300000
   ) throw new Error('aarohi-phase2-config-invalid');
-  const core=parsed.core;
+  const core=parsed['core'];
   if(
-    typeof core.baseUrl!=='string'||
-    typeof core.keyId!=='string'||!REF.test(core.keyId)||
-    !Number.isInteger(core.timeoutMs)||Number(core.timeoutMs)<500||Number(core.timeoutMs)>30000
+    typeof core['baseUrl']!=='string'||
+    typeof core['keyId']!=='string'||!REF.test(core['keyId'])||
+    !Number.isInteger(core['timeoutMs'])||Number(core['timeoutMs'])<500||Number(core['timeoutMs'])>30000
   ) throw new Error('aarohi-phase2-config-invalid');
-  const privateKeyFile=absoluteFile(core.privateKeyFile);
-  const providers=parsed.providers.map((raw)=>{
-    if(!record(raw)||typeof raw.key!=='string'||!REF.test(raw.key)||typeof raw.channel!=='string'||!CHANNELS.has(raw.channel)||
-      typeof raw.endpoint!=='string'||!Array.isArray(raw.allowedHosts)||raw.allowedHosts.length<1||raw.allowedHosts.length>20||
-      raw.allowedHosts.some(host=>typeof host!=='string'||host.length<1||host.length>253)
+  const privateKeyFile=absoluteFile(core['privateKeyFile']);
+  const providers=parsed['providers'].map((raw)=>{
+    if(!record(raw)||typeof raw['key']!=='string'||!REF.test(raw['key'])||typeof raw['channel']!=='string'||!CHANNELS.has(raw['channel'])||
+      typeof raw['endpoint']!=='string'||!Array.isArray(raw['allowedHosts'])||raw['allowedHosts'].length<1||raw['allowedHosts'].length>20||
+      raw['allowedHosts'].some(host=>typeof host!=='string'||host.length<1||host.length>253)
     ) throw new Error('aarohi-phase2-config-invalid');
     return Object.freeze({
-      key:raw.key,
-      channel:raw.channel as AarohiDiscoveryProviderChannel,
-      endpoint:raw.endpoint,
-      bearerTokenFile:absoluteFile(raw.bearerTokenFile),
-      allowedHosts:Object.freeze(raw.allowedHosts.map(String)),
-      socialContinuation:raw.socialContinuation===true,
+      key:raw['key'],
+      channel:raw['channel'] as AarohiDiscoveryProviderChannel,
+      endpoint:raw['endpoint'],
+      bearerTokenFile:absoluteFile(raw['bearerTokenFile']),
+      allowedHosts:Object.freeze(raw['allowedHosts'].map(String)),
+      socialContinuation:raw['socialContinuation']===true,
     });
   });
   return Object.freeze({
-    revision:parsed.revision,
-    enabled:parsed.enabled,
-    workerRef:parsed.workerRef,
-    pollMs:Number(parsed.pollMs),
+    revision:parsed['revision'],
+    enabled:parsed['enabled'],
+    workerRef:parsed['workerRef'],
+    pollMs:Number(parsed['pollMs']),
     core:Object.freeze({
-      baseUrl:String(core.baseUrl),
-      keyId:String(core.keyId),
+      baseUrl:String(core['baseUrl']),
+      keyId:String(core['keyId']),
       privateKeyFile,
-      timeoutMs:Number(core.timeoutMs),
+      timeoutMs:Number(core['timeoutMs']),
     }),
     providers:Object.freeze(providers),
   });
