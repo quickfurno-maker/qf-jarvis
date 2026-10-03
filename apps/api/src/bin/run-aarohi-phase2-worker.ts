@@ -67,7 +67,8 @@ async function main(): Promise<void> {
     );
     const socialProviders = createAarohiSocialProviderRegistry(
       file.providers.flatMap((provider) =>
-        provider.socialContinuation && ['INSTAGRAM', 'FACEBOOK', 'X'].includes(provider.channel)
+        (provider.socialContinuation || provider.socialReplyPolling) &&
+        ['INSTAGRAM', 'FACEBOOK', 'X'].includes(provider.channel)
           ? [
               createHttpJsonAarohiSocialProvider({
                 key: provider.key,
@@ -75,6 +76,8 @@ async function main(): Promise<void> {
                 endpoint: provider.endpoint,
                 bearerToken: providerSecrets.get(provider.key)!,
                 allowedHosts: provider.allowedHosts,
+                enableContinuation: provider.socialContinuation,
+                enableReplyPolling: provider.socialReplyPolling,
               }),
             ]
           : [],
@@ -100,8 +103,9 @@ async function main(): Promise<void> {
     try {
       while (!controller.signal.aborted) {
         const discovery = await worker.runOnce();
+        const socialInbox = await worker.runSocialInboxOnce();
         const social = await worker.runSocialOnce();
-        for (const result of [discovery, social]) {
+        for (const result of [discovery, socialInbox, social]) {
           if (result.state !== 'idle') {
             process.stdout.write(
               'qfj-aarohi-phase2-worker cycle=' +
@@ -109,11 +113,13 @@ async function main(): Promise<void> {
                 ('runId' in result && result.runId ? ' run=' + result.runId : '') +
                 ('jobId' in result && result.jobId ? ' job=' + result.jobId : '') +
                 ('candidateCount' in result ? ' candidates=' + String(result.candidateCount) : '') +
+                ('replyCount' in result ? ' replies=' + String(result.replyCount) : '') +
                 '\n',
             );
           }
         }
-        const idle = discovery.state === 'idle' && social.state === 'idle';
+        const idle =
+          discovery.state === 'idle' && socialInbox.state === 'idle' && social.state === 'idle';
         if (!controller.signal.aborted) await sleep(idle ? file.pollMs : 50, controller.signal);
       }
     } finally {
