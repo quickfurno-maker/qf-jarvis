@@ -41,7 +41,9 @@ describe('Aarohi Phase 2 social reply ingestion',()=>{
       occurredAt:'2026-10-03T05:00:00.000Z',
       phoneE164:'+919876543210',
     }]);
-    const body=JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit)?.body));
+    const calls=(fetchImpl as unknown as {mock:{calls:unknown[][]}}).mock.calls;
+    const init=(calls[0]?.[1]??null) as RequestInit|null;
+    const body=JSON.parse(String(init?.body??""));
     expect(body).toEqual({
       version:1,operation:'SOCIAL_REPLY_POLL',channel:'INSTAGRAM',limit:25,
     });
