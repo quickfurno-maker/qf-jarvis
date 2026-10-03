@@ -1108,7 +1108,6 @@ export function evaluateAarohiSalesTurn(value: unknown): AarohiSalesTurnPlanResu
     });
   }
 
-  const strategy = deriveAarohiSalesStrategy(interpretation.intent, interpretation.objectionKind);
   const plan = {
     contractVersion: AAROHI_AVG7_CONTRACT_VERSION,
     planRef: parsed.data.planRef,
