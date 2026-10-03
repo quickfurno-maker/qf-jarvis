@@ -16,6 +16,7 @@ export interface GatewayConfig {
   readonly maxClockSkewMs: number;
   readonly replayTtlMs: number;
   readonly replayMaxEntries: number;
+  readonly privateRiyaUpstreamUrl?: string;
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -45,6 +46,9 @@ export function loadGatewayConfig(configPath: string): GatewayConfig {
         'quickfurnoVerificationKeys',
         'replayMaxEntries',
         'replayTtlMs',
+        ...(Object.prototype.hasOwnProperty.call(root, 'privateRiyaUpstreamUrl')
+          ? ['privateRiyaUpstreamUrl']
+          : []),
       ]
         .sort()
         .join(',')
@@ -107,11 +111,40 @@ export function loadGatewayConfig(configPath: string): GatewayConfig {
     throw new Error('gateway_config_invalid');
   }
 
+  let privateRiyaUpstreamUrl: string | undefined;
+  if (Object.prototype.hasOwnProperty.call(root, 'privateRiyaUpstreamUrl')) {
+    const rawUpstream = root['privateRiyaUpstreamUrl'];
+    if (typeof rawUpstream !== 'string') throw new Error('gateway_config_invalid');
+    let upstream: URL;
+    try {
+      upstream = new URL(rawUpstream);
+    } catch {
+      throw new Error('gateway_config_invalid');
+    }
+    const loopback =
+      upstream.hostname === '127.0.0.1' ||
+      upstream.hostname === 'localhost' ||
+      upstream.hostname === '::1';
+    if (
+      upstream.protocol !== 'http:' ||
+      (!loopback && upstream.hostname !== 'qf-jarvis-private-riya') ||
+      upstream.username ||
+      upstream.password ||
+      upstream.search ||
+      upstream.hash ||
+      upstream.pathname !== '/'
+    ) {
+      throw new Error('gateway_config_invalid');
+    }
+    privateRiyaUpstreamUrl = upstream.toString();
+  }
+
   return Object.freeze({
     verificationKeys: Object.freeze(verificationKeys),
     signingKey,
     maxClockSkewMs,
     replayTtlMs,
     replayMaxEntries,
+    ...(privateRiyaUpstreamUrl === undefined ? {} : { privateRiyaUpstreamUrl }),
   });
 }
