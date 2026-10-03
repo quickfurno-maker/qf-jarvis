@@ -29,52 +29,52 @@ export type AarohiPhase2CycleResult =
   | Readonly<{state:'refused';runId?:string;jobId?:string;code:string}>;
 
 function workFromClaim(value:Readonly<Record<string,unknown>>):AarohiDiscoveryWorkItem|null{
-  if(value.status==='idle') return null;
-  const run=value.run;
+  if(value['status']==='idle') return null;
+  const run=value['run'];
   if(!run||typeof run!=='object'||Array.isArray(run)) throw new Error('aarohi-phase2-claim-invalid');
   const one=run as Record<string,unknown>;
-  const channel=String(one.channel) as AarohiDiscoveryProviderChannel;
+  const channel=String(one['channel']) as AarohiDiscoveryProviderChannel;
   if(
-    !UUID.test(String(one.runId))||
-    !UUID.test(String(one.connectorId))||
+    !UUID.test(String(one['runId']))||
+    !UUID.test(String(one['connectorId']))||
     !AAROHI_DISCOVERY_PROVIDER_CHANNELS.includes(channel)||
-    !REF.test(String(one.providerKey))||
-    !one.querySpec||typeof one.querySpec!=='object'||Array.isArray(one.querySpec)
+    !REF.test(String(one['providerKey']))||
+    !one['querySpec']||typeof one['querySpec']!=='object'||Array.isArray(one['querySpec'])
   ) throw new Error('aarohi-phase2-claim-invalid');
   return Object.freeze({
-    runId:String(one.runId),
-    connectorId:String(one.connectorId),
+    runId:String(one['runId']),
+    connectorId:String(one['connectorId']),
     channel,
-    providerKey:String(one.providerKey),
-    querySpec:Object.freeze({...one.querySpec as Record<string,unknown>}),
+    providerKey:String(one['providerKey']),
+    querySpec:Object.freeze({...one['querySpec'] as Record<string,unknown>}),
   });
 }
 
 function socialWorkFromClaim(value:Readonly<Record<string,unknown>>):AarohiSocialDispatchWork|null{
-  if(value.status==='idle') return null;
-  const job=value.job;
+  if(value['status']==='idle') return null;
+  const job=value['job'];
   if(!job||typeof job!=='object'||Array.isArray(job)) throw new Error('aarohi-phase2-social-claim-invalid');
   const one=job as Record<string,unknown>;
-  const channel=String(one.channel) as AarohiSocialChannel;
+  const channel=String(one['channel']) as AarohiSocialChannel;
   if(
-    !UUID.test(String(one.jobId))||
-    !UUID.test(String(one.executionToken))||
-    !UUID.test(String(one.prospectId))||
+    !UUID.test(String(one['jobId']))||
+    !UUID.test(String(one['executionToken']))||
+    !UUID.test(String(one['prospectId']))||
     !['INSTAGRAM','FACEBOOK','X'].includes(channel)||
-    !REF.test(String(one.externalReference))||
-    one.messageKind!=='system:request-whatsapp-continuation'||
-    typeof one.coreAuthorizationRef!=='string'||one.coreAuthorizationRef.length<1||
-    !Number.isSafeInteger(one.attemptCount)||Number(one.attemptCount)<1
+    !REF.test(String(one['externalReference']))||
+    one['messageKind']!=='system:request-whatsapp-continuation'||
+    typeof one['coreAuthorizationRef']!=='string'||one['coreAuthorizationRef'].length<1||
+    !Number.isSafeInteger(one['attemptCount'])||Number(one['attemptCount'])<1
   ) throw new Error('aarohi-phase2-social-claim-invalid');
   return Object.freeze({
-    jobId:String(one.jobId),
-    executionToken:String(one.executionToken),
-    prospectId:String(one.prospectId),
+    jobId:String(one['jobId']),
+    executionToken:String(one['executionToken']),
+    prospectId:String(one['prospectId']),
     channel,
-    externalReference:String(one.externalReference),
+    externalReference:String(one['externalReference']),
     messageKind:'system:request-whatsapp-continuation',
-    coreAuthorizationRef:String(one.coreAuthorizationRef),
-    attemptCount:Number(one.attemptCount),
+    coreAuthorizationRef:String(one['coreAuthorizationRef']),
+    attemptCount:Number(one['attemptCount']),
   });
 }
 
