@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/require-await -- async test doubles intentionally implement Promise-returning ports. */
 import { describe, expect, it, vi } from 'vitest';
 
-import { createHttpJsonAarohiDiscoveryProvider } from './http-json-provider.js';
+import { createHttpJsonAarohiDiscoveryProvider } from '../aarohi-phase2/http-json-provider.js';
 
 const work = {
   runId: '11111111-1111-4111-8111-111111111111',

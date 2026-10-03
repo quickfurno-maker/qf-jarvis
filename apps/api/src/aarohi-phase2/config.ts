@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { closeSync, fstatSync, lstatSync, openSync, readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 
 import type { AarohiDiscoveryProviderChannel } from './provider-port.js';
@@ -27,6 +27,7 @@ export interface AarohiPhase2WorkerFileConfig {
 }
 
 const REF = /^[A-Za-z0-9._:-]{1,128}$/u;
+const MAX_CONFIG_BYTES = 256 * 1024;
 const CHANNELS = new Set([
   'INSTAGRAM',
   'FACEBOOK',
@@ -45,11 +46,45 @@ function absoluteFile(value: unknown): string {
     throw new Error('aarohi-phase2-config-invalid');
   return value;
 }
+
+function readBoundedFile(path: string, maxBytes: number, failure: string): string {
+  const absolute = absoluteFile(path);
+  let link;
+  try {
+    link = lstatSync(absolute);
+  } catch {
+    throw new Error(failure);
+  }
+  if (link.isSymbolicLink() || !link.isFile() || link.size > maxBytes) {
+    throw new Error(failure);
+  }
+  let fd: number;
+  try {
+    fd = openSync(absolute, 'r');
+  } catch {
+    throw new Error(failure);
+  }
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.size > maxBytes) throw new Error(failure);
+    const value = readFileSync(fd, 'utf8');
+    if (Buffer.byteLength(value, 'utf8') > maxBytes) throw new Error(failure);
+    return value;
+  } catch {
+    throw new Error(failure);
+  } finally {
+    try {
+      closeSync(fd);
+    } catch {
+      // Closing cannot turn a refused/accepted bounded read into another outcome.
+    }
+  }
+}
 export function loadAarohiPhase2WorkerConfig(path: string): AarohiPhase2WorkerFileConfig {
   if (!isAbsolute(path)) throw new Error('aarohi-phase2-config-invalid');
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(path, 'utf8'));
+    parsed = JSON.parse(readBoundedFile(path, MAX_CONFIG_BYTES, 'aarohi-phase2-config-invalid'));
   } catch {
     throw new Error('aarohi-phase2-config-invalid');
   }
@@ -119,8 +154,12 @@ export function loadAarohiPhase2WorkerConfig(path: string): AarohiPhase2WorkerFi
 }
 
 export function readSecretFile(path: string, maxBytes: number): string {
-  const value = readFileSync(absoluteFile(path), 'utf8').trim();
-  if (value.length < 1 || Buffer.byteLength(value, 'utf8') > maxBytes)
+  if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 64 * 1024) {
     throw new Error('aarohi-phase2-secret-invalid');
+  }
+  const value = readBoundedFile(path, maxBytes, 'aarohi-phase2-secret-invalid').trim();
+  if (value.length < 1 || Buffer.byteLength(value, 'utf8') > maxBytes) {
+    throw new Error('aarohi-phase2-secret-invalid');
+  }
   return value;
 }

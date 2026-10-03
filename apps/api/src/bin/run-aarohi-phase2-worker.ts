@@ -8,6 +8,7 @@ import { createHttpJsonAarohiDiscoveryProvider } from '../aarohi-phase2/http-jso
 import { createHttpJsonAarohiSocialProvider } from '../aarohi-phase2/http-json-social-provider.js';
 import { createAarohiDiscoveryProviderRegistry } from '../aarohi-phase2/provider-port.js';
 import { createAarohiSocialProviderRegistry } from '../aarohi-phase2/social-provider-port.js';
+import { aarohiPhase2HttpFetch } from '../aarohi-phase2/network.js';
 import { createAarohiPhase2Worker } from '../aarohi-phase2/worker.js';
 
 function configPath(argv: readonly string[]): string {
@@ -56,7 +57,7 @@ async function main(): Promise<void> {
       clock: () => new Date().toISOString(),
       requestId: () => randomUUID(),
       timeoutMs: file.core.timeoutMs,
-      httpPost: async (url, init) => fetch(url, init),
+      httpPost: aarohiPhase2HttpFetch,
     });
     const providerSecrets = new Map(
       file.providers.map(
@@ -71,6 +72,7 @@ async function main(): Promise<void> {
           endpoint: provider.endpoint,
           bearerToken: providerSecret(providerSecrets, provider.key),
           allowedHosts: provider.allowedHosts,
+          fetchImpl: aarohiPhase2HttpFetch,
         }),
       ),
     );
@@ -87,6 +89,7 @@ async function main(): Promise<void> {
                 allowedHosts: provider.allowedHosts,
                 enableContinuation: provider.socialContinuation,
                 enableReplyPolling: provider.socialReplyPolling,
+                fetchImpl: aarohiPhase2HttpFetch,
               }),
             ]
           : [],
