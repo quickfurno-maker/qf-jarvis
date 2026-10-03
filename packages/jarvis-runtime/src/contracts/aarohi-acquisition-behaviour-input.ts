@@ -29,12 +29,13 @@
  * passes through is re-run through AVG-1's gate by the evaluator; it is evidence to be re-proved, not
  * a verdict to be accepted.
  *
- * ### The port is OPTIONAL, and absent in every deployment today
+ * ### The port remains OPTIONAL; production wiring is Core-gated
  *
  * When it is absent, a `PROSPECT` turn reaches no Aarohi adapter and takes the legacy default exactly
- * as an unconfigured VENDOR turn does. Defining the seam is not activating it, and this slice ships no
- * supplier of any kind — the authoritative source of these artifacts is a future QuickFurno/Core
- * adapter, after JF-7 freezes that contract.
+ * as an unconfigured VENDOR turn does. The production WhatsApp worker may now supply this port through
+ * a signed QuickFurno/Core adapter, but that still grants no send or provider authority: Core must bind
+ * the durable prospect, return the current structured acquisition facts, and independently authorize
+ * the eventual reply.
  */
 
 /**
@@ -58,20 +59,30 @@ export interface AarohiAcquisitionBehaviourInputRequest {
  * opaque reference grammar it shares with the rest of the composition; every business rule stays in
  * the Aarohi contract that owns it.
  */
-export interface AarohiAcquisitionBehaviourInput {
-  /** AVG-7's own artifact identity for this plan. Opaque, 1–128 identifier characters. */
+export interface AarohiLegacyAcquisitionBehaviourInput {
+  /** Absent/legacy means the certified AVG-7 + AVG-5 Instagram contract. */
+  readonly mode?: 'AVG7_OFFLINE';
   readonly planRef: string;
-  /** A canonical AVG-5 Instagram conversation snapshot. Re-parsed by AVG-7. */
   readonly conversation: unknown;
-  /** An injected, model-SHAPED AVG-7 reading of the CURRENT inbound turn. Re-parsed by AVG-7. */
   readonly interpretation: unknown;
-  /** A CURRENT Core observation. Re-run through the AVG-1 existing-vendor gate by AVG-7. */
   readonly coreObservation: unknown;
-  /** The semantic UTC instant this plan is made at. Checked against the causal chain by AVG-7. */
   readonly plannedAt: string;
-  /** Opaque, 1–128 identifier characters. Names a prompt; never contains one. */
   readonly promptRef: string;
 }
+
+export interface AarohiOmnichannelAcquisitionBehaviourInput {
+  /** Live channel-neutral acquisition contract used by production WhatsApp/social adapters. */
+  readonly mode: 'OMNICHANNEL_LIVE_V1';
+  readonly planRef: string;
+  readonly turn: unknown;
+  readonly interpretation: unknown;
+  readonly coreObservation: unknown;
+  readonly plannedAt: string;
+  readonly promptRef: string;
+}
+
+export type AarohiAcquisitionBehaviourInput =
+  AarohiLegacyAcquisitionBehaviourInput | AarohiOmnichannelAcquisitionBehaviourInput;
 
 /**
  * Supplies certified Aarohi acquisition artifacts, or `undefined` when this turn has none.

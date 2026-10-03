@@ -1190,6 +1190,9 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
     // pure suite evaluator whose outcome is derived, and one pure autonomy decision that grants
     // OFFLINE decision freedom over a single frozen posture. It exposes no activation, rollout,
     // send, approve or execute function, and no level changes the authority ceiling.
+    // AVG-13 adds the live channel-neutral acquisition turn/interpretation/plan shapes and one
+    // pure evaluator. It reuses AVG-7 sales policy and Core eligibility, but grants no provider,
+    // send, registration, payment or activation authority.
     //
     // Note the two names that are NOT here. `parseAarohiOfflineEvaluationReport` and
     // `parseAarohiControlledAutonomyDecision` were exported in an earlier revision and are now
@@ -1249,6 +1252,8 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'AAROHI_OFFLINE_PREPARATIONS',
       'AAROHI_OFFLINE_PROBES',
       'AAROHI_OFFLINE_PROBE_COUNT',
+      'AAROHI_OMNICHANNEL_CHANNELS',
+      'AAROHI_OMNICHANNEL_LIVE_CONTRACT_VERSION',
       'AAROHI_PAYMENT_FOLLOWUP_POSTURE',
       'AAROHI_PROBE_DIMENSION',
       'AAROHI_PROBE_SEVERITY',
@@ -1342,6 +1347,9 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'aarohiFunnelMetricSchema',
       'aarohiOfflineEvaluationReportSchema',
       'aarohiOfflineScaleSummarySchema',
+      'aarohiOmnichannelInterpretationSchema',
+      'aarohiOmnichannelPlanSchema',
+      'aarohiOmnichannelTurnSchema',
       'aarohiPaymentFollowupBriefSchema',
       'aarohiPaymentFollowupPostureSchema',
       'aarohiRegistrationAssistanceBriefSchema',
@@ -1376,6 +1384,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'enrichmentProfileSchema',
       'enrichmentSourceSchema',
       'evaluateAarohiOfflineSuite',
+      'evaluateAarohiOmnichannelSalesTurn',
       'evaluateAarohiSalesTurn',
       'evaluateAcquisitionContactEligibility',
       'evaluateAcquisitionEligibility',

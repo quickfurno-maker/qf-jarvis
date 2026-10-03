@@ -586,3 +586,19 @@ export type {
   AarohiOfflineProbe,
   AarohiOfflineScaleSummary,
 } from './contracts/avg12-scale-evaluation-controlled-autonomy.js';
+
+export {
+  AAROHI_OMNICHANNEL_CHANNELS,
+  AAROHI_OMNICHANNEL_LIVE_CONTRACT_VERSION,
+  aarohiOmnichannelInterpretationSchema,
+  aarohiOmnichannelPlanSchema,
+  aarohiOmnichannelTurnSchema,
+  evaluateAarohiOmnichannelSalesTurn,
+} from './contracts/avg13-omnichannel-live-sales.js';
+export type {
+  AarohiOmnichannelChannel,
+  AarohiOmnichannelInterpretation,
+  AarohiOmnichannelSalesPlan,
+  AarohiOmnichannelSalesPlanResult,
+  AarohiOmnichannelTurn,
+} from './contracts/avg13-omnichannel-live-sales.js';

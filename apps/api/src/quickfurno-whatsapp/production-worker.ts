@@ -60,6 +60,8 @@ import { createFileOpenAICredentialBinding } from '../secrets/file-openai-creden
 import {
   createQuickFurnoClientMatchRequestWriter,
   createQuickFurnoClientVendorFeedbackWriter,
+  createQuickFurnoAarohiBehaviourInputReader,
+  createQuickFurnoAarohiProjectionWriter,
   createQuickFurnoWhatsAppAuthorityReader,
   createQuickFurnoWhatsAppConversationContextReader,
   createQuickFurnoWhatsAppMaterialReader,
@@ -468,10 +470,12 @@ export async function createQuickFurnoWhatsAppProductionWorker(
     const authoritativeState = createQuickFurnoWhatsAppAuthorityStatePort(
       createQuickFurnoWhatsAppAuthorityReader(httpConfig),
     );
+    const aarohiAcquisitionBehaviourInput = createQuickFurnoAarohiBehaviourInputReader(httpConfig);
     const specialists = runtimeStacks.map((stack) => {
       const gatewayInvoker = observedGatewayInvoker(stack.baseGatewayInvoker);
       const sharedRuntimeConfig = {
         authoritativeState,
+        aarohiAcquisitionBehaviourInput,
         policy: createRuntimePolicy({
           policyRevision: config.policyRevision,
           unknownRouting: 'HUMAN',
@@ -586,6 +590,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       specialistRuntime,
       clientVendorFeedbackWriter: createQuickFurnoClientVendorFeedbackWriter(httpConfig),
       clientMatchRequestWriter: createQuickFurnoClientMatchRequestWriter(httpConfig),
+      aarohiProjectionWriter: createQuickFurnoAarohiProjectionWriter(httpConfig),
       replyWriter: createQuickFurnoWhatsAppReplyWriter(httpConfig),
       ...(traceObservation === undefined ? {} : { traceSink: traceObservation }),
     });

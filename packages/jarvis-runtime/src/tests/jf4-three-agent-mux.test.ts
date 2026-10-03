@@ -291,12 +291,17 @@ describe('JF-4C the Aarohi adapter reads nothing it is not entitled to', () => {
     expect(await port.decide(request('PROSPECT', 'AAROHI'))).toBeUndefined();
   });
 
-  it('an absent input is not a refusal, and an invalid reference is', async () => {
+  it('a configured Aarohi adapter refuses absent Core input and invalid references', async () => {
     const absent = inputPort(undefined);
-    const port = aarohiBehaviourPort(absent.port, statePort().port, KEY, 'task.a');
-    // Nothing to say is not a refusal: the turn takes the legacy default.
-    expect(await port.decide(request('PROSPECT', 'AAROHI'))).toBeUndefined();
+    const state = statePort();
+    const port = aarohiBehaviourPort(absent.port, state.port, KEY, 'task.a');
+    // Once the exact PROSPECT/AAROHI adapter is configured, missing Core material must never
+    // fall back to the generic reply path.
+    await expect(port.decide(request('PROSPECT', 'AAROHI'))).rejects.toThrow(
+      'aarohi-input-unavailable',
+    );
     expect(absent.reads()).toBe(1);
+    expect(state.calls()).toBe(0);
 
     for (const bad of ['', 'has space', 'a'.repeat(129), 'bad/ref']) {
       const input = inputPort({
