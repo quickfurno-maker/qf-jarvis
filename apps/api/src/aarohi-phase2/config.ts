@@ -10,6 +10,7 @@ export interface AarohiPhase2WorkerFileProviderConfig {
   readonly bearerTokenFile: string;
   readonly allowedHosts: readonly string[];
   readonly socialContinuation: boolean;
+  readonly socialReplyPolling: boolean;
 }
 export interface AarohiPhase2WorkerFileConfig {
   readonly revision: string;
@@ -99,6 +100,7 @@ export function loadAarohiPhase2WorkerConfig(path: string): AarohiPhase2WorkerFi
       bearerTokenFile: absoluteFile(raw['bearerTokenFile']),
       allowedHosts: Object.freeze(raw['allowedHosts'].map(String)),
       socialContinuation: raw['socialContinuation'] === true,
+      socialReplyPolling: raw['socialReplyPolling'] === true,
     });
   });
   return Object.freeze({
