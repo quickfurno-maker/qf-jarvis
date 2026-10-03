@@ -113,7 +113,9 @@ export function createHttpJsonAarohiSocialProvider(
 
   async function request(body: Record<string, unknown>, maxBytes: number) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
     try {
       const response = await doFetch(url, {
         method: 'POST',
@@ -159,11 +161,7 @@ export function createHttpJsonAarohiSocialProvider(
     key: config.key,
     channel: config.channel,
     async sendContinuation(work: AarohiSocialDispatchWork) {
-      if (
-        config.enableContinuation === false ||
-        work.channel !== config.channel ||
-        work.messageKind !== 'system:request-whatsapp-continuation'
-      ) {
+      if (config.enableContinuation === false || work.channel !== config.channel) {
         throw new AarohiSocialProviderError('DEFINITIVE_FAILURE', 'SOCIAL_WORK_NOT_PERMITTED');
       }
       const decoded = await request(
@@ -178,10 +176,13 @@ export function createHttpJsonAarohiSocialProvider(
         64_000,
       );
       const value = record(decoded);
-      const ref = value?.['providerMessageRef'];
+      if (value === null) {
+        throw new AarohiSocialProviderError('UNCERTAIN', 'SOCIAL_ACCEPT_RESPONSE_INVALID');
+      }
+      const ref = value['providerMessageRef'];
       if (
-        value?.['version'] !== 1 ||
-        value?.['status'] !== 'accepted' ||
+        value['version'] !== 1 ||
+        value['status'] !== 'accepted' ||
         typeof ref !== 'string' ||
         !REF.test(ref)
       ) {
@@ -203,15 +204,19 @@ export function createHttpJsonAarohiSocialProvider(
         256_000,
       );
       const value = record(decoded);
+      if (value === null) {
+        throw new AarohiSocialProviderError('UNCERTAIN', 'SOCIAL_REPLY_RESPONSE_INVALID');
+      }
+      const replies = value['replies'];
       if (
-        value?.['version'] !== 1 ||
-        value?.['status'] !== 'ok' ||
-        !Array.isArray(value?.['replies']) ||
-        value['replies'].length > safe
+        value['version'] !== 1 ||
+        value['status'] !== 'ok' ||
+        !Array.isArray(replies) ||
+        replies.length > safe
       ) {
         throw new AarohiSocialProviderError('UNCERTAIN', 'SOCIAL_REPLY_RESPONSE_INVALID');
       }
-      return Object.freeze(value['replies'].map((one) => parseReply(one, config.channel)));
+      return Object.freeze(replies.map((one) => parseReply(one, config.channel)));
     };
   }
   return Object.freeze(provider);

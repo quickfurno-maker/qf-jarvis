@@ -109,8 +109,8 @@ export function loadAarohiPhase2WorkerConfig(path: string): AarohiPhase2WorkerFi
     workerRef: parsed['workerRef'],
     pollMs: Number(parsed['pollMs']),
     core: Object.freeze({
-      baseUrl: String(core['baseUrl']),
-      keyId: String(core['keyId']),
+      baseUrl: core['baseUrl'],
+      keyId: core['keyId'],
       privateKeyFile,
       timeoutMs: Number(core['timeoutMs']),
     }),

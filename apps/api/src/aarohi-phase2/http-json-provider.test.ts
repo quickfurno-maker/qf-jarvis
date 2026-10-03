@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await -- async test doubles intentionally implement Promise-returning ports. */
 import { describe, expect, it, vi } from 'vitest';
 
 import { createHttpJsonAarohiDiscoveryProvider } from './http-json-provider.js';
@@ -69,11 +70,19 @@ describe('Aarohi Phase 2 HTTP discovery provider', () => {
       confidence: 88,
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const init = fetchImpl.mock.calls[0]?.[1] as RequestInit;
-    expect(String((init.headers as Record<string, string>)['authorization'])).toBe(
-      'Bearer secret-token',
-    );
-    expect(String(init.body)).not.toContain('secret-token');
+    const firstCall = fetchImpl.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    if (firstCall === undefined) throw new Error('expected-fetch-call');
+    const init = firstCall[1];
+    expect(init).toBeDefined();
+    if (init === undefined) throw new Error('expected-fetch-init');
+    const headers = init.headers;
+    if (headers === undefined || headers instanceof Headers || Array.isArray(headers)) {
+      throw new Error('expected-record-headers');
+    }
+    expect(headers['authorization']).toBe('Bearer secret-token');
+    if (typeof init.body !== 'string') throw new Error('expected-string-body');
+    expect(init.body).not.toContain('secret-token');
   });
 
   it('rejects sensitive provider metadata instead of forwarding it to Core', async () => {

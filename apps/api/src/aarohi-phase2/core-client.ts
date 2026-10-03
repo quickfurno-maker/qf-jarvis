@@ -142,7 +142,9 @@ export function createAarohiPhase2CoreClient(
         privateKey,
       ).toString('base64url');
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const timer = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
       try {
         const response = await config.httpPost(url, {
           method: 'POST',
@@ -159,7 +161,7 @@ export function createAarohiPhase2CoreClient(
         return parseResponse(raw, response.status, requestId);
       } catch (error) {
         if (error instanceof Error && error.message.startsWith('aarohi-phase2-core-')) throw error;
-        throw new Error('aarohi-phase2-core-request-failed');
+        throw new Error('aarohi-phase2-core-request-failed', { cause: error });
       } finally {
         clearTimeout(timer);
       }

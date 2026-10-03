@@ -74,7 +74,9 @@ export function createHttpJsonAarohiDiscoveryProvider(
       if (work.channel !== config.channel || work.providerKey !== config.key)
         throw new Error('aarohi-provider-work-mismatch');
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const timer = setTimeout(() => {
+        controller.abort();
+      }, timeoutMs);
       try {
         const response = await doFetch(url, {
           method: 'POST',
@@ -114,28 +116,28 @@ export function createHttpJsonAarohiDiscoveryProvider(
           root['candidates'].map((candidate) => {
             const one = safeRecord(candidate);
             const metadata = safeRecord(one['metadata'] ?? {});
+            const externalReference = optionalString(one['externalReference'], 300);
+            const businessName = optionalString(one['businessName'], 200);
+            if (externalReference === undefined || businessName === undefined) {
+              throw new Error('aarohi-provider-response-invalid');
+            }
+            const profileUrl = optionalString(one['profileUrl'], 500);
+            const cityHint = optionalString(one['cityHint'], 120);
+            const categoryHint = optionalString(one['categoryHint'], 160);
+            const website = optionalString(one['website'], 500);
+            const phoneE164 = optionalString(one['phoneE164'], 20);
+            const email = optionalString(one['email'], 254);
+            const observedAt = optionalString(one['observedAt'], 40);
             const normalized: AarohiNormalizedDiscoveryCandidate = {
               sourceType: work.channel,
-              externalReference: String(one['externalReference'] ?? ''),
-              businessName: String(one['businessName'] ?? ''),
-              ...(optionalString(one['profileUrl'], 500)
-                ? { profileUrl: optionalString(one['profileUrl'], 500)! }
-                : {}),
-              ...(optionalString(one['cityHint'], 120)
-                ? { cityHint: optionalString(one['cityHint'], 120)! }
-                : {}),
-              ...(optionalString(one['categoryHint'], 160)
-                ? { categoryHint: optionalString(one['categoryHint'], 160)! }
-                : {}),
-              ...(optionalString(one['website'], 500)
-                ? { website: optionalString(one['website'], 500)! }
-                : {}),
-              ...(optionalString(one['phoneE164'], 20)
-                ? { phoneE164: optionalString(one['phoneE164'], 20)! }
-                : {}),
-              ...(optionalString(one['email'], 254)
-                ? { email: optionalString(one['email'], 254)! }
-                : {}),
+              externalReference,
+              businessName,
+              ...(profileUrl === undefined ? {} : { profileUrl }),
+              ...(cityHint === undefined ? {} : { cityHint }),
+              ...(categoryHint === undefined ? {} : { categoryHint }),
+              ...(website === undefined ? {} : { website }),
+              ...(phoneE164 === undefined ? {} : { phoneE164 }),
+              ...(email === undefined ? {} : { email }),
               ...(typeof one['confidence'] === 'number' ? { confidence: one['confidence'] } : {}),
               metadata: Object.fromEntries(
                 Object.entries(metadata).flatMap(([key, value]) =>
@@ -147,16 +149,20 @@ export function createHttpJsonAarohiDiscoveryProvider(
                     : [],
                 ),
               ),
-              ...(optionalString(one['observedAt'], 40)
-                ? { observedAt: optionalString(one['observedAt'], 40)! }
-                : {}),
+              ...(observedAt === undefined ? {} : { observedAt }),
             };
             return validateNormalizedCandidate(normalized);
           }),
         );
       } catch (error) {
-        if (error instanceof Error && error.message.startsWith('aarohi-provider-')) throw error;
-        throw new Error('aarohi-provider-request-failed');
+        if (
+          error instanceof Error &&
+          (error.message.startsWith('aarohi-provider-') ||
+            error.message.startsWith('aarohi-discovery-'))
+        ) {
+          throw error;
+        }
+        throw new Error('aarohi-provider-request-failed', { cause: error });
       } finally {
         clearTimeout(timer);
       }

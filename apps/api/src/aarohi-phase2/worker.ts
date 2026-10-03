@@ -66,29 +66,41 @@ function socialWorkFromClaim(
   if (!job || typeof job !== 'object' || Array.isArray(job))
     throw new Error('aarohi-phase2-social-claim-invalid');
   const one = job as Record<string, unknown>;
-  const channel = String(one['channel']) as AarohiSocialChannel;
+  const jobId = one['jobId'];
+  const executionToken = one['executionToken'];
+  const prospectId = one['prospectId'];
+  const channelValue = one['channel'];
+  const externalReference = one['externalReference'];
+  const coreAuthorizationRef = one['coreAuthorizationRef'];
+  const attemptCount = one['attemptCount'];
   if (
-    !UUID.test(String(one['jobId'])) ||
-    !UUID.test(String(one['executionToken'])) ||
-    !UUID.test(String(one['prospectId'])) ||
-    !['INSTAGRAM', 'FACEBOOK', 'X'].includes(channel) ||
-    !REF.test(String(one['externalReference'])) ||
+    typeof jobId !== 'string' ||
+    !UUID.test(jobId) ||
+    typeof executionToken !== 'string' ||
+    !UUID.test(executionToken) ||
+    typeof prospectId !== 'string' ||
+    !UUID.test(prospectId) ||
+    typeof channelValue !== 'string' ||
+    !['INSTAGRAM', 'FACEBOOK', 'X'].includes(channelValue) ||
+    typeof externalReference !== 'string' ||
+    !REF.test(externalReference) ||
     one['messageKind'] !== 'system:request-whatsapp-continuation' ||
-    typeof one['coreAuthorizationRef'] !== 'string' ||
-    one['coreAuthorizationRef'].length < 1 ||
-    !Number.isSafeInteger(one['attemptCount']) ||
-    Number(one['attemptCount']) < 1
+    typeof coreAuthorizationRef !== 'string' ||
+    coreAuthorizationRef.length < 1 ||
+    typeof attemptCount !== 'number' ||
+    !Number.isSafeInteger(attemptCount) ||
+    attemptCount < 1
   )
     throw new Error('aarohi-phase2-social-claim-invalid');
   return Object.freeze({
-    jobId: String(one['jobId']),
-    executionToken: String(one['executionToken']),
-    prospectId: String(one['prospectId']),
-    channel,
-    externalReference: String(one['externalReference']),
+    jobId,
+    executionToken,
+    prospectId,
+    channel: channelValue as AarohiSocialChannel,
+    externalReference,
     messageKind: 'system:request-whatsapp-continuation',
-    coreAuthorizationRef: String(one['coreAuthorizationRef']),
-    attemptCount: Number(one['attemptCount']),
+    coreAuthorizationRef,
+    attemptCount,
   });
 }
 
@@ -170,7 +182,10 @@ export function createAarohiPhase2Worker(config: AarohiPhase2WorkerConfig) {
       let replyCount = 0;
       try {
         for (const provider of polling) {
-          const replies = await provider.pollReplies!(25);
+          const replies = await provider.pollReplies?.(25);
+          if (replies === undefined) {
+            throw new Error('aarohi-social-provider-polling-unavailable');
+          }
           for (const reply of replies) {
             await config.core.call('SUBMIT_SOCIAL_REPLY', {
               prospectId: reply.prospectId,

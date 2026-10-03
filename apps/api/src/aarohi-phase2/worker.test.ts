@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await -- async test doubles intentionally implement Promise-returning ports. */
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AarohiPhase2CoreClient } from './core-client.js';

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await -- async test doubles intentionally implement Promise-returning ports. */
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AarohiPhase2CoreClient } from './core-client.js';
@@ -10,27 +11,28 @@ const PROSPECT = '11111111-1111-4111-8111-111111111111';
 
 describe('Aarohi Phase 2 social reply ingestion', () => {
   it('accepts only structured reply signals and never raw transcript fields', async () => {
-    const fetchImpl = vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
-            version: 1,
-            status: 'ok',
-            replies: [
-              {
-                prospectId: PROSPECT,
-                threadRef: 'thread.1',
-                messageRef: 'message.1',
-                replyKind: 'WHATSAPP_SHARED',
-                safeSummary: 'Prospect asked to continue on WhatsApp.',
-                occurredAt: '2026-10-03T05:00:00Z',
-                phoneE164: '+919876543210',
-              },
-            ],
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        ),
-    );
+    let observedInit: RequestInit | undefined;
+    const fetchImpl = vi.fn(async (_url: URL | string | Request, init?: RequestInit) => {
+      observedInit = init;
+      return new Response(
+        JSON.stringify({
+          version: 1,
+          status: 'ok',
+          replies: [
+            {
+              prospectId: PROSPECT,
+              threadRef: 'thread.1',
+              messageRef: 'message.1',
+              replyKind: 'WHATSAPP_SHARED',
+              safeSummary: 'Prospect asked to continue on WhatsApp.',
+              occurredAt: '2026-10-03T05:00:00Z',
+              phoneE164: '+919876543210',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
     const provider = createHttpJsonAarohiSocialProvider({
       key: 'meta.instagram',
       channel: 'INSTAGRAM',
@@ -39,7 +41,7 @@ describe('Aarohi Phase 2 social reply ingestion', () => {
       allowedHosts: ['social.example.test'],
       enableContinuation: false,
       enableReplyPolling: true,
-      fetchImpl: fetchImpl as unknown as typeof fetch,
+      fetchImpl: fetchImpl,
     });
     await expect(provider.pollReplies?.(25)).resolves.toEqual([
       {
@@ -53,9 +55,13 @@ describe('Aarohi Phase 2 social reply ingestion', () => {
         phoneE164: '+919876543210',
       },
     ]);
-    const calls = (fetchImpl as unknown as { mock: { calls: unknown[][] } }).mock.calls;
-    const init = (calls[0]?.[1] ?? null) as RequestInit | null;
-    const body = JSON.parse(String(init?.body ?? ''));
+    expect(observedInit).toBeDefined();
+    if (observedInit === undefined) throw new Error('expected-fetch-init');
+    const bodyText = observedInit.body;
+    if (typeof bodyText !== 'string') {
+      throw new Error('expected-string-request-body');
+    }
+    const body = JSON.parse(bodyText) as unknown;
     expect(body).toEqual({
       version: 1,
       operation: 'SOCIAL_REPLY_POLL',
@@ -131,7 +137,7 @@ describe('Aarohi Phase 2 social reply ingestion', () => {
       bearerToken: 'test-secret-token',
       allowedHosts: ['social.example.test'],
       enableReplyPolling: true,
-      fetchImpl: (async () =>
+      fetchImpl: async () =>
         new Response(
           JSON.stringify({
             version: 1,
@@ -149,7 +155,7 @@ describe('Aarohi Phase 2 social reply ingestion', () => {
             ],
           }),
           { status: 200 },
-        )) as typeof fetch,
+        ),
     });
     await expect(provider.pollReplies?.(10)).rejects.toMatchObject({
       safeCode: 'SOCIAL_REPLY_INVALID',
