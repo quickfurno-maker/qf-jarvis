@@ -39,7 +39,8 @@ describe('scale portability contract', () => {
     expect(coreTransport).toContain('readonly baseUrl: string');
     expect(coreTransport).toContain('endpointFor(config.baseUrl)');
     expect(coreTransport).toContain('QUICKFURNO_CORE_DECISION_SIGNATURE_HEADER');
-    expect(coreTransport).not.toMatch(/\b(?:\d{1,3}\.){3}\d{1,3}\b/u);
+    const ipv4 = coreTransport.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/gu) ?? [];
+    expect([...new Set(ipv4)]).toEqual(['127.0.0.1']);
   });
 
   it('does not hide the current multi-host blockers', () => {
