@@ -543,7 +543,7 @@ const SALES_OBJECTION_CLASS: Readonly<Record<AarohiSalesObjectionKind, SalesSign
  *
  * There is no model here, no score, no confidence and no threshold to tune.
  */
-function salesStrategyFor(
+export function deriveAarohiSalesStrategy(
   intent: AarohiSalesConversationIntent,
   objectionKind: AarohiSalesObjectionKind,
 ): AarohiSalesStrategy {
@@ -674,6 +674,19 @@ const SALES_STRATEGY_OBLIGATIONS: Readonly<Record<AarohiSalesStrategy, SalesStra
     }),
   });
 
+export function buildAarohiSalesReplyBrief(
+  intent: AarohiSalesConversationIntent,
+  objectionKind: AarohiSalesObjectionKind,
+): AarohiSalesReplyBrief {
+  const strategy = deriveAarohiSalesStrategy(intent, objectionKind);
+  return Object.freeze({
+    strategy,
+    intent,
+    objectionKind,
+    ...SALES_STRATEGY_OBLIGATIONS[strategy],
+  });
+}
+
 const salesStrategyObligationsShape = {
   requiresClarification: z.boolean(),
   requiresCoreCommercialContext: z.boolean(),
@@ -695,7 +708,7 @@ function briefMatchesPolicy(brief: AarohiSalesReplyBrief): boolean {
   // The strategy must be the one the deterministic policy produces for these two signals. A
   // hand-built brief claiming a non-commercial reply for a message read as a rejection is refused
   // here, at the public boundary, rather than only inside a builder somebody could route around.
-  if (brief.strategy !== salesStrategyFor(brief.intent, brief.objectionKind)) {
+  if (brief.strategy !== deriveAarohiSalesStrategy(brief.intent, brief.objectionKind)) {
     return false;
   }
   const obligations = SALES_STRATEGY_OBLIGATIONS[brief.strategy];
@@ -1095,7 +1108,7 @@ export function evaluateAarohiSalesTurn(value: unknown): AarohiSalesTurnPlanResu
     });
   }
 
-  const strategy = salesStrategyFor(interpretation.intent, interpretation.objectionKind);
+  const strategy = deriveAarohiSalesStrategy(interpretation.intent, interpretation.objectionKind);
   const plan = {
     contractVersion: AAROHI_AVG7_CONTRACT_VERSION,
     planRef: parsed.data.planRef,
@@ -1108,12 +1121,7 @@ export function evaluateAarohiSalesTurn(value: unknown): AarohiSalesTurnPlanResu
     coreStatus: core.status,
     coreLookupRef: observation.data.coreLookupRef,
     plannedAt: parsed.data.plannedAt,
-    brief: Object.freeze({
-      strategy,
-      intent: interpretation.intent,
-      objectionKind: interpretation.objectionKind,
-      ...SALES_STRATEGY_OBLIGATIONS[strategy],
-    }),
+    brief: buildAarohiSalesReplyBrief(interpretation.intent, interpretation.objectionKind),
     posture: AAROHI_SALES_BRAIN_POSTURE,
   };
 
