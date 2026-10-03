@@ -9,6 +9,7 @@ export interface AarohiPhase2WorkerFileProviderConfig {
   readonly endpoint:string;
   readonly bearerTokenFile:string;
   readonly allowedHosts:readonly string[];
+  readonly socialContinuation:boolean;
 }
 export interface AarohiPhase2WorkerFileConfig {
   readonly revision:string;
@@ -63,6 +64,7 @@ export function loadAarohiPhase2WorkerConfig(path:string):AarohiPhase2WorkerFile
       endpoint:raw.endpoint,
       bearerTokenFile:absoluteFile(raw.bearerTokenFile),
       allowedHosts:Object.freeze(raw.allowedHosts.map(String)),
+      socialContinuation:raw.socialContinuation===true,
     });
   });
   return Object.freeze({
