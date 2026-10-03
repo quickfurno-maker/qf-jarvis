@@ -60,7 +60,10 @@ export function validateNormalizedCandidate(
   if(value.metadata&&Object.keys(value.metadata).some(k=>/message|body|content|text|transcript|secret|token|password|cookie|authorization/i.test(k))){
     throw new Error('aarohi-discovery-candidate-sensitive-metadata');
   }
-  return Object.freeze({...value,metadata:value.metadata?Object.freeze({...value.metadata}):undefined});
+  const {metadata,...rest}=value;
+  return metadata===undefined
+    ? Object.freeze({...rest})
+    : Object.freeze({...rest,metadata:Object.freeze({...metadata})});
 }
 
 export function createAarohiDiscoveryProviderRegistry(
@@ -76,6 +79,6 @@ export function createAarohiDiscoveryProviderRegistry(
     map.set(id,provider);
   }
   return Object.freeze({
-    resolve(channel,providerKey){return map.get(channel+':'+providerKey);},
+    resolve(channel:AarohiDiscoveryProviderChannel,providerKey:string){return map.get(channel+':'+providerKey);},
   });
 }
