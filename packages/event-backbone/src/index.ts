@@ -69,6 +69,24 @@ export {
   type DatabasePool,
 } from './persistence/pool.js';
 
+export {
+  assertConnectionBudgetInvariant,
+  assertProductionDatabaseRoleBudget,
+  assertWorkerTurnConcurrencyBudget,
+  DatabaseConnectionBudgetError,
+  JARVIS_DB_CONNECTION_BUDGET,
+  rolePoolLimit,
+  targetApplicationConnectionCeiling,
+  type ProductionDatabaseRole,
+} from './persistence/connection-budget.js';
+
+export {
+  JARVIS_DATA_LIFECYCLE,
+  jarvisReadConsistencyFor,
+  type JarvisReadConsistency,
+  type JarvisReadUseCase,
+} from './persistence/data-lifecycle.js';
+
 export { withClient, withTransaction } from './persistence/transaction.js';
 
 /**

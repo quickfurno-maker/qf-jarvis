@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 
 import {
+  assertProductionDatabaseRoleBudget,
+  assertWorkerTurnConcurrencyBudget,
   createDatabaseConfig,
+  rolePoolLimit,
   type DatabaseConfig,
   type DatabaseConfigInput,
 } from '@qf-jarvis/event-backbone';
@@ -398,9 +401,7 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
       };
       database = createDatabaseConfig({
         connectionString: input.database.connectionString,
-        ...(input.database.maxConnections === undefined
-          ? {}
-          : { maxConnections: input.database.maxConnections }),
+        maxConnections: input.database.maxConnections ?? rolePoolLimit('worker'),
         ...(input.database.connectionTimeoutMillis === undefined
           ? {}
           : { connectionTimeoutMillis: input.database.connectionTimeoutMillis }),
@@ -413,6 +414,11 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
         applicationName: 'qf-jarvis-whatsapp-worker',
         tls,
       });
+      assertProductionDatabaseRoleBudget('worker', database.maxConnections);
+      assertWorkerTurnConcurrencyBudget(
+        database.maxConnections,
+        input.concurrency.globalMaxConcurrentTurns,
+      );
     } catch {
       throw new Error('production-worker-config-invalid');
     }
