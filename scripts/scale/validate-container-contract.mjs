@@ -13,6 +13,7 @@ const [
   aarohiCompose,
   workerConfig,
   spool,
+  ciWorkflow,
 ] = await Promise.all([
   read('deploy/jarvis-os/Dockerfile'),
   read('deploy/jarvis-os/compose.production.yml'),
@@ -23,6 +24,7 @@ const [
   read('deploy/aarohi-phase2/compose.production.yml'),
   read('apps/api/src/quickfurno-whatsapp/production-worker-config.ts'),
   read('apps/quickfurno-gateway/src/durable-turn-spool.ts'),
+  read('.github/workflows/ci.yml'),
 ]);
 
 const digest = 'sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d';
@@ -108,6 +110,12 @@ add(
   aarohiCompose.includes('/run/secrets/aarohi-phase2-worker.json') &&
     aarohiCompose.includes('/run/secrets/quickfurno-signing.key') &&
     occurrences(aarohiCompose, /read_only: true/gu) >= 3,
+);
+add(
+  'CI certifies the actual PR source head, not the synthetic merge SHA',
+  ciWorkflow.includes("QFJ_CERT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}") &&
+    ciWorkflow.includes("ref: ${{ github.event.pull_request.head.sha || github.sha }}") &&
+    !ciWorkflow.includes('GIT_SHA="${GITHUB_SHA}"'),
 );
 
 const failed = checks.filter(([, ok]) => !ok);
