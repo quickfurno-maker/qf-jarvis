@@ -29,7 +29,7 @@ function assert(condition, message) {
   console.log(`PASS ${message}`);
 }
 
-const sha = exec("git", ["rev-parse", "HEAD"], { capture: true }).trim();
+const sha = (process.env.QFJ_CERT_SHA?.trim() || exec("git", ["rev-parse", "HEAD"], { capture: true }).trim());
 assert(/^[0-9a-f]{40}$/u.test(sha), "exact Git SHA resolved");
 exec("node", ["scripts/scale/validate-container-contract.mjs"]);
 
