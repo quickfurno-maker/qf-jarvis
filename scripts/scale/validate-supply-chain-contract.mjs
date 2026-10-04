@@ -64,6 +64,17 @@ add(
   (workflow.match(/cosign sign --yes/gu) ?? []).length >= 3,
 );
 add(
+  'manual publish is restricted to main',
+  workflow.includes('manual publish is allowed only from main') &&
+    workflow.includes('"\${REF_NAME}" != "main"'),
+);
+add(
+  'CycloneDX SBOMs are cryptographically attested',
+  (workflow.match(/cosign attest --yes --type cyclonedx/gu) ?? []).length >= 3 &&
+    workflow.includes('cosign verify-attestation') &&
+    workflow.includes('--type cyclonedx'),
+);
+add(
   'all three digests receive provenance',
   (
     workflow.match(/actions\/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8/gu) ??
