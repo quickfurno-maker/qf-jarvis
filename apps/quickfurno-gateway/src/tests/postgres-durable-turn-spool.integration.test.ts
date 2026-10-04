@@ -160,6 +160,22 @@ describe('Postgres durable turn spool', () => {
     expect(serialized).not.toContain('normalizedText');
   });
 
+  it('lets exactly one concurrent worker claim one durable turn', async () => {
+    const spool = createPostgresDurableTurnSpool(runtime());
+    const item = turn({
+      requestId: randomUUID(),
+      inboundMessageId: randomUUID(),
+      conversationId: randomUUID(),
+    });
+    await spool.accept(item, '2026-09-18T12:00:30.000Z');
+
+    const claims = await Promise.all(Array.from({ length: 16 }, () => spool.claimNext()));
+    const winners = claims.filter((claim): claim is NonNullable<typeof claim> => claim !== null);
+    expect(winners).toHaveLength(1);
+    expect(winners[0]?.inboundMessageId).toBe(item.inboundMessageId);
+    await spool.complete(item.inboundMessageId);
+  });
+
   it('claims distinct pending turns atomically through separate runtime pools', async () => {
     const producer = createPostgresDurableTurnSpool(runtime());
     const poolA = createDatabasePool(
