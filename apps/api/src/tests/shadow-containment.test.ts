@@ -606,6 +606,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // API, no network, no persistence, no provider, and no authority field it could express.
       'control-plane-read-contract',
       'conversation-control',
+      // SCALE-P06: provider-neutral ephemeral coordination vocabulary only. No Redis client,
+      // database, durable state or business authority lives in this contract package.
+      'coordination-contract',
       // ADR-0161: read-only Core data-tool composition over already-governed Core ports. It exposes
       // no write operation, invents no adapter or credential, and re-proves every returned value
       // through the canonical Core contract parser before it reaches the tool result.
@@ -750,6 +753,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-P05.05 (ADR-0079): the governed recommendation runtime -- the producer for contracts
       // that already existed. Still an EXACT set match; it records an authorised addition.
       'recommendation-runtime',
+      // SCALE-P06: isolated Redis/Valkey implementation of the powerless coordination contract.
+      // Durable authority remains PostgreSQL/Core and production composition stays optional.
+      'redis-coordination',
       // ADR-0166: framework-neutral, content-free exact-release assurance observations for Jarvis OS
       // and the future mobile client. It carries no log, credential, provider, database or authority;
       // recording it here preserves the EXACT package-set lock rather than weakening containment.
