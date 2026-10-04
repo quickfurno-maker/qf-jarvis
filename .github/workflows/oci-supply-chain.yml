@@ -119,7 +119,7 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           severity: CRITICAL,HIGH
-          trivy-version: v0.75.0
+          version: v0.75.0
 
       - name: Vulnerability gate — gateway
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -129,7 +129,7 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           severity: CRITICAL,HIGH
-          trivy-version: v0.75.0
+          version: v0.75.0
 
       - name: Vulnerability gate — shared worker
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -139,7 +139,7 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           severity: CRITICAL,HIGH
-          trivy-version: v0.75.0
+          version: v0.75.0
 
       - name: Generate Jarvis OS SBOM
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -148,7 +148,7 @@ jobs:
           format: cyclonedx
           output: qfj-os-sbom.cdx.json
           exit-code: '0'
-          trivy-version: v0.75.0
+          version: v0.75.0
 
       - name: Generate gateway SBOM
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -157,7 +157,7 @@ jobs:
           format: cyclonedx
           output: qfj-gateway-sbom.cdx.json
           exit-code: '0'
-          trivy-version: v0.75.0
+          version: v0.75.0
 
       - name: Generate worker SBOM
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -166,7 +166,7 @@ jobs:
           format: cyclonedx
           output: qfj-worker-sbom.cdx.json
           exit-code: '0'
-          trivy-version: v0.75.0
+          version: v0.75.0
 
       - name: Verify revision labels and record metadata
         shell: bash
