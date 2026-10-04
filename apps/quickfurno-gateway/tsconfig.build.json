@@ -6,6 +6,15 @@
     "outDir": "./dist",
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/tests/**"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "src/tests/**"
+  ],
+  "references": [
+    {
+      "path": "../../packages/event-backbone"
+    }
+  ]
 }
