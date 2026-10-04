@@ -33,20 +33,24 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(dockerfile).toContain('USER 10003:10002');
   });
 
-  it('shares exactly the gateway durable spool host path and no gateway secret', () => {
-    const spool = '/srv/qf-jarvis/state/quickfurno-gateway-turns';
-    expect(gatewayCompose).toContain(`source: ${spool}`);
-    expect(compose).toContain(`source: ${spool}`);
-    expect(compose).toContain('target: /var/lib/qfj-turns');
+  it('uses PostgreSQL for durable turns and no longer mounts a host spool', () => {
+    expect(gatewayCompose).toContain('QFJ_GATEWAY_TURN_STORE: POSTGRES');
+    expect(gatewayCompose).toContain('QFJ_GATEWAY_DATABASE_CONFIG_FILE');
+    expect(gatewayCompose).toContain('target: /run/secrets/postgres-ca.pem');
+    expect(compose).toContain('target: /run/secrets/postgres-ca.pem');
+    expect(gatewayCompose).not.toContain('/var/lib/qfj-turns');
+    expect(compose).not.toContain('/var/lib/qfj-turns');
+    expect(compose).not.toContain('quickfurno-gateway-turns');
     expect(compose).not.toContain('qf-jarvis-gateway.json');
   });
 
-  it('repairs legacy shared-spool permissions before the unprivileged worker starts', () => {
-    expect(deploy).toContain('for spool_dir in pending processing completed failed');
-    expect(deploy).toContain('chown 10002:10002 "$SPOOL/$spool_dir"');
-    expect(deploy).toContain('chmod 0770 "$SPOOL/$spool_dir"');
-    expect(deploy).toContain("-name '*.json' -exec chgrp 10002 {} + -exec chmod 0660 {} +");
-    expect(deploy).toContain('does not grant the shared group read/write/traverse');
+  it('does not create or repair a legacy host spool before worker startup', () => {
+    expect(deploy).not.toContain('for spool_dir in pending processing completed failed');
+    expect(deploy).not.toContain('chown 10002:10002 "$SPOOL/$spool_dir"');
+    expect(deploy).not.toContain('chmod 0770 "$SPOOL/$spool_dir"');
+    expect(deploy).toContain('required_files=("$CONFIG" "$SIGNING" "$CA")');
+    expect(deploy).toContain('prove "legacy turn spool absent"');
+    expect(deploy).toContain('prove "postgres CA source"');
   });
 
   it('mounts only explicit worker evidence/credential/config/control inputs', () => {
@@ -55,6 +59,7 @@ describe('QuickFurno production worker deployment containment', () => {
       '/srv/qf-jarvis/secrets/groq-production.key',
       '/srv/qf-jarvis/seals/jf5c-production-seal.json',
       '/srv/qf-jarvis/state/quickfurno-worker-control',
+      '/srv/qf-jarvis/secrets/postgres-ca.pem',
     ]) {
       expect(compose).toContain(`source: ${source}`);
     }
@@ -82,11 +87,14 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(example).toContain('"killSwitchFile": "/var/run/qfj-control/DISABLE_MODEL"');
   });
 
-  it('production example starts with knowledge disabled and still requires the mounted final seal', () => {
+  it('production example keeps knowledge disabled while PostgreSQL owns durable turns', () => {
     expect(example).toContain('"knowledge": {');
     expect(example).toContain('"mode": "DISABLED"');
-    expect(example).not.toContain('"database":');
-    expect(example).not.toContain('postgres-ca.pem');
+    expect(example).toContain('"database": {');
+    expect(example).toContain('"caFile": "/run/secrets/postgres-ca.pem"');
+    expect(example).toContain('"turnStore": {');
+    expect(example).toContain('"mode": "POSTGRES"');
+    expect(example).not.toContain('"spoolDirectory"');
     expect(example).toContain('"sealFile": "/run/secrets/jf5c-production-seal.json"');
     expect(example).toContain('"groqCredentialFile": "/run/secrets/groq-production.key"');
   });
@@ -97,6 +105,9 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(openaiCompose).toContain('source: /srv/qf-jarvis/seals/openai-v1-production-seal.json');
     expect(openaiCompose).not.toContain('groq-production.key');
     expect(openaiCompose).not.toContain('jf5c-production-seal.json');
+    expect(openaiCompose).toContain('target: /run/secrets/postgres-ca.pem');
+    expect(openaiCompose).not.toContain('/var/lib/qfj-turns');
+    expect(openaiCompose).not.toContain('quickfurno-gateway-turns');
     expect(openaiCompose).toContain("user: '10003:10002'");
     expect(openaiCompose).toContain('read_only: true');
     expect(openaiCompose).toContain('no-new-privileges:true');

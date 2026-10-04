@@ -307,7 +307,11 @@ importers:
         specifier: workspace:*
         version: link:../worker
 
-  apps/quickfurno-gateway: {}
+  apps/quickfurno-gateway:
+    dependencies:
+      '@qf-jarvis/event-backbone':
+        specifier: workspace:*
+        version: link:../../packages/event-backbone
 
   apps/temporal-worker:
     dependencies:

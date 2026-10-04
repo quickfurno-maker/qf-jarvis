@@ -37,6 +37,19 @@ const RETURNING = `
   accepted_at
 `;
 
+const RETURNING_TURN = `
+  turn.request_id,
+  turn.conversation_id,
+  turn.conversation_revision,
+  turn.inbound_message_id,
+  turn.received_at,
+  turn.assigned_actor,
+  turn.subject_type,
+  turn.turn_purpose,
+  turn.qualification_request_id,
+  turn.accepted_at
+`;
+
 function instant(value: Date | string): string {
   return (value instanceof Date ? value : new Date(value)).toISOString();
 }
@@ -173,7 +186,7 @@ export function createPostgresDurableTurnSpool(pool: DatabasePool): DurableTurnS
                 processing_started_at = clock_timestamp()
            FROM candidate
           WHERE turn.inbound_message_id = candidate.inbound_message_id
-         RETURNING ${RETURNING}`,
+         RETURNING ${RETURNING_TURN}`,
         [allowedActors, excludedConversations],
       );
       return claimed.rows[0] === undefined ? null : record(claimed.rows[0]);

@@ -25,23 +25,26 @@ authority for authorization, marketplace truth and effect execution.
 
 ## State classification
 
-### Durable correctness state — blocks horizontal ownership today
+### Durable correctness state — shared storage is PostgreSQL, active ownership remains locked
 
-The gateway and WhatsApp worker share `/var/lib/qfj-turns`, backed by the host
-`/srv/qf-jarvis/state/quickfurno-gateway-turns`.
+Post-Phase-03 hardening removed the production host spool bind. The gateway and WhatsApp worker now
+use the PostgreSQL-backed durable turn store. Claiming uses transactional row ownership with
+`FOR UPDATE SKIP LOCKED`; production containers no longer require a writable
+`/var/lib/qfj-turns` mount.
 
-The current implementation is a filesystem durable spool with atomic file creation/rename. This is
-valid for the current single-owner host topology. It is **not** certified for multi-host ownership.
+The legacy filesystem adapter remains available only for compatibility/tests. It is not the
+production durable-turn authority.
 
-The production worker configuration therefore remains hard-locked to:
+The production worker configuration still remains hard-locked to:
 
 ```text
 deploymentMode: SINGLE_OWNER
 ```
 
-Phase 03 deliberately keeps that lock. Phase 07/12 must replace or wrap this spool with a shared
-atomic ownership primitive and certify ordering/replay/lease semantics before N active owners are
-allowed.
+That lock is intentional. Shared durable storage removes the host-filesystem blocker, but it does
+not by itself certify N active workers. Phase 07/12 must still prove ordering, lease recovery,
+provider concurrency, observation/control coordination and multi-owner operational behavior before
+the deployment mode may change.
 
 ### Replaceable telemetry/control state
 
@@ -77,7 +80,7 @@ CI must prove:
 2. runtime images are non-root and carry the exact Git revision.
 3. production Compose roles are read-only, capability-dropped, resource-bounded and log-bounded.
 4. gateway/worker containers are private by default.
-5. the filesystem durable spool is still classified and `SINGLE_OWNER` remains enforced.
+5. production durable turns use PostgreSQL with no writable host spool, while `SINGLE_OWNER` remains enforced.
 6. Aarohi uses the same immutable worker image, an explicit profile and no ingress.
 7. the three active image families build from a clean checkout.
 8. a disabled Aarohi process starts from the worker image, prints `DISABLED` and exits 0.
@@ -90,5 +93,5 @@ CI must prove:
 - no provider activation
 - no Aarohi activation
 - no removal of `SINGLE_OWNER`
-- no shared multi-host durable-turn design in Phase 03
+- no multi-owner production activation before Phase 07/12 certification
 - no Temporal/proactive production activation

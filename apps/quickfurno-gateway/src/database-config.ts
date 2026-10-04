@@ -16,9 +16,7 @@ interface RawDatabaseConfig {
   readonly connectionTimeoutMillis?: number;
   readonly idleTimeoutMillis?: number;
   readonly statementTimeoutMillis?: number;
-  readonly tls:
-    | Readonly<{ mode: 'disabled' }>
-    | Readonly<{ mode: 'verify-full'; caFile: string }>;
+  readonly tls: Readonly<{ mode: 'disabled' }> | Readonly<{ mode: 'verify-full'; caFile: string }>;
 }
 
 function bounded(path: string, maxBytes: number): Buffer {
@@ -75,10 +73,7 @@ function parseRaw(path: string): RawDatabaseConfig {
 
   const numeric = (
     key:
-      | 'maxConnections'
-      | 'connectionTimeoutMillis'
-      | 'idleTimeoutMillis'
-      | 'statementTimeoutMillis',
+      'maxConnections' | 'connectionTimeoutMillis' | 'idleTimeoutMillis' | 'statementTimeoutMillis',
   ): number | undefined => {
     const candidate = row[key];
     if (candidate === undefined) return undefined;
@@ -124,9 +119,7 @@ export function loadGatewayDatabaseConfig(path: string): DatabaseConfig {
     ...(raw.connectionTimeoutMillis === undefined
       ? {}
       : { connectionTimeoutMillis: raw.connectionTimeoutMillis }),
-    ...(raw.idleTimeoutMillis === undefined
-      ? {}
-      : { idleTimeoutMillis: raw.idleTimeoutMillis }),
+    ...(raw.idleTimeoutMillis === undefined ? {} : { idleTimeoutMillis: raw.idleTimeoutMillis }),
     ...(raw.statementTimeoutMillis === undefined
       ? {}
       : { statementTimeoutMillis: raw.statementTimeoutMillis }),

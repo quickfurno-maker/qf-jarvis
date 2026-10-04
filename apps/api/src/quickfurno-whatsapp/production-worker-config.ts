@@ -254,8 +254,7 @@ const schema = z
         message: 'legacy spoolDirectory and turnStore cannot be mixed',
       });
     }
-    const needsDatabase =
-      value.knowledge.mode === 'HYBRID' || value.turnStore?.mode === 'POSTGRES';
+    const needsDatabase = value.knowledge.mode === 'HYBRID' || value.turnStore?.mode === 'POSTGRES';
     if (needsDatabase && value.database === undefined) {
       ctx.addIssue({
         code: 'custom',
@@ -335,8 +334,7 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
     modelGateway: Readonly<{ maxConcurrent: number; maxQueue: number }>;
   }>;
   readonly turnStore:
-    | Readonly<{ mode: 'FILE'; directory: string }>
-    | Readonly<{ mode: 'POSTGRES' }>;
+    Readonly<{ mode: 'FILE'; directory: string }> | Readonly<{ mode: 'POSTGRES' }>;
   readonly killSwitchFile: string;
   readonly operationalSnapshotFile: string;
   readonly agentFlowTraceSnapshotFile?: string;
@@ -381,12 +379,15 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
     throw new Error('production-worker-config-invalid');
   }
 
-  const turnStore: QuickFurnoWhatsAppProductionWorkerConfig['turnStore'] =
-    input.turnStore === undefined
-      ? Object.freeze({ mode: 'FILE' as const, directory: input.spoolDirectory as string })
-      : input.turnStore.mode === 'POSTGRES'
-        ? Object.freeze({ mode: 'POSTGRES' as const })
-        : Object.freeze({ mode: 'FILE' as const, directory: input.turnStore.directory });
+  let turnStore: QuickFurnoWhatsAppProductionWorkerConfig['turnStore'];
+  if (input.turnStore === undefined) {
+    if (input.spoolDirectory === undefined) throw new Error('production-worker-config-invalid');
+    turnStore = Object.freeze({ mode: 'FILE' as const, directory: input.spoolDirectory });
+  } else if (input.turnStore.mode === 'POSTGRES') {
+    turnStore = Object.freeze({ mode: 'POSTGRES' as const });
+  } else {
+    turnStore = Object.freeze({ mode: 'FILE' as const, directory: input.turnStore.directory });
+  }
 
   let database: DatabaseConfig | undefined;
   if (input.database !== undefined) {

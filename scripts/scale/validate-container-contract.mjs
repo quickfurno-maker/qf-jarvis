@@ -10,9 +10,16 @@ const [
   gatewayCompose,
   workerDocker,
   workerCompose,
+  workerOpenaiCompose,
   aarohiCompose,
   workerConfig,
+  workerRuntime,
+  gatewayIndex,
   spool,
+  workerDeploy,
+  workerDefaultExample,
+  workerHybridExample,
+  workerOpenaiExample,
   ciWorkflow,
 ] = await Promise.all([
   read('deploy/jarvis-os/Dockerfile'),
@@ -21,9 +28,16 @@ const [
   read('deploy/quickfurno-gateway/compose.production.yml'),
   read('deploy/quickfurno-worker/Dockerfile'),
   read('deploy/quickfurno-worker/compose.production.yml'),
+  read('deploy/quickfurno-worker/compose.openai.production.yml'),
   read('deploy/aarohi-phase2/compose.production.yml'),
   read('apps/api/src/quickfurno-whatsapp/production-worker-config.ts'),
+  read('apps/api/src/quickfurno-whatsapp/production-worker.ts'),
+  read('apps/quickfurno-gateway/src/index.ts'),
   read('apps/quickfurno-gateway/src/durable-turn-spool.ts'),
+  read('deploy/quickfurno-worker/deploy.sh'),
+  read('deploy/quickfurno-worker/worker-config.example.json'),
+  read('deploy/quickfurno-worker/worker-config.hybrid.example.json'),
+  read('deploy/quickfurno-worker/worker-config.openai.example.json'),
   read('.github/workflows/ci.yml'),
 ]);
 
@@ -49,6 +63,7 @@ for (const [name, compose] of [
   ['jarvis-os', josCompose],
   ['gateway', gatewayCompose],
   ['worker', workerCompose],
+  ['worker-openai', workerOpenaiCompose],
   ['aarohi', aarohiCompose],
 ]) {
   add(name + ' read-only rootfs', compose.includes('read_only: true'));
@@ -65,17 +80,64 @@ add('jarvis-os liveness exists', josDocker.includes('HEALTHCHECK'));
 add('gateway liveness exists', gatewayDocker.includes('HEALTHCHECK'));
 add('gateway stays private by default', gatewayCompose.includes("traefik.enable: 'false'"));
 add(
-  'worker stays private',
-  workerCompose.includes("traefik.enable: 'false'") && !workerCompose.includes('ports:'),
+  'worker provider variants stay private',
+  workerCompose.includes("traefik.enable: 'false'") &&
+    workerOpenaiCompose.includes("traefik.enable: 'false'") &&
+    !workerCompose.includes('ports:') &&
+    !workerOpenaiCompose.includes('ports:'),
 );
 add(
-  'worker durable turn spool remains explicit writable state',
-  workerCompose.includes('/var/lib/qfj-turns') && workerCompose.includes('read_only: false'),
+  'worker provider variants use Postgres with no writable durable filesystem spool',
+  !workerCompose.includes('/var/lib/qfj-turns') &&
+    !workerOpenaiCompose.includes('/var/lib/qfj-turns') &&
+    !workerCompose.includes('quickfurno-gateway-turns') &&
+    !workerOpenaiCompose.includes('quickfurno-gateway-turns') &&
+    workerCompose.includes('/run/secrets/postgres-ca.pem') &&
+    workerOpenaiCompose.includes('/run/secrets/postgres-ca.pem'),
 );
 add(
-  'gateway durable turn spool remains explicit writable state',
-  gatewayCompose.includes('/var/lib/qfj-turns') && gatewayCompose.includes('read_only: false'),
+  'gateway production uses Postgres durable turn store with no host spool bind',
+  gatewayCompose.includes('QFJ_GATEWAY_TURN_STORE: POSTGRES') &&
+    gatewayCompose.includes('QFJ_GATEWAY_DATABASE_CONFIG_FILE') &&
+    gatewayCompose.includes('/run/secrets/postgres-ca.pem') &&
+    !gatewayCompose.includes('/var/lib/qfj-turns') &&
+    !gatewayCompose.includes('read_only: false'),
 );
+add(
+  'worker config and runtime support Postgres durable turn store',
+  workerConfig.includes("z.literal('POSTGRES')") &&
+    workerConfig.includes("mode: 'POSTGRES'") &&
+    workerConfig.includes('selected runtime capabilities need database configuration') &&
+    workerRuntime.includes("config.turnStore.mode === 'POSTGRES'") &&
+    workerRuntime.includes('createPostgresDurableTurnSpool'),
+);
+add(
+  'gateway runtime selects Postgres production turn store',
+  gatewayIndex.includes("turnStoreMode === 'POSTGRES'") &&
+    gatewayIndex.includes('createPostgresDurableTurnSpool'),
+);
+add(
+  'worker deploy script has no host spool lifecycle and requires database CA',
+  !workerDeploy.includes("SPOOL='/srv/qf-jarvis/state/quickfurno-gateway-turns'") &&
+    !workerDeploy.includes('mkdir -p "$SPOOL') &&
+    workerDeploy.includes('required_files=("$CONFIG" "$SIGNING" "$CA")') &&
+    workerDeploy.includes('legacy turn spool absent') &&
+    workerDeploy.includes('postgres CA source'),
+);
+for (const [name, example] of [
+  ['default', workerDefaultExample],
+  ['hybrid', workerHybridExample],
+  ['openai', workerOpenaiExample],
+]) {
+  add(
+    name + ' worker example is Postgres-turn-store only',
+    example.includes('"turnStore": {') &&
+      example.includes('"mode": "POSTGRES"') &&
+      example.includes('"database": {') &&
+      !example.includes('"spoolDirectory"') &&
+      !example.includes('/var/lib/qfj-turns'),
+  );
+}
 
 add(
   'SINGLE_OWNER safety lock preserved',

@@ -15,6 +15,9 @@
       "caFile": "/run/secrets/postgres-ca.pem"
     }
   },
+  "turnStore": {
+    "mode": "POSTGRES"
+  },
   "quickfurno": {
     "baseUrl": "https://REPLACE_AT_DEPLOYMENT/",
     "keyId": "REPLACE_AT_DEPLOYMENT",
@@ -69,7 +72,6 @@
       "maxQueue": 150
     }
   },
-  "spoolDirectory": "/var/lib/qfj-turns",
   "killSwitchFile": "/var/run/qfj-control/DISABLE_MODEL",
   "operationalSnapshotFile": "/var/run/qfj-observability/whatsapp-worker.json",
   "agentFlowTraceSnapshotFile": "/var/run/qfj-observability/agent-flow-trace.json",

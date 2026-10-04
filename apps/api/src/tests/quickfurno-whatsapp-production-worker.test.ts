@@ -217,6 +217,26 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     expect(config.decisionIntelligence).toEqual({ mode: 'DISABLED' });
   });
 
+  it('allows DISABLED knowledge while PostgreSQL remains the durable turn store', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const legacy = validConfig(root);
+    const { spoolDirectory: _spoolDirectory, ...withoutLegacySpool } = legacy;
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...withoutLegacySpool,
+        knowledge: { mode: 'DISABLED' },
+        turnStore: { mode: 'POSTGRES' },
+      }),
+    );
+
+    const config = loadQuickFurnoWhatsAppProductionWorkerConfig(path);
+    expect(config.knowledge).toEqual({ mode: 'DISABLED' });
+    expect(config.turnStore).toEqual({ mode: 'POSTGRES' });
+    expect(config.database?.applicationName).toBe('qf-jarvis-whatsapp-worker');
+  });
+
   it('loads Jev SHADOW configuration from a bounded mounted credential without exposing the key', () => {
     const root = tempRoot();
     const path = join(root, 'worker.json');
@@ -489,15 +509,17 @@ describe('QuickFurno WhatsApp production worker containment', () => {
     expect(worker).not.toContain('.provision(');
   });
 
-  it('verifies the exact seal before credential resolution, database creation or spool creation', () => {
+  it('verifies the exact seal before credentials, database creation and durable turn-store binding', () => {
     const seal = worker.indexOf('bindJf5cSealForProduction');
     const credential = worker.indexOf('credentialBinding.resolver.resolve');
     const database = worker.indexOf('createDatabasePool(config.database)');
-    const spool = worker.indexOf('createFileDurableTurnSpool(config.spoolDirectory)');
+    const postgresSpool = worker.indexOf('createPostgresDurableTurnSpool(pool)');
+    const fileSpool = worker.indexOf('createFileDurableTurnSpool(config.turnStore.directory)');
     expect(seal).toBeGreaterThanOrEqual(0);
     expect(seal).toBeLessThan(credential);
     expect(credential).toBeLessThan(database);
-    expect(database).toBeLessThan(spool);
+    expect(database).toBeLessThan(postgresSpool);
+    expect(fileSpool).toBeGreaterThanOrEqual(0);
   });
 
   it('reads no secret-bearing environment variable and logs no config or exception', () => {
@@ -565,7 +587,7 @@ describe('QuickFurno WhatsApp production worker containment', () => {
 });
 
 describe('production worker deployment shape', () => {
-  it('refuses any deployment mode other than the single-owner file-spool topology', () => {
+  it('refuses any deployment mode other than the governed single-owner topology', () => {
     const root = tempRoot();
     const path = join(root, 'worker.json');
     const config = validConfig(root);
