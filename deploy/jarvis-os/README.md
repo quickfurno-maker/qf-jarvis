@@ -234,7 +234,7 @@ reach shared Traefik, QuickFurno Core Automation and Core resources.
 Digest pinning gives reproducibility, not absence of vulnerabilities. Docker Scout on the first
 image found **3 CRITICAL / 6 HIGH**, every one in the base image's build toolchain and **none** in
 the application's traced `node_modules`. The pinned digest is already the current published digest
-for `node:24.18.0-bookworm-slim`, so there was no fixed base to move to.
+for `node:24.21.0-bookworm-slim`, so there was no fixed base to move to.
 
 The runtime never installs a package, so the toolchain was removed: npm, npx, corepack and `perl`.
 

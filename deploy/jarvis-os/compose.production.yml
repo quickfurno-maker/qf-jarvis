@@ -30,7 +30,7 @@ services:
   jarvis-os:
     # Immutable, SHA-tagged. There is no `latest`, no `main` and no `stable`: a mutable tag makes
     # "which code is running" unanswerable and makes rollback a rebuild instead of a re-tag.
-    image: 'qf-jarvis-os:${JOS_IMAGE_TAG:?JOS_IMAGE_TAG must be the exact merged git SHA}'
+    image: '${QFJ_OS_IMAGE_REF:?QFJ_OS_IMAGE_REF must be an immutable registry@sha256 digest}'
     container_name: qf-jarvis-os
 
     restart: unless-stopped
@@ -71,7 +71,7 @@ services:
       QFJ_WORKER_OBSERVATION_FILE: /run/observability/whatsapp-worker.json
       QFJ_AGENT_FLOW_TRACE_FILE: /run/observability/agent-flow-trace.json
       QFJ_RELEASE_ASSURANCE_OBSERVATION_FILE: /run/release-assurance/current.json
-      QFJ_JOS_RELEASE_SHA: '${JOS_IMAGE_TAG:?JOS_IMAGE_TAG must be the exact merged git SHA}'
+      QFJ_JOS_RELEASE_SHA: '${QFJ_RELEASE_SHA:?QFJ_RELEASE_SHA must be the certified source git SHA}'
 
     volumes:
       - type: bind

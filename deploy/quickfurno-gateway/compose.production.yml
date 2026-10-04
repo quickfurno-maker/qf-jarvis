@@ -2,7 +2,7 @@ name: qf-jarvis-gateway
 
 services:
   quickfurno-gateway:
-    image: 'qf-jarvis-gateway:${QFJ_GATEWAY_IMAGE_TAG:?QFJ_GATEWAY_IMAGE_TAG must be the exact merged git SHA}'
+    image: '${QFJ_GATEWAY_IMAGE_REF:?QFJ_GATEWAY_IMAGE_REF must be an immutable registry@sha256 digest}'
     container_name: qf-jarvis-gateway
     restart: unless-stopped
     init: true

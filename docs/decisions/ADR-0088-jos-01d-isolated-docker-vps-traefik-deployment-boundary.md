@@ -185,8 +185,8 @@ redirect check exists to catch.
 
 ### 3. The image is immutable and holds no secret
 
-Base pinned by **digest** (`node:24.18.0-bookworm-slim`,
-`sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d`), not by tag: a tag is
+Base pinned by **digest** (`node:24.21.0-bookworm-slim`,
+`sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6`), not by tag: a tag is
 republished on every Debian security update, so two builds of one commit could differ. Tagged by
 exact Git SHA — never `latest`, `main` or `stable` — so "which code is running" is answerable and
 rollback is a re-tag rather than a rebuild.
@@ -205,8 +205,8 @@ Every one of them was in the base image's build toolchain — npm's bundled `tar
 `brace-expansion` and `ip-address`, plus Debian's `perl`. **None were in the application's traced
 `node_modules`**, verified by listing both paths inside the image rather than inferring it.
 
-The pinned digest is already the current published digest for `node:24.18.0-bookworm-slim`, so
-there was no fixed base to move to. Waiting was the only option that preserved Node 24.18.0 — or
+The pinned digest is already the current published digest for `node:24.21.0-bookworm-slim`, so
+there was no fixed base to move to. Waiting was the only option that preserved Node 24.21.0 — or
 removing the packages, which is what happened. The runtime runs `node apps/jarvis-os/server.js` and
 never installs anything, so npm, npx, corepack and perl are pure surface:
 
@@ -224,7 +224,7 @@ are reported **"Fixed version: not fixed"** for this base.
 The precise claim, and the one recorded here, is: **no fixed package is currently available in
 Debian bookworm for this pinned runtime base.** Not "no upstream fix exists" — some of these CVEs do
 have fixes on newer or different Debian branches. What is unavailable is a fix reachable without
-leaving bookworm, and leaving bookworm means leaving `node:24.18.0-bookworm-slim`, which is the
+leaving bookworm, and leaving bookworm means leaving `node:24.21.0-bookworm-slim`, which is the
 pinned Node version this release is built and tested against.
 
 Accepted on that basis: nothing in the request path invokes perl, the container is non-root with a
@@ -369,3 +369,14 @@ managed database, Core, QuickFurno Core Automation, Meta or provider connection.
 The no-published-port topology, the non-root read-only container, the digest-pinned base, the
 SHA-only image tag and the prohibition on modifying shared Traefik may be changed only by a
 superseding ADR. Gate 2 may not begin until this ADR is merged and the DNS A record exists.
+
+## 2026-10-04 security baseline amendment
+
+Phase 04 supply-chain certification found fixed-available HIGH vulnerabilities in the Debian layer
+under the previous Node 24.18.0 image. The project runtime baseline therefore moved as one reviewed
+unit to Node 24.21.0 and the pinned node:24.21.0-bookworm-slim OCI index digest
+sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6.
+
+This is a Node 24 patch-level security refresh, not a runtime-major or application-architecture
+change. CI, local runtime pins, pnpm engine evaluation and production Docker images remain aligned.
+The Phase 04 Trivy gate must pass on the resulting exact-head images before this amendment is accepted.

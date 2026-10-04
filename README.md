@@ -160,7 +160,7 @@ The design documents are [model-runtime-and-governance.md](docs/architecture/mod
 
 ## Getting Started
 
-**Prerequisites:** Node.js **24.18.0** and pnpm **11.11.0**. Both are pinned, and the versions are enforced — an install on a different Node major fails rather than warns.
+**Prerequisites:** Node.js **24.21.0** and pnpm **11.11.0**. Both are pinned, and the versions are enforced — an install on a different Node major fails rather than warns.
 
 ```bash
 # Use the pinned pnpm (Corepack ships with Node; do not install pnpm globally)

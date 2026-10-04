@@ -7,7 +7,7 @@
   "description": "QF Jarvis — the intelligence, recommendation, coordination, and founder decision-support layer for the QuickFurno ecosystem.",
   "license": "UNLICENSED",
   "engines": {
-    "node": ">=24.18.0 <25.0.0"
+    "node": ">=24.21.0 <25.0.0"
   },
   "scripts": {
     "build": "tsc --build tsconfig.json && node scripts/copy-sql-assets.mjs",
@@ -27,9 +27,10 @@
     "db:preflight": "pnpm --filter @qf-jarvis/event-backbone db:preflight",
     "inspect:failures": "pnpm --filter @qf-jarvis/event-backbone inspect:failures --",
     "check:dist-containment": "node scripts/check-dist-containment.mjs",
-    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:dist-containment && pnpm run check:scale:containers",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:dist-containment && pnpm run check:scale:containers && pnpm run check:scale:supply-chain",
     "riya:as3:pilot": "node packages/riya-ai-synthetic-provider-adapters/dist/cli/bin.js",
-    "check:scale:containers": "node scripts/scale/validate-container-contract.mjs"
+    "check:scale:containers": "node scripts/scale/validate-container-contract.mjs",
+    "check:scale:supply-chain": "node scripts/scale/validate-supply-chain-contract.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

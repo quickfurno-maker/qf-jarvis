@@ -85,9 +85,9 @@ const WINDOWS_GIT_CYGPATH = 'C:\\Program Files\\Git\\usr\\bin\\cygpath.exe';
 const BASH_EXECUTABLE = existsSync(WINDOWS_GIT_BASH) ? WINDOWS_GIT_BASH : 'bash';
 
 describe('the production image', () => {
-  it('pins an exact Node 24.18.0 base by digest, never a floating tag', () => {
+  it('pins an exact Node 24.21.0 base by digest, never a floating tag', () => {
     expect(DOCKERFILE_CODE).toContain('node@sha256:');
-    expect(DOCKERFILE).toContain('node:24.18.0-bookworm-slim');
+    expect(DOCKERFILE).toContain('node:24.21.0-bookworm-slim');
     // A mutable tag makes two builds of the same commit produce different filesystems.
     expect(DOCKERFILE_CODE).not.toMatch(/FROM\s+node:latest/u);
     expect(DOCKERFILE_CODE).not.toMatch(/FROM\s+node:\d+\s*$/mu);

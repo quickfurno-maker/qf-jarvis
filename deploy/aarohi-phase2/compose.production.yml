@@ -4,7 +4,7 @@ services:
   aarohi-phase2-worker:
     # Reuse the exact same certified worker filesystem as the WhatsApp worker.
     # Role selection belongs to the container command/config, not to a duplicate image build.
-    image: 'qf-jarvis-whatsapp-worker:${QFJ_WORKER_IMAGE_TAG:?QFJ_WORKER_IMAGE_TAG must be the exact merged git SHA}'
+    image: '${QFJ_WORKER_IMAGE_REF:?QFJ_WORKER_IMAGE_REF must be an immutable registry@sha256 digest}'
     profiles: ['aarohi-phase2']
 
     # Disabled config exits 0 and stays stopped. A provider is never activated merely because

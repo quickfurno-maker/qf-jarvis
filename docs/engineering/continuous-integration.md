@@ -49,7 +49,7 @@ A superseded pull-request run is cancelled — it is wasted compute and a mislea
 | --- | --------------------- | --------------------------------------------------------------------------------------------------------- |
 | 1   | **Checkout**          | `actions/checkout`                                                                                        |
 | 2   | **Set up pnpm**       | `pnpm/action-setup`. **Must precede setup-node** — `cache: pnpm` needs pnpm on the PATH to find the store |
-| 3   | **Set up Node**       | `actions/setup-node` — Node **24.18.0**, pnpm store cached                                                |
+| 3   | **Set up Node**       | `actions/setup-node` — Node **24.21.0**, pnpm store cached                                                |
 | 4   | **Install**           | `pnpm install --frozen-lockfile`                                                                          |
 | 5   | **Quality gate**      | `pnpm check`                                                                                              |
 | 6   | **Verify clean tree** | Fails if the checks modified the repository                                                               |
@@ -58,7 +58,7 @@ A 15-minute timeout bounds a hung job.
 
 ### Versions cannot drift from local
 
-- **Node** is `24.18.0` in the workflow, identical to `.nvmrc`, `.node-version`, and `engines.node`. `engineStrict: true` in `pnpm-workspace.yaml` means a mismatch fails the install rather than warning.
+- **Node** is `24.21.0` in the workflow, identical to `.nvmrc`, `.node-version`, and `engines.node`. `engineStrict: true` in `pnpm-workspace.yaml` means a mismatch fails the install rather than warning.
 - **pnpm** is **not** given a version input. `pnpm/action-setup` reads it from the `packageManager` field in `package.json` — the same field Corepack reads locally. There is one source of truth, so CI's pnpm and a developer's pnpm cannot diverge.
 
 ### Caching
