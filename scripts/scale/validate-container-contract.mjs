@@ -42,6 +42,7 @@ for (const [name, dockerfile] of [
   add(name + ' exact revision OCI label', dockerfile.includes('org.opencontainers.image.revision'));
   add(name + ' non-root runtime', /USER\s+1000[123](?::1000[1232])?/u.test(dockerfile));
   add(name + ' runtime npm removed', dockerfile.includes('/usr/local/bin/npm'));
+  add(name + ' runtime OS security refresh', dockerfile.includes('apt-get upgrade -y'));
 }
 
 for (const [name, compose] of [

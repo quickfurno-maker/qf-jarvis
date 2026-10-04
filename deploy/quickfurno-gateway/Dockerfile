@@ -16,6 +16,11 @@ COPY apps/quickfurno-gateway apps/quickfurno-gateway
 RUN pnpm --filter @qf-jarvis/quickfurno-gateway build
 
 FROM ${NODE_IMAGE} AS runtime
+
+# Refresh Debian security fixes in the final runtime before this one-time release artifact is signed.
+RUN apt-get update \
+ && apt-get upgrade -y \
+ && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 RUN groupadd --gid 10002 gateway \
  && useradd --uid 10002 --gid 10002 --no-create-home --shell /usr/sbin/nologin gateway \
