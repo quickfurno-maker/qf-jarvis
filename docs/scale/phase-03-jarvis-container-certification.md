@@ -82,6 +82,7 @@ CI must prove:
 7. the three active image families build from a clean checkout.
 8. a disabled Aarohi process starts from the worker image, prints `DISABLED` and exits 0.
 9. existing repository quality/certification tests remain green.
+10. pull-request image identity is bound to the actual PR head SHA, never GitHub's synthetic merge SHA.
 
 ## Explicit non-goals
 
