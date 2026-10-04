@@ -20,8 +20,12 @@ RUN pnpm --filter @qf-jarvis/operator-api-contract build \
  && find packages/operator-api-contract apps/livekit-voice-agent -type f \( -name '*.tsbuildinfo' -o -name '*.map' \) -delete
 
 FROM ${NODE_IMAGE} AS runtime
+ARG PCRE2_VERSION=10.42-1+deb12u2
 ENV NODE_ENV=production \
     QFJ_LIVEKIT_VOICE_AGENT_CONFIG_FILE=/run/secrets/qf-jarvis-livekit-voice-agent.json
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends "libpcre2-8-0=${PCRE2_VERSION}" \
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 # Debian already reserves the conventional "voice" group, so use a service-specific
 # principal while keeping the fixed numeric identity used by the secret mount and Compose policy.
 RUN groupadd --gid 10004 jarvisvoice \

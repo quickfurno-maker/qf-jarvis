@@ -120,11 +120,18 @@ RUN pnpm --filter @qf-jarvis/jarvis-os... build
 # Runtime
 # ---------------------------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS runtime
+ARG PCRE2_VERSION=10.42-1+deb12u2
 
 ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     PORT=3000 \
     NEXT_TELEMETRY_DISABLED=1
+
+# The official Node 24.21.0 image predates Debian's deb12u2 PCRE2 security package.
+# Pin the fixed package explicitly; Trivy must prove this final runtime is clean.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends "libpcre2-8-0=${PCRE2_VERSION}" \
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # A fixed, unprivileged identity. Fixed rather than auto-assigned because the bind-mounted secret
 # on the host is chowned to the same numeric id, and a UID that moved between builds would either

@@ -21,7 +21,11 @@ RUN find packages apps/api apps/quickfurno-gateway -type d \( -name src -o -name
  && find packages apps/api apps/quickfurno-gateway -type f \( -name '*.tsbuildinfo' -o -name '*.map' \) -delete
 
 FROM ${NODE_IMAGE} AS runtime
+ARG PCRE2_VERSION=10.42-1+deb12u2
 ENV NODE_ENV=production
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends "libpcre2-8-0=${PCRE2_VERSION}" \
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 RUN groupadd --gid 10002 qfturns \
  && useradd --uid 10003 --gid 10002 --no-create-home --shell /usr/sbin/nologin worker \
  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \

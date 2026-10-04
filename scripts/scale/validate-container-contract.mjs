@@ -10,6 +10,7 @@ const [
   gatewayCompose,
   workerDocker,
   workerCompose,
+  voiceDocker,
   aarohiCompose,
   workerConfig,
   spool,
@@ -21,6 +22,7 @@ const [
   read('deploy/quickfurno-gateway/compose.production.yml'),
   read('deploy/quickfurno-worker/Dockerfile'),
   read('deploy/quickfurno-worker/compose.production.yml'),
+  read('deploy/livekit-voice-agent/Dockerfile'),
   read('deploy/aarohi-phase2/compose.production.yml'),
   read('apps/api/src/quickfurno-whatsapp/production-worker-config.ts'),
   read('apps/quickfurno-gateway/src/durable-turn-spool.ts'),
@@ -33,15 +35,22 @@ const checks = [];
 const add = (name, ok) => checks.push([name, Boolean(ok)]);
 const occurrences = (text, pattern) => (text.match(pattern) ?? []).length;
 
+const pcre2Patch = 'ARG PCRE2_VERSION=10.42-1+deb12u2';
+
 for (const [name, dockerfile] of [
   ['jarvis-os', josDocker],
   ['gateway', gatewayDocker],
   ['worker', workerDocker],
+  ['voice-agent', voiceDocker],
 ]) {
   add(name + ' base image pinned by digest', dockerfile.includes(digest));
   add(name + ' exact revision OCI label', dockerfile.includes('org.opencontainers.image.revision'));
-  add(name + ' non-root runtime', /USER\s+1000[123](?::1000[1232])?/u.test(dockerfile));
+  add(name + ' non-root runtime', /USER\s+1000[1-4](?::1000[1-4])?/u.test(dockerfile));
   add(name + ' runtime npm removed', dockerfile.includes('/usr/local/bin/npm'));
+  add(
+    name + ' patched PCRE2 runtime package pinned',
+    dockerfile.includes(pcre2Patch) && dockerfile.includes('"libpcre2-8-0=${PCRE2_VERSION}"'),
+  );
 }
 
 for (const [name, compose] of [
