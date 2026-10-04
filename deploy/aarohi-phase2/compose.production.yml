@@ -1,0 +1,68 @@
+name: qf-jarvis-aarohi-phase2
+
+services:
+  aarohi-phase2-worker:
+    # Reuse the exact same certified worker filesystem as the WhatsApp worker.
+    # Role selection belongs to the container command/config, not to a duplicate image build.
+    image: 'qf-jarvis-whatsapp-worker:${QFJ_WORKER_IMAGE_TAG:?QFJ_WORKER_IMAGE_TAG must be the exact merged git SHA}'
+    profiles: ['aarohi-phase2']
+
+    # Disabled config exits 0 and stays stopped. A provider is never activated merely because
+    # the image exists or this Compose file is present.
+    restart: on-failure:5
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 60s
+    user: '10003:10002'
+
+    command:
+      - node
+      - apps/api/dist/bin/run-aarohi-phase2-worker.js
+      - --config
+      - /run/secrets/aarohi-phase2-worker.json
+
+    environment:
+      NODE_ENV: production
+
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+
+    volumes:
+      - type: bind
+        source: /srv/qf-jarvis/secrets/aarohi-phase2-worker.json
+        target: /run/secrets/aarohi-phase2-worker.json
+        read_only: true
+      - type: bind
+        source: /srv/qf-jarvis/secrets/quickfurno-signing.key
+        target: /run/secrets/quickfurno-signing.key
+        read_only: true
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512m
+          pids: 128
+        reservations:
+          memory: 128m
+
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+
+    networks:
+      - acquisition
+
+    labels:
+      traefik.enable: 'false'
+
+networks:
+  acquisition:
+    name: qf-jarvis-aarohi-phase2_acquisition
+    driver: bridge
