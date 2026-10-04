@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publish/sign this exact source SHA to GHCR without deployment"
+        description: 'Publish/sign this exact source SHA to GHCR without deployment'
         required: true
         default: false
         type: boolean
