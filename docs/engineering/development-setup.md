@@ -13,7 +13,7 @@ Commands are given for **Windows PowerShell** and **POSIX** (Linux, macOS, Git B
 
 | Requirement                       | Version     | Why exactly this                                                                                                                                                                                                                                       |
 | --------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Node.js**                       | **24.18.0** | Pinned in `.nvmrc`, `.node-version`, `engines.node`, and CI. `engineStrict: true` in `pnpm-workspace.yaml` means an install on any other major **fails** rather than warns ([ADR-0009](../decisions/ADR-0009-runtime-language-and-package-manager.md)) |
+| **Node.js**                       | **24.21.0** | Pinned in `.nvmrc`, `.node-version`, `engines.node`, and CI. `engineStrict: true` in `pnpm-workspace.yaml` means an install on any other major **fails** rather than warns ([ADR-0009](../decisions/ADR-0009-runtime-language-and-package-manager.md)) |
 | **pnpm**                          | **11.11.0** | Pinned in `packageManager`. Install it via Corepack, below — do not install it globally                                                                                                                                                                |
 | **Git**                           | any recent  | —                                                                                                                                                                                                                                                      |
 | **Docker + Compose v2**           | any recent  | Runs the local PostgreSQL. **Required from Stage 3.1** — see [PostgreSQL](#postgresql-17--required-from-stage-31) below                                                                                                                                |
@@ -21,15 +21,15 @@ Commands are given for **Windows PowerShell** and **POSIX** (Linux, macOS, Git B
 
 You do **not** need to install TypeScript, ESLint, Prettier, or Vitest. They are development dependencies of this repository and are installed by `pnpm install`.
 
-### 1. Install Node.js 24.18.0
+### 1. Install Node.js 24.21.0
 
 The exact version matters. If you already manage Node versions, both `.nvmrc` and `.node-version` are present, so most version managers will pick it up automatically.
 
 **nvm (POSIX) / nvm-windows**
 
 ```
-nvm install 24.18.0
-nvm use 24.18.0
+nvm install 24.21.0
+nvm use 24.21.0
 ```
 
 **fnm, asdf, mise, Volta** — all read `.nvmrc` or `.node-version` from the repository root:
@@ -38,7 +38,7 @@ nvm use 24.18.0
 fnm use
 ```
 
-**No version manager.** Download Node 24.18.0 from <https://nodejs.org/dist/v24.18.0/>, or:
+**No version manager.** Download Node 24.21.0 from <https://nodejs.org/dist/v24.21.0/>, or:
 
 ```
 # Windows (winget)
@@ -48,7 +48,7 @@ winget install OpenJS.NodeJS.LTS
 brew install node@24
 ```
 
-Verify — this must print `v24.18.0`:
+Verify — this must print `v24.21.0`:
 
 ```
 node --version
@@ -368,7 +368,7 @@ Configuration arrives under [security-principles.md](../governance/security-prin
 ## Troubleshooting
 
 **`pnpm install` fails with an engine error.**
-You are on the wrong Node version. This is `engineStrict` working. Run `node --version`; if it is not `v24.18.0`, fix that first.
+You are on the wrong Node version. This is `engineStrict` working. Run `node --version`; if it is not `v24.21.0`, fix that first.
 
 **`pnpm` is not the pinned version.**
 You likely have a global pnpm shadowing Corepack. Run `corepack prepare pnpm@11.11.0 --activate`, and consider removing the global install.

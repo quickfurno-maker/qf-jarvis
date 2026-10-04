@@ -13,10 +13,10 @@ The decisions behind them: [ADR-0009](../decisions/ADR-0009-runtime-language-and
 
 |             | Version                       | Pinned in                                                                                   |
 | ----------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
-| **Node.js** | **24.18.0** — LTS ("Krypton") | `.nvmrc`, `.node-version`, `engines.node` (`>=24.18.0 <25.0.0`), `.github/workflows/ci.yml` |
+| **Node.js** | **24.21.0** — LTS ("Krypton") | `.nvmrc`, `.node-version`, `engines.node` (`>=24.21.0 <25.0.0`), `.github/workflows/ci.yml` |
 | **pnpm**    | **11.11.0**                   | `packageManager: pnpm@11.11.0`                                                              |
 
-**Node is pinned in four places, and they are one decision.** `engineStrict: true` (in `pnpm-workspace.yaml`) means an install on any other major **fails**, rather than warning and continuing. `nodeVersion: 24.18.0` additionally makes pnpm evaluate every dependency's engine range against the **target** runtime rather than against whichever Node 24 patch happens to be running the command. CI runs the same pinned version, so a drift between the four cannot pass quietly.
+**Node is pinned in four places, and they are one decision.** `engineStrict: true` (in `pnpm-workspace.yaml`) means an install on any other major **fails**, rather than warning and continuing. `nodeVersion: 24.21.0` additionally makes pnpm evaluate every dependency's engine range against the **target** runtime rather than against whichever Node 24 patch happens to be running the command. CI runs the same pinned version, so a drift between the four cannot pass quietly.
 
 **pnpm is pinned by `packageManager` and activated through Corepack.** CI reads that same field, so the pnpm in CI and the pnpm on a developer's machine cannot diverge. Do not install pnpm globally — a global install is a version nobody pinned.
 
@@ -117,7 +117,7 @@ Zod earns its place by turning an architecture boundary from prose into a parser
 > | Peer dependencies       | One — `pg-native` — declared **optional** and deliberately not installed. Clean under `strictPeerDependencies: true`                                                 |
 > | Transitive dependencies | Not zero. The lockfile records `pg-connection-string`, `pg-pool`, `pg-protocol`, `pg-types`, `pgpass` and their helpers. **None of them runs a build script either** |
 > | Release age             | Satisfies `minimumReleaseAge: 1440`. **No exemption was written** — there are none in this repository                                                                |
-> | Engines                 | `>= 16.0.0` — satisfied by Node 24.18.0                                                                                                                              |
+> | Engines                 | `>= 16.0.0` — satisfied by Node 24.21.0                                                                                                                              |
 >
 > **The build-script answer chose the driver; preference did not.** `onlyBuiltDependencies: []` is an accepted supply-chain control, and it eliminates the alternatives before any comparison begins: `better-sqlite3` is a native module that requires a build script, and Prisma fetches engine binaries in a `postinstall`. Neither can be installed here without weakening the control — and a control weakened to admit a convenience is not a control.
 >
@@ -160,11 +160,11 @@ Peer ranges were read from the registry **before** versions were selected — no
 | `typescript-eslint@8.63.0`      | `typescript: >=4.8.4 <6.1.0`                        | typescript 6.0.3          | ✅        |
 | `@eslint/js@10.0.1`             | `eslint: ^10.0.0`                                   | eslint 10.6.0             | ✅        |
 | `eslint-config-prettier@10.1.8` | `eslint: >=7.0.0`                                   | eslint 10.6.0             | ✅        |
-| `eslint@10.6.0`                 | `engines.node: ^20.19.0 \|\| ^22.13.0 \|\| >=24`    | node 24.18.0              | ✅        |
-| `vitest@4.1.10`                 | `engines.node: ^20.0.0 \|\| ^22.0.0 \|\| >=24.0.0`  | node 24.18.0              | ✅        |
+| `eslint@10.6.0`                 | `engines.node: ^20.19.0 \|\| ^22.13.0 \|\| >=24`    | node 24.21.0              | ✅        |
+| `vitest@4.1.10`                 | `engines.node: ^20.0.0 \|\| ^22.0.0 \|\| >=24.0.0`  | node 24.21.0              | ✅        |
 | `vitest@4.1.10`                 | `vite` (required peer)                              | supplied by Vitest itself | ✅        |
-| `typescript-eslint@8.63.0`      | `engines.node: ^18.18.0 \|\| ^20.9.0 \|\| >=21.1.0` | node 24.18.0              | ✅        |
-| `pg@8.22.0`                     | `engines.node: >= 16.0.0`                           | node 24.18.0              | ✅        |
+| `typescript-eslint@8.63.0`      | `engines.node: ^18.18.0 \|\| ^20.9.0 \|\| >=21.1.0` | node 24.21.0              | ✅        |
+| `pg@8.22.0`                     | `engines.node: >= 16.0.0`                           | node 24.21.0              | ✅        |
 | `pg@8.22.0`                     | `pg-native: >=3.0.1` (**optional** peer)            | not installed, by choice  | ✅        |
 | `pg-pool@3.14.0`                | `pg: >=8.0`                                         | pg 8.22.0                 | ✅        |
 
@@ -194,7 +194,7 @@ Every setting below is therefore verified with `pnpm config get` — the effecti
 | **Strict peers**               | `strictPeerDependencies: true`              | An unmet or conflicting peer **fails the install**                                                                                                      |
 | **No auto-installed peers**    | `autoInstallPeers: false`                   | Nothing enters the tree that we did not ask for. Recorded in the lockfile as `settings.autoInstallPeers: false`                                         |
 | **Engine enforcement**         | `engineStrict: true`                        | The wrong Node version fails at install, with a clear message                                                                                           |
-| **Target runtime**             | `nodeVersion: 24.18.0`                      | Dependency engine compatibility is evaluated against the **project's target runtime**, not against whichever Node 24 patch ran the command              |
+| **Target runtime**             | `nodeVersion: 24.21.0`                      | Dependency engine compatibility is evaluated against the **project's target runtime**, not against whichever Node 24 patch ran the command              |
 | **No install scripts**         | `onlyBuiltDependencies: []`                 | **No package may run a lifecycle build script.** None currently needs to                                                                                |
 | **Release cooldown**           | `minimumReleaseAge: 1440`                   | A version must be public for **24 hours** before we resolve it                                                                                          |
 | **No self-granted exemption**  | `minimumReleaseAgeStrict: true`             | pnpm may **not** resolve a too-fresh version and record an automatic exemption. A control that grants itself exceptions is not a control                |

@@ -128,7 +128,7 @@ Without this, a formatter that rewrites a file, a build that emits into a tracke
 
 ## Local versus CI
 
-**They are the same.** `pnpm check` locally and `pnpm check` in CI run the identical sequence, on the identical pinned Node (24.18.0) and pnpm (11.11.0).
+**They are the same.** `pnpm check` locally and `pnpm check` in CI run the identical sequence, on the identical pinned Node (24.21.0) and pnpm (11.11.0).
 
 |                  | Local          | CI                                                              |
 | ---------------- | -------------- | --------------------------------------------------------------- |

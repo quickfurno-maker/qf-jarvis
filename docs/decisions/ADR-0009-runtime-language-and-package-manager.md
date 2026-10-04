@@ -23,7 +23,7 @@ Two properties therefore matter more than performance:
 
 | Choice          | Version                             | Pinned in                                     |
 | --------------- | ----------------------------------- | --------------------------------------------- |
-| Runtime         | **Node.js 24.18.0** (LTS "Krypton") | `.nvmrc`, `.node-version`, `engines.node`, CI |
+| Runtime         | **Node.js 24.21.0** (LTS "Krypton") | `.nvmrc`, `.node-version`, `engines.node`, CI |
 | Language        | **TypeScript 6.0.3**                | `package.json` (exact)                        |
 | Package manager | **pnpm 11.11.0**                    | `packageManager`, CI                          |
 | Module system   | **Native ESM**                      | `"type": "module"`, `module: nodenext`        |
@@ -97,7 +97,7 @@ Rejected for now. It is not LTS. We will move to 26 when it becomes LTS, per the
 
 - **Dependencies:** exact versions in `package.json` — `"typescript": "6.0.3"`, never `"^6.0.3"`. Enforced by `savePrefix: ''`.
 - **The lockfile is committed** and is authoritative. CI installs with `--frozen-lockfile`, so if `package.json` and `pnpm-lock.yaml` ever disagree, CI fails rather than silently resolving something new.
-- **Node** is pinned in four places that must agree: `.nvmrc`, `.node-version`, `engines.node` (`>=24.18.0 <25.0.0`, enforced by `engineStrict: true`), and the CI workflow. `nodeVersion: 24.18.0` additionally makes pnpm evaluate dependency engine ranges against the **target** runtime rather than against whichever Node 24 patch happens to be running the command.
+- **Node** is pinned in four places that must agree: `.nvmrc`, `.node-version`, `engines.node` (`>=24.21.0 <25.0.0`, enforced by `engineStrict: true`), and the CI workflow. `nodeVersion: 24.21.0` additionally makes pnpm evaluate dependency engine ranges against the **target** runtime rather than against whichever Node 24 patch happens to be running the command.
 - **pnpm** is pinned by `packageManager: pnpm@11.11.0`, which Corepack enforces locally and which CI reads directly — so CI cannot drift from local.
 - **GitHub Actions** are pinned to immutable commit SHAs ([ADR-0011](./ADR-0011-quality-toolchain-and-continuous-integration.md)).
 

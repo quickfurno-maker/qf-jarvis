@@ -4,7 +4,7 @@
 #
 # ### Pinned by digest, not by tag
 #
-# The base is pinned to an exact digest. A tag is a mutable pointer: `node:24.18.0-bookworm-slim`
+# The base is pinned to an exact digest. A tag is a mutable pointer: `node:24.21.0-bookworm-slim`
 # is republished whenever the Debian layer gets a security update, so two builds a week apart can
 # produce different filesystems from identical source. That is fine for a laptop and wrong for a
 # deployment artefact whose whole purpose is to be reproducible and rollback-able. The digest is
@@ -17,9 +17,9 @@
 # image layer — an image is copied, pushed and cached, and a secret baked into one is a secret you
 # cannot revoke by deleting a file.
 #
-# Base: node:24.18.0-bookworm-slim
-# Digest: sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
-ARG NODE_IMAGE=node@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d
+# Base: node:24.21.0-bookworm-slim
+# Digest: sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+ARG NODE_IMAGE=node@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
 
 # ---------------------------------------------------------------------------------------------
 # Builder
@@ -137,11 +137,10 @@ RUN groupadd --gid 10001 jarvis \
 # This runs `node apps/jarvis-os/server.js`. It never installs a package, so npm, npx, corepack and
 # perl are pure surface. Two independent reasons to remove them:
 #
-# 1. Vulnerabilities. A scan of the previous image found 3 CRITICAL and 6 HIGH findings, and EVERY
-#    one was in this toolchain -- npm's bundled tar/undici/brace-expansion/ip-address, and Debian's
-#    perl -- with NONE in the application's traced node_modules. The pinned digest is already the
-#    current published digest for node:24.18.0-bookworm-slim, so there is no fixed base to move to;
-#    the packages had to go rather than be waited on.
+# 1. Vulnerabilities. Earlier certification found toolchain-only findings in npm/perl, so the runtime
+#    strips them even when the base image itself is current. Phase 04 separately moved the project
+#    from Node 24.18.0 to the patched Node 24.21.0 Debian base after Trivy found fixed-available
+#    PCRE2 HIGH vulnerabilities in the older OS layer. Toolchain removal remains defense-in-depth.
 #
 # 2. Post-exploitation. `npm`/`npx` in a container is an arbitrary-package install-and-execute
 #    primitive. Removing them is worth doing even at zero known CVEs.
@@ -197,5 +196,5 @@ LABEL org.opencontainers.image.title="qf-jarvis-os" \
       org.opencontainers.image.source="https://github.com/quickfurno-maker/qf-jarvis" \
       org.opencontainers.image.revision="${GIT_SHA}" \
       org.opencontainers.image.licenses="UNLICENSED" \
-      org.opencontainers.image.base.name="node:24.18.0-bookworm-slim" \
-      org.opencontainers.image.base.digest="sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d"
+      org.opencontainers.image.base.name="node:24.21.0-bookworm-slim" \
+      org.opencontainers.image.base.digest="sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6"

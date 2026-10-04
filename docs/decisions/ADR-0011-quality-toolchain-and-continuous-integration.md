@@ -89,7 +89,7 @@ One workflow, one job, on pull requests to `main` and pushes to `main` ([ci.yml]
 
 1. Checkout
 2. Set up pnpm (reads the exact version from `packageManager`)
-3. Set up Node 24.18.0, with the pnpm store cached
+3. Set up Node 24.21.0, with the pnpm store cached
 4. `pnpm install --frozen-lockfile`
 5. `pnpm check` — format:check → lint → typecheck → test → build
 6. **Verify the working tree is still clean**

@@ -43,7 +43,7 @@ engineStrict: true
 # not against whichever Node 24 patch happens to be running the command. Without
 # this, a developer on a newer patch could install a dependency whose engines
 # range excludes the version CI and production actually run.
-nodeVersion: 24.18.0
+nodeVersion: 24.21.0
 
 # The lockfile is authoritative. CI additionally installs with --frozen-lockfile.
 preferFrozenLockfile: true

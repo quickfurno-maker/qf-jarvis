@@ -108,7 +108,7 @@ jobs:
         with:
           # Pinned exactly, and identical to .nvmrc, .node-version, and the
           # engines.node constraint in package.json.
-          node-version: 24.18.0
+          node-version: 24.21.0
           cache: pnpm
 
       # --frozen-lockfile makes the lockfile authoritative: if package.json and
