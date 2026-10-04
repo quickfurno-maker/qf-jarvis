@@ -5,6 +5,13 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish/sign this exact source SHA to GHCR without deployment"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -161,7 +168,7 @@ jobs:
 
   publish:
     name: Publish and sign exact Jarvis digests
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish == true)
     needs: certify
     runs-on: ubuntu-latest
     timeout-minutes: 35
