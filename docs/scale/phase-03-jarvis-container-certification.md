@@ -6,15 +6,15 @@ Baseline source SHA: `7101b3c7cae2cfe384c416ad870cc1dbe4458253`
 
 ## Runtime role map
 
-| Role | Production state | Container boundary | Phase 03 classification |
-| --- | --- | --- | --- |
-| Jarvis OS | active | `deploy/jarvis-os` | certified hardened runtime |
-| QuickFurno ↔ Jarvis gateway | active | `deploy/quickfurno-gateway` | certified hardened runtime |
-| WhatsApp / Riya / Anisha governed worker | active | `deploy/quickfurno-worker` | certified hardened SINGLE_OWNER runtime |
-| Aarohi Phase 2 acquisition worker | disabled / providers off | shared worker image + `deploy/aarohi-phase2` command | container-ready, not activated |
-| Proactive worker | dormant library/app only | none in production | not a current production runtime |
-| Temporal worker | not deployed | none in production | container gate required before activation |
-| LiveKit voice agent | optional separate feature | `deploy/livekit-voice-agent` | outside current marketplace text-runtime activation |
+| Role                                     | Production state          | Container boundary                                   | Phase 03 classification                             |
+| ---------------------------------------- | ------------------------- | ---------------------------------------------------- | --------------------------------------------------- |
+| Jarvis OS                                | active                    | `deploy/jarvis-os`                                   | certified hardened runtime                          |
+| QuickFurno ↔ Jarvis gateway              | active                    | `deploy/quickfurno-gateway`                          | certified hardened runtime                          |
+| WhatsApp / Riya / Anisha governed worker | active                    | `deploy/quickfurno-worker`                           | certified hardened SINGLE_OWNER runtime             |
+| Aarohi Phase 2 acquisition worker        | disabled / providers off  | shared worker image + `deploy/aarohi-phase2` command | container-ready, not activated                      |
+| Proactive worker                         | dormant library/app only  | none in production                                   | not a current production runtime                    |
+| Temporal worker                          | not deployed              | none in production                                   | container gate required before activation           |
+| LiveKit voice agent                      | optional separate feature | `deploy/livekit-voice-agent`                         | outside current marketplace text-runtime activation |
 
 ## Authority boundary
 
