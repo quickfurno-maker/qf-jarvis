@@ -70,6 +70,10 @@ jobs:
           if [[ "${EVENT_NAME}" == "push" && "${REF_NAME}" == "main" ]]; then
             PUBLISH=true
           elif [[ "${EVENT_NAME}" == "workflow_dispatch" && "${MANUAL_PUBLISH}" == "true" ]]; then
+            if [[ "${REF_NAME}" != "main" ]]; then
+              echo "REFUSED: manual publish is allowed only from main" >&2
+              exit 64
+            fi
             PUBLISH=true
           fi
           echo "publish=${PUBLISH}" >> "$GITHUB_OUTPUT"
@@ -288,6 +292,17 @@ jobs:
           cosign sign --yes "${GATEWAY_REF}"
           cosign sign --yes "${WORKER_REF}"
 
+      - name: Attest CycloneDX SBOMs
+        env:
+          OS_REF: ${{ steps.push.outputs.os_ref }}
+          GATEWAY_REF: ${{ steps.push.outputs.gateway_ref }}
+          WORKER_REF: ${{ steps.push.outputs.worker_ref }}
+        run: |
+          set -euo pipefail
+          cosign attest --yes --type cyclonedx --predicate qfj-os-sbom.cdx.json "${OS_REF}"
+          cosign attest --yes --type cyclonedx --predicate qfj-gateway-sbom.cdx.json "${GATEWAY_REF}"
+          cosign attest --yes --type cyclonedx --predicate qfj-worker-sbom.cdx.json "${WORKER_REF}"
+
       - name: Attest Jarvis OS provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
@@ -322,6 +337,11 @@ jobs:
               --certificate-identity="${IDENTITY}" \
               --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
               "${image_ref}" >/dev/null
+            cosign verify-attestation \
+              --type cyclonedx \
+              --certificate-identity="${IDENTITY}" \
+              --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+              "${image_ref}" >/dev/null
           done
 
       - name: Record release metadata
@@ -335,12 +355,18 @@ jobs:
           WORKER_DIGEST: ${{ steps.push.outputs.worker_digest }}
         run: |
           set -euo pipefail
+          OS_SBOM_SHA256="$(sha256sum qfj-os-sbom.cdx.json | awk '{print $1}')"
+          GATEWAY_SBOM_SHA256="$(sha256sum qfj-gateway-sbom.cdx.json | awk '{print $1}')"
+          WORKER_SBOM_SHA256="$(sha256sum qfj-worker-sbom.cdx.json | awk '{print $1}')"
           jq -n \
             --arg source_sha "${SOURCE_SHA}" \
             --arg os_ref "${OS_IMAGE}@${OS_DIGEST}" \
             --arg gateway_ref "${GATEWAY_IMAGE}@${GATEWAY_DIGEST}" \
             --arg worker_ref "${WORKER_IMAGE}@${WORKER_DIGEST}" \
-            '{source_sha:$source_sha,os_ref:$os_ref,gateway_ref:$gateway_ref,worker_ref:$worker_ref}' \
+            --arg os_sbom_sha256 "${OS_SBOM_SHA256}" \
+            --arg gateway_sbom_sha256 "${GATEWAY_SBOM_SHA256}" \
+            --arg worker_sbom_sha256 "${WORKER_SBOM_SHA256}" \
+            '{source_sha:$source_sha,os_ref:$os_ref,gateway_ref:$gateway_ref,worker_ref:$worker_ref,os_sbom_sha256:$os_sbom_sha256,gateway_sbom_sha256:$gateway_sbom_sha256,worker_sbom_sha256:$worker_sbom_sha256}' \
             > qfj-release-metadata.json
 
       - name: Upload release metadata
