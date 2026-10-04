@@ -56,38 +56,50 @@ jobs:
           docker image inspect "qfj-gateway-candidate:$SOURCE_SHA" --format '{{.Id}}' > gateway-image-id.txt
           docker image inspect "qfj-worker-candidate:$SOURCE_SHA" --format '{{.Id}}' > worker-image-id.txt
 
-      - name: Scan Jarvis OS image
+      - name: Produce Jarvis OS HIGH/CRITICAL vulnerability report
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: qfj-os-candidate:${{ steps.source.outputs.sha }}
           scan-type: image
+          scanners: vuln
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: '1'
-          format: table
-          output: trivy-os.txt
+          exit-code: '0'
+          format: json
+          output: trivy-os.json
 
-      - name: Scan gateway image
+      - name: Enforce Jarvis OS vulnerability policy
+        run: node scripts/scale/enforce-trivy-report.mjs trivy-os.json
+
+      - name: Produce gateway HIGH/CRITICAL vulnerability report
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: qfj-gateway-candidate:${{ steps.source.outputs.sha }}
           scan-type: image
+          scanners: vuln
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: '1'
-          format: table
-          output: trivy-gateway.txt
+          exit-code: '0'
+          format: json
+          output: trivy-gateway.json
 
-      - name: Scan worker image
+      - name: Enforce gateway vulnerability policy
+        run: node scripts/scale/enforce-trivy-report.mjs trivy-gateway.json
+
+      - name: Produce worker HIGH/CRITICAL vulnerability report
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: qfj-worker-candidate:${{ steps.source.outputs.sha }}
           scan-type: image
+          scanners: vuln
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: '1'
-          format: table
-          output: trivy-worker.txt
+          exit-code: '0'
+          format: json
+          output: trivy-worker.json
+
+      - name: Enforce worker vulnerability policy
+        run: node scripts/scale/enforce-trivy-report.mjs trivy-worker.json
 
       - name: Generate Jarvis OS SPDX SBOM
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
@@ -137,9 +149,9 @@ jobs:
             jarvis-os-sbom.spdx.json
             jarvis-gateway-sbom.spdx.json
             jarvis-worker-sbom.spdx.json
-            trivy-os.txt
-            trivy-gateway.txt
-            trivy-worker.txt
+            trivy-os.json
+            trivy-gateway.json
+            trivy-worker.json
             os-image-id.txt
             gateway-image-id.txt
             worker-image-id.txt
