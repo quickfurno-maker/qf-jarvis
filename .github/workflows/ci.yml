@@ -115,6 +115,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # SCALE-P03 — static, offline deployment contract. No secrets, no providers.
+      - name: Jarvis container contract
+        run: pnpm run test:scale:container
+
       # The migration CLI runs from `dist/`, so the workspace must be built before it
       # can be invoked. This step also proves the CLI itself works — `pnpm check` would
       # exercise the migration *runner* through the tests, but not the executable that
@@ -163,3 +167,34 @@ jobs:
             exit 1
           fi
           echo "Working tree is clean."
+
+  # SCALE-P03 — build the exact reviewed OCI artifacts. This job has no secrets
+  # and activates no provider/runtime; the Aarohi role is executed only with an
+  # enabled:false synthetic config to prove safe containment.
+  container-certification:
+    name: Container certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact reviewed head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Verify exact checked-out SHA
+        shell: bash
+        run: |
+          EXPECTED_SHA="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          echo "Expected SHA: $EXPECTED_SHA"
+          echo "Actual SHA:   $ACTUAL_SHA"
+          test "$ACTUAL_SHA" = "$EXPECTED_SHA"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.18.0
+
+      - name: Run exact-head Jarvis container certification
+        run: node scripts/scale/certify-container-images.mjs
