@@ -157,6 +157,8 @@ describe('db:migrate runs the preflight automatically', () => {
       15,
       // Client-OS v2: bounded client lifetime projection. LOCAL/CI only.
       16,
+      // Phase 05: PostgreSQL-backed QuickFurno durable turn spool. LOCAL/CI only.
+      17,
     ]);
   });
 
