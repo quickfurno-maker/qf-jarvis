@@ -161,6 +161,7 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
       '0014_conversation_prospect_party_type.sql',
       '0015_correlation_timeline_projection.sql',
       '0016_client_lifetime_projection.sql',
+      '0017_quickfurno_durable_turn_spool.sql',
     ]);
     // RWC-P8 (ADR-0104) added 0012; QFJ-P09 D5 (ADR-0142) added 0013; the JF-4B/C/D owner correction
     // (ADR-0150 §34) adds 0014, the party CHECK widened to hold PROSPECT. One authorized addition each.

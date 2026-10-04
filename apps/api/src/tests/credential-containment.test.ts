@@ -1140,6 +1140,8 @@ describe('(78, 79, 80, 81) repository invariants', () => {
         '31517791c0e8f382f6dff1d0d25f01d8244cc0fabb06c27694246cd1905ba952',
       '0016_client_lifetime_projection.sql':
         'e389afa44ef080e3808845ee8900463f94e130448e4beed3d5dbcd243440539e',
+      '0017_quickfurno_durable_turn_spool.sql':
+        'fb14e55292eaac4682c2b6f431e718d33aefbe1f7dfa6c7f78be9bf36b4bcb09',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -1156,7 +1158,7 @@ describe('(78, 79, 80, 81) repository invariants', () => {
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((name) => name.startsWith('0017'))).toBe(false);
+    expect(sql.some((name) => name.startsWith('0018'))).toBe(false);
   });
 
   it('(80) no source references the protected reconciliation directory', () => {
