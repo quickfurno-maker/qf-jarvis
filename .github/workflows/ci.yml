@@ -112,6 +112,21 @@ jobs:
       # --frozen-lockfile makes the lockfile authoritative: if package.json and
       # pnpm-lock.yaml disagree, the install fails rather than silently resolving
       # something new. CI installs what was reviewed, or it installs nothing.
+      - name: Validate scale container contract
+        run: node scripts/scale/validate-container-contract.mjs
+
+      - name: Render production container definitions
+        shell: bash
+        env:
+          JOS_IMAGE_TAG: ${{ github.sha }}
+          QFJ_GATEWAY_IMAGE_TAG: ${{ github.sha }}
+          QFJ_WORKER_IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker compose -f deploy/jarvis-os/compose.production.yml config --quiet
+          docker compose -f deploy/quickfurno-gateway/compose.production.yml config --quiet
+          docker compose -f deploy/quickfurno-worker/compose.production.yml config --quiet
+          docker compose -f deploy/aarohi-phase2/compose.production.yml --profile aarohi-phase2 config --quiet
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -163,3 +178,105 @@ jobs:
             exit 1
           fi
           echo "Working tree is clean."
+
+  container-certification:
+    name: Container certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Build exact-SHA Jarvis OS image
+        run: |
+          docker build \
+            --build-arg GIT_SHA="${GITHUB_SHA}" \
+            -f deploy/jarvis-os/Dockerfile \
+            -t "qf-jarvis-os:${GITHUB_SHA}" \
+            .
+
+      - name: Build exact-SHA gateway image
+        run: |
+          docker build \
+            --build-arg GIT_SHA="${GITHUB_SHA}" \
+            -f deploy/quickfurno-gateway/Dockerfile \
+            -t "qf-jarvis-gateway:${GITHUB_SHA}" \
+            .
+
+      - name: Build exact-SHA worker image
+        run: |
+          docker build \
+            --build-arg GIT_SHA="${GITHUB_SHA}" \
+            -f deploy/quickfurno-worker/Dockerfile \
+            -t "qf-jarvis-whatsapp-worker:${GITHUB_SHA}" \
+            .
+
+      - name: Verify image identity and runtime users
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify_image() {
+            local image="$1"
+            local user="$2"
+            local revision
+            local actual_user
+            revision="$(docker image inspect "$image" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+            actual_user="$(docker image inspect "$image" --format '{{ .Config.User }}')"
+            test "$revision" = "$GITHUB_SHA"
+            test "$actual_user" = "$user"
+          }
+          verify_image "qf-jarvis-os:${GITHUB_SHA}" "10001:10001"
+          verify_image "qf-jarvis-gateway:${GITHUB_SHA}" "10002:10002"
+          verify_image "qf-jarvis-whatsapp-worker:${GITHUB_SHA}" "10003:10002"
+
+      - name: Verify runtime toolchain stripped
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in \
+            "qf-jarvis-os:${GITHUB_SHA}" \
+            "qf-jarvis-gateway:${GITHUB_SHA}" \
+            "qf-jarvis-whatsapp-worker:${GITHUB_SHA}"
+          do
+            docker run --rm --entrypoint sh "$image" -c \
+              'test ! -e /usr/local/bin/npm && test ! -e /usr/local/bin/npx && test ! -e /usr/local/bin/corepack'
+          done
+
+      - name: Smoke disabled Aarohi role from certified worker image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-aarohi
+          cat > .ci-aarohi/config.json <<JSON
+          {
+            "revision": "${GITHUB_SHA}",
+            "enabled": false,
+            "workerRef": "aarohi.phase2.ci",
+            "pollMs": 5000,
+            "core": {
+              "baseUrl": "https://quickfurno.invalid/",
+              "keyId": "ci-only",
+              "privateKeyFile": "/run/secrets/quickfurno-signing.key",
+              "timeoutMs": 5000
+            },
+            "providers": []
+          }
+          JSON
+          output="$(
+            docker run --rm \
+              --read-only \
+              --tmpfs /tmp:rw,noexec,nosuid,nodev,size=32m \
+              --cap-drop ALL \
+              --security-opt no-new-privileges \
+              --pids-limit 128 \
+              --memory 512m \
+              --cpus 0.5 \
+              -v "$PWD/.ci-aarohi/config.json:/run/secrets/aarohi-phase2-worker.json:ro" \
+              --entrypoint node \
+              "qf-jarvis-whatsapp-worker:${GITHUB_SHA}" \
+              apps/api/dist/bin/run-aarohi-phase2-worker.js \
+              --config /run/secrets/aarohi-phase2-worker.json
+          )"
+          test "$output" = "qfj-aarohi-phase2-worker DISABLED"
+          rm -rf .ci-aarohi
