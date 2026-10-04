@@ -1,0 +1,3 @@
+services:
+  quickfurno-gateway:
+    image: '${QFJ_GATEWAY_IMAGE_REF:?QFJ_GATEWAY_IMAGE_REF must be an immutable OCI digest reference}'

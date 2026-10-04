@@ -1,0 +1,3 @@
+services:
+  quickfurno-worker:
+    image: '${QFJ_WORKER_IMAGE_REF:?QFJ_WORKER_IMAGE_REF must be an immutable OCI digest reference}'

@@ -1,0 +1,3 @@
+services:
+  jarvis-os:
+    image: '${JOS_IMAGE_REF:?JOS_IMAGE_REF must be an immutable OCI digest reference}'
