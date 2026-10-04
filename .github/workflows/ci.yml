@@ -64,9 +64,22 @@ jobs:
           --health-timeout 5s
           --health-retries 20
 
+      valkey:
+        # Phase 06 coordination is explicitly ephemeral and provider-neutral.
+        # The digest is the same one used by local/production coordination manifests.
+        image: valkey/valkey@sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
     env:
       # The integration tests and the migration CLI both read this. Loopback, CI-only.
       DATABASE_URL: postgresql://qf_jarvis_ci:qf_jarvis_ci_only@127.0.0.1:5432/qf_jarvis_test
+      QFJ_COORDINATION_REDIS_URL: redis://127.0.0.1:6379
 
     steps:
       # Actions are pinned to immutable commit SHAs, not to mutable tags. A tag
@@ -126,8 +139,11 @@ jobs:
           QFJ_WORKER_IMAGE_TAG: ${{ github.sha }}
         run: |
           docker compose -f deploy/jarvis-os/compose.production.yml config --quiet
+          docker compose -f deploy/coordination/compose.production.yml config --quiet
           docker compose -f deploy/quickfurno-gateway/compose.production.yml config --quiet
+          docker compose -f deploy/quickfurno-gateway/compose.production.yml -f deploy/quickfurno-gateway/compose.coordination.yml config --quiet
           docker compose -f deploy/quickfurno-worker/compose.production.yml config --quiet
+          docker compose -f deploy/quickfurno-worker/compose.production.yml -f deploy/quickfurno-worker/compose.coordination.yml config --quiet
           docker compose -f deploy/aarohi-phase2/compose.production.yml --profile aarohi-phase2 config --quiet
 
       - name: Install dependencies

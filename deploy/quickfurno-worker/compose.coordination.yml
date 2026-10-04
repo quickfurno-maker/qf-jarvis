@@ -1,0 +1,12 @@
+services:
+  quickfurno-worker:
+    environment:
+      QFJ_COORDINATION_REDIS_URL: redis://qf-jarvis-valkey:6379
+    networks:
+      - worker
+      - coordination
+
+networks:
+  coordination:
+    external: true
+    name: qf-jarvis-coordination

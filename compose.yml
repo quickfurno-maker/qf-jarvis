@@ -1,9 +1,9 @@
-# QF Jarvis — LOCAL DEVELOPMENT DATABASE ONLY.
+# QF Jarvis — LOCAL DEVELOPMENT DEPENDENCIES ONLY.
 #
 # THIS IS NOT PRODUCTION CONFIGURATION, AND IT MUST NEVER BECOME PRODUCTION
 # CONFIGURATION. There is no application container here, no reverse proxy, no TLS, no
-# backup, no resource limit, and no secret management. It exists so that a developer can
-# run `pnpm check` on a laptop, and for nothing else (ADR-0019 §6).
+# backup, and no secret management. It provides local PostgreSQL plus ephemeral Valkey
+# so a developer can run the repository quality/certification gates on a laptop.
 #
 # It is also NOT QuickFurno's database. QF Jarvis owns its own PostgreSQL instance, its
 # own credentials, and its own blast radius. A QuickFurno Core Supabase credential must
@@ -70,6 +70,30 @@ services:
 
     # Appropriate for a laptop: comes back after a reboot, but never fights a developer
     # who deliberately stopped it.
+    restart: unless-stopped
+
+  valkey:
+    # Phase 06 local/CI-compatible ephemeral coordination. It is intentionally
+    # non-persistent: PostgreSQL remains the durable authority.
+    image: valkey/valkey@sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507
+    container_name: qf-jarvis-valkey-dev
+    command:
+      - valkey-server
+      - --save
+      - ''
+      - --appendonly
+      - 'no'
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - volatile-ttl
+    ports:
+      - '127.0.0.1:56379:6379'
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
     restart: unless-stopped
 
 volumes:

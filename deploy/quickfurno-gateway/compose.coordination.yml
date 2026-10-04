@@ -1,0 +1,12 @@
+services:
+  quickfurno-gateway:
+    environment:
+      QFJ_COORDINATION_REDIS_URL: redis://qf-jarvis-valkey:6379
+    networks:
+      - gateway
+      - coordination
+
+networks:
+  coordination:
+    external: true
+    name: qf-jarvis-coordination
