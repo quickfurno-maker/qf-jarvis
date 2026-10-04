@@ -1,0 +1,69 @@
+name: qf-jarvis-aarohi-phase2
+
+services:
+  aarohi-phase2:
+    # Phase 03 deliberately reuses the exact certified API-worker image lineage.
+    # The WhatsApp production worker remains the default command; this role
+    # overrides only the executable/config path and does not gain Core authority.
+    image: 'qf-jarvis-whatsapp-worker:${QFJ_AAROHI_PHASE2_IMAGE_TAG:?QFJ_AAROHI_PHASE2_IMAGE_TAG must be the exact merged git SHA}'
+    container_name: qf-jarvis-aarohi-phase2
+
+    # A disabled config exits 0 and must remain stopped. Enabled worker crashes
+    # may restart a bounded number of times, after which operator attention wins
+    # over an unbounded restart loop.
+    restart: 'on-failure:5'
+    init: true
+
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    user: '10003:10002'
+
+    environment:
+      NODE_ENV: production
+
+    # Dedicated role-only secret directory. The worker config refers only to
+    # absolute files inside this mount. Do not mount the generic Jarvis secret
+    # directory or Docker socket into this role.
+    volumes:
+      - type: bind
+        source: /srv/qf-jarvis/secrets/aarohi-phase2
+        target: /run/secrets/aarohi-phase2
+        read_only: true
+
+    command:
+      - node
+      - apps/api/dist/bin/run-aarohi-phase2-worker.js
+      - --config
+      - /run/secrets/aarohi-phase2/worker.json
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512m
+          pids: 128
+        reservations:
+          memory: 128m
+
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+
+    networks:
+      - aarohi-phase2
+
+    labels:
+      traefik.enable: 'false'
+
+networks:
+  aarohi-phase2:
+    name: qf-jarvis-aarohi-phase2_private
+    driver: bridge
