@@ -37,8 +37,8 @@ USER 10003:10002
 CMD ["node", "apps/api/dist/bin/run-quickfurno-whatsapp-production-worker.js", "--config", "/run/secrets/qf-jarvis-whatsapp-worker.json"]
 
 ARG GIT_SHA=unknown
-LABEL org.opencontainers.image.title="qf-jarvis-quickfurno-worker" \
-      org.opencontainers.image.description="Private evidence-gated QuickFurno WhatsApp worker with governed Groq or OpenAI Luna/Sol inference" \
+LABEL org.opencontainers.image.title="qf-jarvis-quickfurno-api-worker" \
+      org.opencontainers.image.description="Private governed QuickFurno/Jarvis API-worker runtime; WhatsApp is the default command and bounded specialist roles may override it" \
       org.opencontainers.image.source="https://github.com/quickfurno-maker/qf-jarvis" \
       org.opencontainers.image.revision="${GIT_SHA}" \
       org.opencontainers.image.licenses="UNLICENSED"
