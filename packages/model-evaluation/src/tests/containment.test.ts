@@ -94,6 +94,10 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     'e389afa44ef080e3808845ee8900463f94e130448e4beed3d5dbcd243440539e',
   '0017_quickfurno_durable_turn_spool.sql':
     'fb14e55292eaac4682c2b6f431e718d33aefbe1f7dfa6c7f78be9bf36b4bcb09',
+  // SCALE-P09: reviewed lifecycle migration. Canonical event deletion remains absent;
+  // only bounded maintenance pruning of terminal opaque turn-spool rows is introduced.
+  '0018_scale_phase09_data_lifecycle.sql':
+    '1170c1b6b126871108b6a5a7326dcf2619fe3eadd2400c85a8580966a555dc74',
 };
 
 function recorder(): { hook: EvaluationObservabilityHook; events: EvaluationEvent[] } {
@@ -367,7 +371,7 @@ describe('containment', () => {
     expect(b['buildFoundationSuite']).toBeUndefined();
   });
 
-  it('(58,59) migrations 0001–0014 are byte-exact and there is no 0018', () => {
+  it('(58,59) reviewed migrations through SCALE-P09 0018 are byte-exact', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -380,15 +384,14 @@ describe('containment', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
-    // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
-    // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((n) => n.startsWith('0018'))).toBe(false);
+    // SCALE-P09 authorizes exactly 0018; exact-set equality and byte hashes above continue
+    // to reject every unreviewed migration after it.
+    expect(sql.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
   });
 
-  it('(60) the event-backbone public-api lock remains 38', () => {
+  it('(60) the event-backbone public-api lock includes the reviewed SCALE-P09 surface', () => {
     expect(readRepo('packages/event-backbone/src/tests/public-api.test.ts')).toContain(
-      'toHaveLength(38)',
+      'toHaveLength(47)',
     );
   });
 
