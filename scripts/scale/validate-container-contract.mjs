@@ -113,8 +113,8 @@ add(
 );
 add(
   'CI certifies the actual PR source head, not the synthetic merge SHA',
-  ciWorkflow.includes("QFJ_CERT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}") &&
-    ciWorkflow.includes("ref: ${{ github.event.pull_request.head.sha || github.sha }}") &&
+  ciWorkflow.includes('QFJ_CERT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}') &&
+    ciWorkflow.includes('ref: ${{ github.event.pull_request.head.sha || github.sha }}') &&
     !ciWorkflow.includes('GIT_SHA="${GITHUB_SHA}"'),
 );
 
