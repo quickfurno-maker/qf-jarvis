@@ -32,7 +32,7 @@ const checks = [
   ["private roles expose no host ports", [josCompose, gatewayCompose, workerCompose, aarohiCompose].every((value) => !/^\s*ports:/mu.test(value))],
   ["private roles stay outside Traefik until explicit ingress overlay", allCompose.every((value) => value.includes("traefik.enable: 'false'"))],
   ["no privileged container", allCompose.every((value) => !/\bprivileged\s*:\s*true\b/u.test(value))],
-  ["no host network", allCompose.every((value) => !/network_mode\s*:\s*['\"]?host/u.test(value))],
+  ["no host network", allCompose.every((value) => !/network_mode\s*:\s*["\']?host/u.test(value))],
   ["no Docker socket mount", allCompose.every((value) => !value.includes("/var/run/docker.sock"))],
   ["gateway durable spool remains explicit writable state", gatewayCompose.includes("/var/lib/qfj-turns") && gatewayCompose.includes("read_only: false")],
   ["WhatsApp worker durable spool remains explicit writable state", workerCompose.includes("/var/lib/qfj-turns") && workerCompose.includes("read_only: false")],
