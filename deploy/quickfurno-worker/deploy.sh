@@ -18,7 +18,6 @@ CA='/srv/qf-jarvis/secrets/postgres-ca.pem'
 PROVIDER_MODE="${QFJ_WORKER_PROVIDER_MODE:-GROQ_ONLY}"
 KNOWLEDGE_MODE="${QFJ_WORKER_KNOWLEDGE_MODE:-DISABLED}"
 JEV_MODE="${QFJ_WORKER_JEV_MODE:-DISABLED}"
-SPOOL='/srv/qf-jarvis/state/quickfurno-gateway-turns'
 CONTROL='/srv/qf-jarvis/state/quickfurno-worker-control'
 OBSERVABILITY='/srv/qf-jarvis/state/observability'
 DISABLE="$CONTROL/DISABLE_MODEL"
@@ -37,7 +36,9 @@ die() { echo "FATAL: $1" >&2; exit 1; }
 [[ "$JEV_MODE" == "DISABLED" || "$JEV_MODE" == "SHADOW" ]] ||
   die "QFJ_WORKER_JEV_MODE must be DISABLED or SHADOW."
 
-required_files=("$CONFIG" "$SIGNING")
+# PostgreSQL is the durable production turn store for every provider mode.
+# The CA is therefore required even when knowledge/RAG is disabled.
+required_files=("$CONFIG" "$SIGNING" "$CA")
 if [[ "$PROVIDER_MODE" == "OPENAI_LUNA_SOL" ]]; then
   required_files+=("$OPENAI" "$OPENAI_SEAL")
 else
@@ -47,26 +48,18 @@ if [[ "$JEV_MODE" == "SHADOW" ]]; then
   required_files+=("$JEV")
 fi
 if [[ "$KNOWLEDGE_MODE" == "HYBRID" ]]; then
-  required_files+=("$EMBEDDING" "$CA")
+  required_files+=("$EMBEDDING")
 fi
 
 for file in "${required_files[@]}"; do
   [[ -f "$file" && ! -L "$file" ]] || die "$file must be a regular non-symlink file."
 done
-[[ -d "$SPOOL" && ! -L "$SPOOL" ]] || die "$SPOOL must be the gateway's real spool directory."
 [[ -d "$CONTROL" && ! -L "$CONTROL" ]] || die "$CONTROL must be a real directory."
 [[ -d "$OBSERVABILITY" && ! -L "$OBSERVABILITY" ]] || die "$OBSERVABILITY must be a real directory."
 
-# The gateway (uid 10002) produces durable records and the worker (uid 10003) consumes them through
-# their dedicated shared gid 10002. Repair legacy 0700/0600 spool artifacts before the unprivileged
-# worker starts; otherwise an older gateway-created queue can be mounted successfully but remain
-# unreadable to the worker.
-for spool_dir in pending processing completed failed; do
-  mkdir -p "$SPOOL/$spool_dir"
-  chown 10002:10002 "$SPOOL/$spool_dir"
-  chmod 0770 "$SPOOL/$spool_dir"
-  find "$SPOOL/$spool_dir" -maxdepth 1 -type f -name '*.json' -exec chgrp 10002 {} + -exec chmod 0660 {} +
-done
+# Durable turn ownership lives in PostgreSQL. No application-host spool directory is
+# created, repaired, mounted or permissioned here. The control and observability paths
+# below are operational surfaces only; neither is business truth.
 
 # Every mounted secret/evidence file is privately readable by the worker uid. Knowledge-only files are
 # checked and mounted only when HYBRID is explicitly requested.
@@ -78,15 +71,6 @@ for file in "${required_files[@]}"; do
   [[ "$owner" == "10003:10002" ]] ||
     die "$file owner is $owner; expected 10003:10002."
 done
-
-# Gateway is uid/gid 10002. Worker is uid 10003 in the SAME gid, so the durable queue has one shared
-# group rather than world-writable permissions.
-spool_group="$(stat -c '%g' "$SPOOL")"
-[[ "$spool_group" == "10002" ]] || die "$SPOOL gid is $spool_group; expected 10002."
-spool_mode="$(stat -c '%a' "$SPOOL")"
-group_digit="${spool_mode: -2:1}"
-[[ "$group_digit" == "7" ]] ||
-  die "$SPOOL mode $spool_mode does not grant the shared group read/write/traverse."
 
 obs_group="$(stat -c '%g' "$OBSERVABILITY")"
 [[ "$obs_group" == "10002" ]] || die "$OBSERVABILITY gid is $obs_group; expected 10002."
@@ -155,8 +139,8 @@ prove "capabilities added" "[]"   "$(docker inspect qf-jarvis-whatsapp-worker --
 prove "no-new-privileges" "true"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .HostConfig.SecurityOpt}}{{if eq . "no-new-privileges:true"}}true{{end}}{{end}}')"
 prove "published host ports" ""   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range $p, $conf := .NetworkSettings.Ports}}{{range $conf}}{{.HostPort}} {{end}}{{end}}')"
 prove "traefik disabled" "false"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{ index .Config.Labels "traefik.enable" }}')"
-prove "gateway spool source" "$SPOOL"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/lib/qfj-turns"}}{{.Source}}{{end}}{{end}}')"
-prove "spool writable" "true"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/lib/qfj-turns"}}{{.RW}}{{end}}{{end}}')"
+prove "legacy turn spool absent" ""   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/lib/qfj-turns"}}{{.Source}}{{end}}{{end}}')"
+prove "postgres CA source" "$CA"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/postgres-ca.pem"}}{{.Source}}{{end}}{{end}}')"
 prove "observation source" "$OBSERVABILITY"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/run/qfj-observability"}}{{.Source}}{{end}}{{end}}')"
 prove "observation writable" "true"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/run/qfj-observability"}}{{.RW}}{{end}}{{end}}')"
 prove "kill switch visible" "true"   "$(docker exec qf-jarvis-whatsapp-worker node -e "const fs=require('node:fs');console.log(fs.existsSync('/var/run/qfj-control/DISABLE_MODEL'))")"

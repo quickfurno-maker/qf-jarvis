@@ -437,6 +437,7 @@ describe('the managed provider’s roles are revoked — and re-revoked on every
       '0014_conversation_prospect_party_type.sql',
       '0015_correlation_timeline_projection.sql',
       '0016_client_lifetime_projection.sql',
+      '0017_quickfurno_durable_turn_spool.sql',
     ]);
     expect(await tableExists('event')).toBe(true);
   });

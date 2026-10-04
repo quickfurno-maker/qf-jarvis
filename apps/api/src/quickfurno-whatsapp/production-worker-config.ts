@@ -74,6 +74,11 @@ const databaseSchema = z
   })
   .strict();
 
+const turnStoreSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('FILE'), directory: absolutePath }).strict(),
+  z.object({ mode: z.literal('POSTGRES') }).strict(),
+]);
+
 const concurrencySchema = z
   .object({
     globalMaxConcurrentTurns: z.number().int().min(1).max(200),
@@ -191,7 +196,10 @@ const schema = z
     knowledge: knowledgeSchema,
     decisionIntelligence: decisionIntelligenceSchema.default({ mode: 'DISABLED' }),
     concurrency: concurrencySchema,
-    spoolDirectory: absolutePath,
+    // spoolDirectory is the legacy SINGLE_OWNER file-spool field. New deployments
+    // use turnStore; keeping this optional preserves existing config compatibility.
+    spoolDirectory: absolutePath.optional(),
+    turnStore: turnStoreSchema.optional(),
     killSwitchFile: absolutePath,
     operationalSnapshotFile: absolutePath,
     agentFlowTraceSnapshotFile: absolutePath.optional(),
@@ -232,18 +240,33 @@ const schema = z
         message: 'OpenAI Luna/Sol requires at least two concurrent and two queued model slots',
       });
     }
-    if (value.knowledge.mode === 'HYBRID' && value.database === undefined) {
+    if (value.turnStore === undefined && value.spoolDirectory === undefined) {
       ctx.addIssue({
         code: 'custom',
-        path: ['database'],
-        message: 'hybrid knowledge needs database',
+        path: ['turnStore'],
+        message: 'a durable turn store is required',
       });
     }
-    if (value.knowledge.mode === 'DISABLED' && value.database !== undefined) {
+    if (value.turnStore !== undefined && value.spoolDirectory !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['turnStore'],
+        message: 'legacy spoolDirectory and turnStore cannot be mixed',
+      });
+    }
+    const needsDatabase = value.knowledge.mode === 'HYBRID' || value.turnStore?.mode === 'POSTGRES';
+    if (needsDatabase && value.database === undefined) {
       ctx.addIssue({
         code: 'custom',
         path: ['database'],
-        message: 'disabled knowledge must not carry database configuration',
+        message: 'selected runtime capabilities need database configuration',
+      });
+    }
+    if (!needsDatabase && value.database !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['database'],
+        message: 'database configuration has no enabled consumer',
       });
     }
   });
@@ -310,7 +333,8 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
     maxConcurrentByAgent: Readonly<Record<'RIYA' | 'ANISHA' | 'AAROHI', number>>;
     modelGateway: Readonly<{ maxConcurrent: number; maxQueue: number }>;
   }>;
-  readonly spoolDirectory: string;
+  readonly turnStore:
+    Readonly<{ mode: 'FILE'; directory: string }> | Readonly<{ mode: 'POSTGRES' }>;
   readonly killSwitchFile: string;
   readonly operationalSnapshotFile: string;
   readonly agentFlowTraceSnapshotFile?: string;
@@ -355,16 +379,20 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
     throw new Error('production-worker-config-invalid');
   }
 
-  let database: DatabaseConfig | undefined;
-  let knowledge: QuickFurnoWhatsAppProductionWorkerConfig['knowledge'];
-  if (input.knowledge.mode === 'DISABLED') {
-    knowledge = Object.freeze({ mode: 'DISABLED' as const });
+  let turnStore: QuickFurnoWhatsAppProductionWorkerConfig['turnStore'];
+  if (input.turnStore === undefined) {
+    if (input.spoolDirectory === undefined) throw new Error('production-worker-config-invalid');
+    turnStore = Object.freeze({ mode: 'FILE' as const, directory: input.spoolDirectory });
+  } else if (input.turnStore.mode === 'POSTGRES') {
+    turnStore = Object.freeze({ mode: 'POSTGRES' as const });
   } else {
-    if (input.database === undefined) throw new Error('production-worker-config-invalid');
+    turnStore = Object.freeze({ mode: 'FILE' as const, directory: input.turnStore.directory });
+  }
 
-    let tls: DatabaseConfigInput['tls'];
+  let database: DatabaseConfig | undefined;
+  if (input.database !== undefined) {
     try {
-      tls = {
+      const tls: DatabaseConfigInput['tls'] = {
         mode: 'verify-full',
         caCertificatePem: boundedFile(input.database.tls.caFile, MAX_CA_BYTES).toString('utf8'),
       };
@@ -388,7 +416,13 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
     } catch {
       throw new Error('production-worker-config-invalid');
     }
+  }
 
+  let knowledge: QuickFurnoWhatsAppProductionWorkerConfig['knowledge'];
+  if (input.knowledge.mode === 'DISABLED') {
+    knowledge = Object.freeze({ mode: 'DISABLED' as const });
+  } else {
+    if (database === undefined) throw new Error('production-worker-config-invalid');
     let bearerToken: string | undefined;
     try {
       bearerToken =
@@ -490,7 +524,7 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
       maxConcurrentByAgent: Object.freeze({ ...input.concurrency.maxConcurrentByAgent }),
       modelGateway: Object.freeze({ ...input.concurrency.modelGateway }),
     }),
-    spoolDirectory: input.spoolDirectory,
+    turnStore,
     killSwitchFile: input.killSwitchFile,
     operationalSnapshotFile: input.operationalSnapshotFile,
     ...(input.agentFlowTraceSnapshotFile === undefined

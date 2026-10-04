@@ -7,5 +7,10 @@
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/tests/**"]
+  "exclude": ["src/tests/**"],
+  "references": [
+    {
+      "path": "../../packages/event-backbone"
+    }
+  ]
 }

@@ -21,6 +21,11 @@ RUN find packages apps/api apps/quickfurno-gateway -type d \( -name src -o -name
  && find packages apps/api apps/quickfurno-gateway -type f \( -name '*.tsbuildinfo' -o -name '*.map' \) -delete
 
 FROM ${NODE_IMAGE} AS runtime
+
+# Refresh Debian security fixes in the final runtime before this one-time release artifact is signed.
+RUN apt-get update \
+ && apt-get upgrade -y \
+ && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 RUN groupadd --gid 10002 qfturns \
  && useradd --uid 10003 --gid 10002 --no-create-home --shell /usr/sbin/nologin worker \

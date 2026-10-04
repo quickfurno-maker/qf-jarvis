@@ -164,8 +164,8 @@ describe('RMB-A invokes nothing and measures nothing', () => {
     const migrations = readdirSync(
       join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations'),
     ).filter((name) => name.endsWith('.sql'));
-    expect(migrations).toHaveLength(16);
-    expect(migrations.some((name) => name.startsWith('0017'))).toBe(false);
+    expect(migrations).toHaveLength(17);
+    expect(migrations.some((name) => name.startsWith('0018'))).toBe(false);
   });
 
   it('uses node:crypto, and ONLY for SHA-256', () => {

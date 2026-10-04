@@ -131,6 +131,7 @@ describe('db:migrate runs the preflight automatically', () => {
       '0014_conversation_prospect_party_type.sql',
       '0015_correlation_timeline_projection.sql',
       '0016_client_lifetime_projection.sql',
+      '0017_quickfurno_durable_turn_spool.sql',
     ]);
     expect(await tableExists(MIGRATION_SCHEMA, 'event')).toBe(true);
   });
@@ -156,6 +157,8 @@ describe('db:migrate runs the preflight automatically', () => {
       15,
       // Client-OS v2: bounded client lifetime projection. LOCAL/CI only.
       16,
+      // Phase 05: PostgreSQL-backed QuickFurno durable turn spool. LOCAL/CI only.
+      17,
     ]);
   });
 

@@ -390,12 +390,12 @@ describe('a prompt definition reaches nothing', () => {
     ]);
   });
 
-  it('migrations are unchanged and there is no 0017', () => {
+  it('migrations are unchanged and there is no 0018', () => {
     const migrations = readdirSync(
       join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations'),
     ).filter((name) => name.endsWith('.sql'));
-    expect(migrations).toHaveLength(16);
-    expect(migrations.some((name) => name.startsWith('0017'))).toBe(false);
+    expect(migrations).toHaveLength(17);
+    expect(migrations.some((name) => name.startsWith('0018'))).toBe(false);
   });
 });
 

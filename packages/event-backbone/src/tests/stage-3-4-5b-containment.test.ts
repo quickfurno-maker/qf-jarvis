@@ -125,7 +125,7 @@ describe('destructive/reset operations are absent from ALL production projection
 // (QFJ-P08-B2), 0009 (QFJ-P08 durable approval queue) and now 0010 (QFJ-P09.03 durable execution
 // replay claim). This guard bounds it at 0001–0011.
 describe('migrations are bounded at 0001–0012 with no 0014', () => {
-  it('the migrations directory holds exactly the approved SQL files through 0016', () => {
+  it('the migrations directory holds exactly the approved SQL files through 0017', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((name) => name.endsWith('.sql'))
       .sort();
@@ -147,17 +147,18 @@ describe('migrations are bounded at 0001–0012 with no 0014', () => {
       '0014_conversation_prospect_party_type.sql',
       '0015_correlation_timeline_projection.sql',
       '0016_client_lifetime_projection.sql',
+      '0017_quickfurno_durable_turn_spool.sql',
     ]);
   });
 
-  it('no migration numbered 0017 or higher exists', () => {
+  it('no migration numbered 0018 or higher exists', () => {
     // Compared NUMERICALLY rather than by prefix. The previous form was `/^0010|^0[1-9]\d\d/`,
     // which named 0010 and 0100–0999 but silently missed everything from 0011 to 0099 — the exact
     // range the very next migration would land in. Moving the bound is the moment to close that.
     const files = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql'));
     // RWC-P8 (ADR-0104): the bound moves to 0012, the ONE owner-authorized addition. The lock
     // still says exactly what it said -- no unauthorized migration exists.
-    const beyond = files.filter((name) => Number.parseInt(name.slice(0, 4), 10) > 16);
+    const beyond = files.filter((name) => Number.parseInt(name.slice(0, 4), 10) > 17);
     expect(beyond).toEqual([]);
   });
 });

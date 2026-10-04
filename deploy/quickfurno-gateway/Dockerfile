@@ -9,13 +9,21 @@ RUN corepack enable && corepack prepare "pnpm@${PNPM_VERSION}" --activate
 WORKDIR /build
 
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json tsconfig.json ./
-COPY apps/quickfurno-gateway/package.json apps/quickfurno-gateway/
+COPY packages ./packages
+COPY apps/quickfurno-gateway ./apps/quickfurno-gateway
 RUN pnpm install --frozen-lockfile --filter @qf-jarvis/quickfurno-gateway... --filter .
+RUN pnpm --filter @qf-jarvis/quickfurno-gateway... build
 
-COPY apps/quickfurno-gateway apps/quickfurno-gateway
-RUN pnpm --filter @qf-jarvis/quickfurno-gateway build
+# Keep only runtime artifacts while preserving pnpm workspace symlink targets.
+RUN find packages apps/quickfurno-gateway -type d \( -name src -o -name tests \) -prune -exec rm -rf '{}' + \
+ && find packages apps/quickfurno-gateway -type f \( -name '*.tsbuildinfo' -o -name '*.map' \) -delete
 
 FROM ${NODE_IMAGE} AS runtime
+
+# Refresh Debian security fixes in the final runtime before this one-time release artifact is signed.
+RUN apt-get update \
+ && apt-get upgrade -y \
+ && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 RUN groupadd --gid 10002 gateway \
  && useradd --uid 10002 --gid 10002 --no-create-home --shell /usr/sbin/nologin gateway \
@@ -23,12 +31,14 @@ RUN groupadd --gid 10002 gateway \
            /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
            /root/.npm /tmp/*
 WORKDIR /app
-COPY --from=builder --chown=10002:10002 /build/apps/quickfurno-gateway/dist ./dist
+COPY --from=builder --chown=10002:10002 /build/node_modules ./node_modules
+COPY --from=builder --chown=10002:10002 /build/packages ./packages
+COPY --from=builder --chown=10002:10002 /build/apps/quickfurno-gateway ./apps/quickfurno-gateway
 USER 10002:10002
 EXPOSE 3100
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:3100/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-CMD ["node", "dist/index.js"]
+CMD ["node", "apps/quickfurno-gateway/dist/index.js"]
 
 ARG GIT_SHA=unknown
 LABEL org.opencontainers.image.title="qf-jarvis-quickfurno-gateway" \

@@ -269,13 +269,13 @@ describe('JF-4B/C/D repository boundaries', () => {
     }
   });
 
-  it('(J93) migrations are unchanged: 0001-0014, and no 0017', () => {
+  it('(J93) migrations are unchanged: 0001-0014, and no 0018', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(16);
-    expect(sql.some((n) => n.startsWith('0017'))).toBe(false);
+    expect(sql).toHaveLength(17);
+    expect(sql.some((n) => n.startsWith('0018'))).toBe(false);
   });
 
   it('(J91,J92) D5 is neither activated nor granted new permissions by this lane', () => {
@@ -478,7 +478,7 @@ describe('JF-4 correction: there is ONE governed RAG, not three', () => {
     }
   });
 
-  it('(§17) the migration ledger is exactly 0001-0016, in order, with no gap', () => {
+  it('(§17) the migration ledger is exactly 0001-0017, in order, with no gap', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((name) => name.endsWith('.sql'))
@@ -500,10 +500,12 @@ describe('JF-4 correction: there is ONE governed RAG, not three', () => {
       '0014',
       '0015',
       '0016',
+      '0017',
     ]);
     expect(sql[13]).toBe('0014_conversation_prospect_party_type.sql');
     expect(sql[14]).toBe('0015_correlation_timeline_projection.sql');
     expect(sql[15]).toBe('0016_client_lifetime_projection.sql');
+    expect(sql[16]).toBe('0017_quickfurno_durable_turn_spool.sql');
   });
 
   it('(§17) 0014 is the ONLY migration that mentions PROSPECT, and it adds no table or grant', () => {

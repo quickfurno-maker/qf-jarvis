@@ -48,6 +48,7 @@ import {
 } from '@qf-jarvis/postgres-knowledge-index';
 import { createPromptRegistry } from '@qf-jarvis/prompt-registry';
 import { createFileDurableTurnSpool } from '@qf-jarvis/quickfurno-gateway/durable-turn-spool';
+import { createPostgresDurableTurnSpool } from '@qf-jarvis/quickfurno-gateway/postgres-durable-turn-spool';
 import { createInMemoryPublicKnowledgeSemanticCache } from '@qf-jarvis/semantic-context-engine';
 import { createJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
 import {
@@ -345,11 +346,8 @@ export async function createQuickFurnoWhatsAppProductionWorker(
   }
 
   let pool: DatabasePool | undefined;
-  if (config.knowledge.mode === 'HYBRID') {
-    if (config.database === undefined) throw new Error('production-worker-config-invalid');
+  if (config.database !== undefined) {
     pool = createDatabasePool(config.database);
-  } else if (config.database !== undefined) {
-    throw new Error('production-worker-config-invalid');
   }
 
   const traceObservation =
@@ -581,7 +579,13 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         };
       },
     });
-    const spool = await createFileDurableTurnSpool(config.spoolDirectory);
+    const spool =
+      config.turnStore.mode === 'POSTGRES'
+        ? (() => {
+            if (pool === undefined) throw new Error('production-worker-config-invalid');
+            return createPostgresDurableTurnSpool(pool);
+          })()
+        : await createFileDurableTurnSpool(config.turnStore.directory);
     await spool.recoverStale(config.staleProcessingMs, Date.now());
     const processor = createQuickFurnoWhatsAppTurnProcessor({
       queue: spool,
