@@ -32,8 +32,11 @@ add(
     workflow.includes('git rev-parse HEAD'),
 );
 add(
-  'publication is main-only',
-  workflow.includes("github.event_name == 'push' && github.ref == 'refs/heads/main'"),
+  'publication is guarded to main push or explicit manual proof',
+  workflow.includes('workflow_dispatch:') &&
+    workflow.includes('publish:') &&
+    workflow.includes("github.event_name == 'push' && github.ref == 'refs/heads/main'") &&
+    workflow.includes("github.event_name == 'workflow_dispatch' && inputs.publish == true"),
 );
 add(
   'no mutable latest image tag is published',
