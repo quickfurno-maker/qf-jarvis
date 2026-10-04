@@ -14,7 +14,7 @@ function requiredRedisUrl(): string {
 }
 
 const url = requiredRedisUrl();
-const prefix = `qfj:p6-${process.pid}`;
+const prefix = `qfj:p6-${String(process.pid)}`;
 const web1 = new RedisCoordination({ url, prefix });
 const web2 = new RedisCoordination({ url, prefix });
 const worker1 = new RedisCoordination({ url, prefix });
@@ -100,7 +100,7 @@ describe('Phase 06 shared Redis/Valkey coordination', () => {
     const loser = race.find((result) => result.status === 'busy');
     expect(winner?.status).toBe('acquired');
     expect(loser?.status).toBe('busy');
-    if (!winner || winner.status !== 'acquired') throw new Error('expected lock winner');
+    if (winner === undefined) throw new Error('expected lock winner');
 
     const losingOwner = winner.owner === 'worker-a' ? 'worker-b' : 'worker-a';
     expect(

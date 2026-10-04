@@ -28,7 +28,7 @@ function machineToken(value: string, label: string): string {
 
 function positiveInteger(value: number, label: string, maximum: number): number {
   if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) {
-    throw new Error(`${label} must be a positive integer <= ${maximum}`);
+    throw new Error(`${label} must be a positive integer <= ${String(maximum)}`);
   }
   return value;
 }
@@ -50,6 +50,12 @@ function numberFromReply(value: unknown, label: string): number {
   return parsed;
 }
 
+function scalarString(value: unknown, label: string): string {
+  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'bigint') {
+    throw new Error(`Redis returned an invalid ${label}`);
+  }
+  return String(value);
+}
 function arrayReply(value: unknown, label: string): readonly unknown[] {
   if (!Array.isArray(value)) {
     throw new Error(`Redis returned an invalid ${label}`);
@@ -57,11 +63,11 @@ function arrayReply(value: unknown, label: string): readonly unknown[] {
   return value;
 }
 
-export type RedisCoordinationOptions = {
+export interface RedisCoordinationOptions {
   url: string;
   prefix?: string;
   connectTimeoutMs?: number;
-};
+}
 
 export class RedisCoordination implements CoordinationPort {
   readonly #client;
@@ -113,7 +119,7 @@ export class RedisCoordination implements CoordinationPort {
     try {
       const reply = await this.#client.sendCommand(['MGET', ...keys]);
       return arrayReply(reply, 'tag version reply').map((value) =>
-        value === null ? '0' : String(value),
+        value === null ? '0' : scalarString(value, 'tag version'),
       );
     } catch {
       return null;
@@ -294,7 +300,7 @@ export class RedisCoordination implements CoordinationPort {
     const lockKey = `${this.#prefix}:{${slot}}:owner`;
     if (!(await this.#ready())) return { status: 'unavailable' };
 
-    const expected = `${input.owner}:${input.fence}`;
+    const expected = `${input.owner}:${String(input.fence)}`;
     const script = [
       "if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end",
       "return redis.call('DEL', KEYS[1])",
