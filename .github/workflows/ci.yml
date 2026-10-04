@@ -115,6 +115,9 @@ jobs:
       - name: Validate scale container contract
         run: node scripts/scale/validate-container-contract.mjs
 
+      - name: Validate immutable artifact contract
+        run: node scripts/scale/validate-artifact-contract.mjs
+
       - name: Render production container definitions
         shell: bash
         env:
