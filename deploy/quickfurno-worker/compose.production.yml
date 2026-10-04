@@ -2,7 +2,7 @@ name: qf-jarvis-whatsapp-worker
 
 services:
   quickfurno-worker:
-    image: 'qf-jarvis-whatsapp-worker:${QFJ_WORKER_IMAGE_TAG:?QFJ_WORKER_IMAGE_TAG must be the exact merged git SHA}'
+    image: '${QFJ_WORKER_IMAGE_REF:?QFJ_WORKER_IMAGE_REF must be an immutable registry@sha256 digest}'
     container_name: qf-jarvis-whatsapp-worker
     restart: unless-stopped
     init: true

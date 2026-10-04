@@ -88,8 +88,7 @@ add(
 
 add(
   'Aarohi reuses certified worker artifact',
-  aarohiCompose.includes("image: 'qf-jarvis-whatsapp-worker:") &&
-    aarohiCompose.includes('QFJ_WORKER_IMAGE_TAG'),
+  aarohiCompose.includes('QFJ_WORKER_IMAGE_REF') && !aarohiCompose.includes('QFJ_WORKER_IMAGE_TAG'),
 );
 add(
   'Aarohi role selected by explicit command',

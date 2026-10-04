@@ -115,12 +115,16 @@ jobs:
       - name: Validate scale container contract
         run: node scripts/scale/validate-container-contract.mjs
 
+      - name: Validate supply-chain reproducibility contract
+        run: node scripts/scale/validate-supply-chain-contract.mjs
+
       - name: Render production container definitions
         shell: bash
         env:
-          JOS_IMAGE_TAG: ${{ github.sha }}
-          QFJ_GATEWAY_IMAGE_TAG: ${{ github.sha }}
-          QFJ_WORKER_IMAGE_TAG: ${{ github.sha }}
+          QFJ_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          QFJ_OS_IMAGE_REF: ghcr.io/quickfurno-maker/qf-jarvis-os@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          QFJ_GATEWAY_IMAGE_REF: ghcr.io/quickfurno-maker/qf-jarvis-gateway@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          QFJ_WORKER_IMAGE_REF: ghcr.io/quickfurno-maker/qf-jarvis-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000
         run: |
           docker compose -f deploy/jarvis-os/compose.production.yml config --quiet
           docker compose -f deploy/quickfurno-gateway/compose.production.yml config --quiet
