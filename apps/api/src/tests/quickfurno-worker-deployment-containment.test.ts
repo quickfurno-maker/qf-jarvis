@@ -20,6 +20,11 @@ const example = read('deploy/quickfurno-worker/worker-config.example.json');
 const jevCompose = read('deploy/quickfurno-worker/compose.jev.yml');
 const jevExample = read('deploy/quickfurno-worker/worker-config.jev-shadow.example.json');
 const gatewayCompose = read('deploy/quickfurno-gateway/compose.production.yml');
+const productionWorkerConfig = read('apps/api/src/quickfurno-whatsapp/production-worker-config.ts');
+const productionWorker = read('apps/api/src/quickfurno-whatsapp/production-worker.ts');
+const durableTurnSpool = read('apps/quickfurno-gateway/src/durable-turn-spool.ts');
+const productionKillSwitch = read('apps/api/src/quickfurno-whatsapp/production-kill-switch.ts');
+const coreDecisionTransport = read('packages/core-decision-http-transport/src/transport.ts');
 
 describe('QuickFurno production worker deployment containment', () => {
   it('is a private non-root read-only container with no public routing surface', () => {
@@ -151,6 +156,36 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(compose).toContain('stop_grace_period: 120s');
     expect(compose).toContain("cpus: '1.50'");
     expect(compose).toContain('memory: 2048m');
+  });
+
+  it('keeps SINGLE_OWNER fail-closed while the production turn store is host-filesystem backed', () => {
+    const productionUsesFileSpool =
+      productionWorker.includes('createFileDurableTurnSpool(config.spoolDirectory)') ||
+      gatewayCompose.includes('quickfurno-gateway-turns');
+    if (productionUsesFileSpool) {
+      expect(productionWorkerConfig).toContain("deploymentMode: z.literal('SINGLE_OWNER')");
+    }
+  });
+
+  it('keeps durable turn state behind an implementation interface until the shared store replaces files', () => {
+    expect(durableTurnSpool).toContain('export interface DurableTurnSpool');
+    expect(durableTurnSpool).toContain('accept(turn: WhatsAppTurnV1');
+    expect(durableTurnSpool).toContain('claimNext(');
+    expect(durableTurnSpool).toContain('recoverStale(');
+  });
+
+  it('keeps the local emergency kill switch fail-closed on every I/O outcome except missing file', () => {
+    expect(productionKillSwitch).toContain(
+      "return (error as { readonly code?: unknown }).code !== 'ENOENT'",
+    );
+  });
+
+  it('keeps QuickFurno Core discovery externally configured, signed, and free of fixed non-loopback IPs', () => {
+    expect(coreDecisionTransport).toContain('readonly baseUrl: string');
+    expect(coreDecisionTransport).toContain('endpointFor(config.baseUrl)');
+    expect(coreDecisionTransport).toContain('QUICKFURNO_CORE_DECISION_SIGNATURE_HEADER');
+    const ipv4 = coreDecisionTransport.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/gu) ?? [];
+    expect([...new Set(ipv4)]).toEqual(['127.0.0.1']);
   });
 
   it('contains no committed credential or private-key material', () => {
