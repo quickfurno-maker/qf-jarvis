@@ -203,6 +203,7 @@ describe('secret containment in application source', () => {
     expect(loader).toContain("AGENT_FLOW_TRACE_PATH_VAR = 'QFJ_AGENT_FLOW_TRACE_FILE'");
     expect(loader).toContain("CORE_READ_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_READ_CONFIG_FILE'");
     expect(loader).toContain("CORE_COMMAND_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_COMMAND_CONFIG_FILE'");
+    expect(loader).toContain("AGNI_CONFIG_PATH_VAR = 'QFJ_JOS_AGNI_CONFIG_FILE'");
     expect(loader).toContain(
       "RELEASE_ASSURANCE_OBSERVATION_PATH_VAR = 'QFJ_RELEASE_ASSURANCE_OBSERVATION_FILE'",
     );
@@ -212,7 +213,7 @@ describe('secret containment in application source', () => {
     expect(loader).toContain("CONFIG_SCHEMA_VERSION_VAR = 'QFJ_CONFIG_SCHEMA_VERSION'");
     expect(loader).toContain("SERVICE_ID_VAR = 'QFJ_SERVICE_ID'");
     const envReads = loader.match(/process\.env(?:\[|\.)/gu) ?? [];
-    expect(envReads).toHaveLength(12);
+    expect(envReads).toHaveLength(13);
   });
 
   it('imports node:fs only in the auth config loader', () => {
