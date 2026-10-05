@@ -39,6 +39,10 @@ export interface GatewayEvent {
   readonly mode?: GatewayMode;
   readonly attempts?: number;
   readonly latencyMs?: number;
+  readonly cost?: number;
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+  readonly totalTokens?: number;
   readonly circuitState?: CircuitState;
   /** Hybrid-routing evidence (QFJ-P04.01D) — all bounded, content-free enums/ids. */
   readonly profile?: RoutingProfile;

@@ -2,9 +2,16 @@ import { chmod, open, mkdir, readFile, readdir, rename, stat } from 'node:fs/pro
 import { isAbsolute, join } from 'node:path';
 import type { WhatsAppTurnV1 } from './whatsapp-turn-protocol.js';
 
+export interface DurableTraceContextV1 {
+  readonly traceparent: string;
+  readonly tracestate?: string;
+}
+
 export interface DurableTurnRecordV1 {
   readonly version: 1;
   readonly requestId?: string;
+  readonly traceparent?: string;
+  readonly tracestate?: string;
   readonly conversationId: string;
   readonly conversationRevision: number;
   readonly inboundMessageId: string;
@@ -36,7 +43,11 @@ export interface DurableTurnClaimSelection {
 }
 
 export interface DurableTurnSpool {
-  accept(turn: WhatsAppTurnV1, acceptedAt: string): Promise<TurnAcceptResult>;
+  accept(
+    turn: WhatsAppTurnV1,
+    acceptedAt: string,
+    traceContext?: DurableTraceContextV1,
+  ): Promise<TurnAcceptResult>;
   claimNext(selection?: DurableTurnClaimSelection): Promise<DurableTurnRecordV1 | null>;
   complete(inboundMessageId: string): Promise<void>;
   fail(inboundMessageId: string): Promise<void>;
@@ -46,6 +57,7 @@ export interface DurableTurnSpool {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const TRACEPARENT = /^[0-9a-f]{2}-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/u;
 const SHARED_DIRECTORY_MODE = 0o770;
 const SHARED_RECORD_MODE = 0o660;
 const fileName = (id: string): string => `${id}.json`;
@@ -54,10 +66,35 @@ async function ensureSharedDirectory(path: string): Promise<void> {
   const created = await mkdir(path, { recursive: true, mode: SHARED_DIRECTORY_MODE });
   if (created !== undefined) await chmod(path, SHARED_DIRECTORY_MODE);
 }
-function stableRecord(turn: WhatsAppTurnV1, acceptedAt: string): DurableTurnRecordV1 {
+function traceContextValid(value: DurableTraceContextV1): boolean {
+  const match = TRACEPARENT.exec(value.traceparent);
+  return Boolean(
+    match &&
+    match[1] !== '00000000000000000000000000000000' &&
+    match[2] !== '0000000000000000' &&
+    (value.tracestate === undefined ||
+      (Buffer.byteLength(value.tracestate, 'utf8') >= 1 &&
+        Buffer.byteLength(value.tracestate, 'utf8') <= 512 &&
+        !/[\r\n]/u.test(value.tracestate))),
+  );
+}
+function stableRecord(
+  turn: WhatsAppTurnV1,
+  acceptedAt: string,
+  traceContext?: DurableTraceContextV1,
+): DurableTurnRecordV1 {
+  if (traceContext !== undefined && !traceContextValid(traceContext)) {
+    throw new Error('turn_spool_trace_context_invalid');
+  }
   return Object.freeze({
     version: 1,
     requestId: turn.requestId,
+    ...(traceContext === undefined
+      ? {}
+      : {
+          traceparent: traceContext.traceparent,
+          ...(traceContext.tracestate === undefined ? {} : { tracestate: traceContext.tracestate }),
+        }),
     conversationId: turn.conversationId,
     conversationRevision: turn.conversationRevision,
     inboundMessageId: turn.inboundMessageId,
@@ -90,7 +127,7 @@ function sameIdentity(a: DurableTurnRecordV1, b: DurableTurnRecordV1): boolean {
 function parseRecord(value: unknown): DurableTurnRecordV1 | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const r = value as Record<string, unknown>;
-  const legacyKeys = [
+  const requiredKeys = new Set([
     'version',
     'conversationId',
     'conversationRevision',
@@ -99,18 +136,25 @@ function parseRecord(value: unknown): DurableTurnRecordV1 | null {
     'assignedActor',
     'subjectType',
     'acceptedAt',
-  ];
-  const currentKeys = [...legacyKeys, 'requestId'];
-  const qualificationKeys = [...currentKeys, 'turnPurpose', 'qualificationRequestId'];
-  const actualKeys = Object.keys(r).sort().join(',');
+  ]);
+  const allowedKeys = new Set([
+    ...requiredKeys,
+    'requestId',
+    'traceparent',
+    'tracestate',
+    'turnPurpose',
+    'qualificationRequestId',
+  ]);
+  const actualKeys = Object.keys(r);
   if (
-    actualKeys !== [...legacyKeys].sort().join(',') &&
-    actualKeys !== currentKeys.sort().join(',') &&
-    actualKeys !== qualificationKeys.sort().join(',')
+    [...requiredKeys].some((key) => !Object.hasOwn(r, key)) ||
+    actualKeys.some((key) => !allowedKeys.has(key))
   )
     return null;
   const version = r['version'];
   const requestId = r['requestId'];
+  const traceparent = r['traceparent'];
+  const tracestate = r['tracestate'];
   const conversationId = r['conversationId'];
   const conversationRevision = r['conversationRevision'];
   const inboundMessageId = r['inboundMessageId'];
@@ -123,6 +167,17 @@ function parseRecord(value: unknown): DurableTurnRecordV1 | null {
   if (
     version !== 1 ||
     (requestId !== undefined && (typeof requestId !== 'string' || !UUID.test(requestId))) ||
+    (traceparent !== undefined &&
+      (typeof traceparent !== 'string' ||
+        !TRACEPARENT.test(traceparent) ||
+        TRACEPARENT.exec(traceparent)?.[1] === '00000000000000000000000000000000' ||
+        TRACEPARENT.exec(traceparent)?.[2] === '0000000000000000')) ||
+    (tracestate !== undefined &&
+      (traceparent === undefined ||
+        typeof tracestate !== 'string' ||
+        Buffer.byteLength(tracestate, 'utf8') < 1 ||
+        Buffer.byteLength(tracestate, 'utf8') > 512 ||
+        /[\r\n]/u.test(tracestate))) ||
     typeof conversationId !== 'string' ||
     !UUID.test(conversationId) ||
     typeof inboundMessageId !== 'string' ||
@@ -152,6 +207,8 @@ function parseRecord(value: unknown): DurableTurnRecordV1 | null {
   return Object.freeze({
     version: 1,
     ...(requestId === undefined ? {} : { requestId }),
+    ...(traceparent === undefined ? {} : { traceparent }),
+    ...(tracestate === undefined ? {} : { tracestate }),
     conversationId,
     conversationRevision,
     inboundMessageId,
@@ -195,8 +252,12 @@ export async function createFileDurableTurnSpool(root: string): Promise<DurableT
   };
 
   return Object.freeze({
-    async accept(turn: WhatsAppTurnV1, acceptedAt: string): Promise<TurnAcceptResult> {
-      const record = stableRecord(turn, acceptedAt);
+    async accept(
+      turn: WhatsAppTurnV1,
+      acceptedAt: string,
+      traceContext?: DurableTraceContextV1,
+    ): Promise<TurnAcceptResult> {
+      const record = stableRecord(turn, acceptedAt, traceContext);
       const prior = await existingRecord(turn.inboundMessageId);
       if (prior) {
         const same = sameIdentity(prior, record);

@@ -133,33 +133,53 @@ function CommandButton({
 export function ApprovalDecisionControls({
   approvalId,
   state,
+  kind = 'AUTOMATION',
+  actionFingerprint,
 }: {
   readonly approvalId: string;
   readonly state: 'awaiting-core' | 'awaiting-operator' | 'answered';
+  readonly kind?: 'AUTOMATION' | 'AGNI' | undefined;
+  readonly actionFingerprint?: string | undefined;
 }) {
-  const enabled = state === 'awaiting-operator';
-  const build = (decision: 'APPROVE' | 'REJECT') => (commandId: string) => ({
-    protocol: 'qfj.operator.command.v1' as const,
-    commandId,
-    issuedAt: new Date().toISOString(),
-    idempotencyKey: 'web:' + commandId,
-    clientPlatform: 'WEB' as const,
-    action: 'APPROVAL_DECIDE' as const,
-    payload: { approvalId, decision },
-  });
+  const action: OperatorAction = kind === 'AGNI' ? 'AGNI_APPROVAL_DECIDE' : 'APPROVAL_DECIDE';
+  const enabled =
+    state === 'awaiting-operator' &&
+    (kind !== 'AGNI' || /^[0-9a-f]{64}$/u.test(actionFingerprint ?? ''));
+  const build =
+    (decision: 'APPROVE' | 'REJECT') =>
+    (commandId: string): OperatorCommand =>
+      kind === 'AGNI'
+        ? parseOperatorCommand({
+            protocol: 'qfj.operator.command.v1',
+            commandId,
+            issuedAt: new Date().toISOString(),
+            idempotencyKey: 'web:' + commandId,
+            clientPlatform: 'WEB',
+            action: 'AGNI_APPROVAL_DECIDE',
+            payload: { proposalId: approvalId, actionFingerprint, decision },
+          })
+        : parseOperatorCommand({
+            protocol: 'qfj.operator.command.v1',
+            commandId,
+            issuedAt: new Date().toISOString(),
+            idempotencyKey: 'web:' + commandId,
+            clientPlatform: 'WEB',
+            action: 'APPROVAL_DECIDE',
+            payload: { approvalId, decision },
+          });
 
   return (
     <span className="flex items-start gap-1.5">
       <CommandButton
-        action="APPROVAL_DECIDE"
+        action={action}
         label="Approve"
-        confirmLabel="Confirm approve"
+        confirmLabel={kind === 'AGNI' ? 'Confirm AGNI action' : 'Confirm approve'}
         build={build('APPROVE')}
         confirm
         disabled={!enabled}
       />
       <CommandButton
-        action="APPROVAL_DECIDE"
+        action={action}
         label="Reject"
         confirmLabel="Confirm reject"
         build={build('REJECT')}

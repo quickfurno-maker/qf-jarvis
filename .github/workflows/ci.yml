@@ -445,3 +445,51 @@ jobs:
 
       - name: Revalidate container contract
         run: pnpm run check:scale:containers
+
+  phase14-observability-sre-certification:
+    name: Phase 14 observability SRE certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace packages
+        run: pnpm run build
+
+      - name: Certify Phase 14 observability and AGNI operator boundary
+        run: pnpm run check:scale:phase14
+
+      - name: Render Phase 14 telemetry overlays
+        env:
+          AGNI_OTLP_GATEWAY_ENDPOINT: agni.internal:4317
+          QFJ_OTEL_SECRET_DIR: /tmp/qfj-otel-secrets
+          QFJ_GATEWAY_IMAGE_TAG: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          QFJ_WORKER_IMAGE_TAG: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        run: |
+          docker compose -f deploy/observability/compose.agent.yml config --quiet
+          docker compose \
+            -f deploy/quickfurno-gateway/compose.production.yml \
+            -f deploy/quickfurno-gateway/compose.observability.yml \
+            config --quiet
+          docker compose \
+            -f deploy/quickfurno-worker/compose.production.yml \
+            -f deploy/quickfurno-worker/compose.observability.yml \
+            config --quiet
+
+      - name: Typecheck Jarvis OS AGNI surface
+        run: pnpm --filter @qf-jarvis/jarvis-os typecheck:tests

@@ -150,6 +150,7 @@ describe('migrations are bounded at 0001–0012 with no 0014', () => {
       '0017_quickfurno_durable_turn_spool.sql',
       '0018_scale_phase09_data_lifecycle.sql',
       '0019_scale_phase12_horizontal_worker_ordering.sql',
+      '0020_scale_phase14_trace_context.sql',
     ]);
   });
 
@@ -160,7 +161,7 @@ describe('migrations are bounded at 0001–0012 with no 0014', () => {
     const files = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql'));
     // RWC-P8 (ADR-0104): the bound moves to 0012, the ONE owner-authorized addition. The lock
     // still says exactly what it said -- no unauthorized migration exists.
-    const beyond = files.filter((name) => Number.parseInt(name.slice(0, 4), 10) > 19);
+    const beyond = files.filter((name) => Number.parseInt(name.slice(0, 4), 10) > 20);
     expect(beyond).toEqual([]);
   });
 });

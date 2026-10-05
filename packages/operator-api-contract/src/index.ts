@@ -27,6 +27,7 @@ export const operatorModuleSchema = z
       'anisha',
       'agent-flows',
       'operations',
+      'agni',
       'approvals',
       'conversations',
       'execution',
@@ -115,6 +116,14 @@ export const OPERATOR_MODULES = Object.freeze([
     label: 'Operations Center',
     scope: 'Human control and safety state',
     webPath: '/operations',
+    mobilePrimary: true,
+  },
+  {
+    id: 'agni',
+    group: 'OPERATE',
+    label: 'AGNI',
+    scope: 'Independent reliability, security and AI-SRE supervisory plane',
+    webPath: '/agni',
     mobilePrimary: true,
   },
   {
@@ -280,6 +289,7 @@ export const operatorVoiceSessionSchema = z
 
 export const operatorActionSchema = z.enum([
   'APPROVAL_DECIDE',
+  'AGNI_APPROVAL_DECIDE',
   'CONVERSATION_TAKEOVER',
   'CONVERSATION_RESUME_AI',
   'CONVERSATION_PAUSE_AI',
@@ -328,6 +338,20 @@ const approval = z
     payload: z
       .object({
         approvalId: uuid,
+        decision: z.enum(['APPROVE', 'REJECT']),
+      })
+      .strict(),
+  })
+  .strict();
+
+const agniApproval = z
+  .object({
+    ...base,
+    action: z.literal('AGNI_APPROVAL_DECIDE'),
+    payload: z
+      .object({
+        proposalId: uuid,
+        actionFingerprint: z.string().regex(/^[0-9a-f]{64}$/u),
         decision: z.enum(['APPROVE', 'REJECT']),
       })
       .strict(),
@@ -394,6 +418,7 @@ const rollout = z
 
 export const operatorCommandSchema = z.discriminatedUnion('action', [
   approval,
+  agniApproval,
   conversation('CONVERSATION_TAKEOVER'),
   conversation('CONVERSATION_RESUME_AI'),
   conversation('CONVERSATION_PAUSE_AI'),

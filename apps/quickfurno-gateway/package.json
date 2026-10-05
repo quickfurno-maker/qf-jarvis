@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@qf-jarvis/cross-system-scale-contract": "workspace:*",
-    "@qf-jarvis/event-backbone": "workspace:*"
+    "@qf-jarvis/event-backbone": "workspace:*",
+    "@qf-jarvis/observability": "workspace:*"
   }
 }

@@ -393,6 +393,8 @@ describe('the route file itself', () => {
       const networkAllowed = new Set([
         'src/server/control-plane/sources/quickfurno-operator-source.ts',
         'src/server/operator/quickfurno-command.ts',
+        // Phase 14: one reviewed outbound-only AGNI client, isolated from Core/business mutation.
+        'src/server/agni/client.ts',
       ]).has(label);
       if (!networkAllowed) {
         expect(code, `${label}: fetch`).not.toMatch(/\bfetch\s*\(/);
@@ -421,7 +423,7 @@ describe('the route file itself', () => {
     }
   });
 
-  it('locks the API route set to exactly ten, all of them accounted for', () => {
+  it('locks the API route set to exactly eleven, all of them accounted for', () => {
     // Exact allowlist: adding a debug endpoint, introspection helper or ad-hoc mobile API fails
     // review. The operator API is versioned and is the shared web/mobile boundary.
     const routes = walk(join(SRC, 'app'))
@@ -435,6 +437,8 @@ describe('the route file itself', () => {
       'api/control-plane/v1/snapshot/route.ts',
       'api/control-plane/v2/snapshot/route.ts',
       'api/operator/v1/agent-flow-trace/route.ts',
+      // Phase 14: authenticated operator-only AGNI observation/approval bridge.
+      'api/operator/v1/agni/route.ts',
       'api/operator/v1/bootstrap/route.ts',
       'api/operator/v1/commands/route.ts',
       'api/operator/v1/intelligence/route.ts',

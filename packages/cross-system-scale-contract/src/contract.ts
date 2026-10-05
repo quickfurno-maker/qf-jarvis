@@ -37,6 +37,8 @@ export const QFJ_SCALE_ACTORS = [
   'quickfurno-core',
   'qf-jarvis',
   'qf-jarvis-os',
+  'qf-agni-control-plane',
+  'qf-agni-action-broker',
   'RIYA',
   'ANISHA',
   'AAROHI',
@@ -87,6 +89,7 @@ export type QfjScaleVerificationResult =
 
 const ID = /^[A-Za-z0-9._:-]{1,160}$/u;
 const TRACE_ID = /^[0-9a-f]{32}$/u;
+const TRACEPARENT = /^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/u;
 const KEY_ID = /^[A-Za-z0-9._:-]{1,64}$/u;
 const SIGNATURE = /^[A-Za-z0-9_-]{80,128}$/u;
 
@@ -270,6 +273,13 @@ export function verifyQfjScaleRequest(args: {
 
   if (!metadataValid(metadata)) {
     return { ok: false, errorClass: 'QFJ_CONTRACT_INVALID' };
+  }
+  const traceparent = headerValue(args.headers, 'traceparent');
+  if (traceparent !== undefined) {
+    const parsed = TRACEPARENT.exec(traceparent);
+    if (parsed?.[1] !== metadata.traceId) {
+      return { ok: false, errorClass: 'QFJ_CONTRACT_INVALID' };
+    }
   }
   if ((args.nowMs ?? Date.now()) > Date.parse(metadata.deadlineAt)) {
     return { ok: false, errorClass: 'QFJ_DEADLINE_EXCEEDED' };

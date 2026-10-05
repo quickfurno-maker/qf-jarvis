@@ -2,6 +2,15 @@ import http from 'node:http';
 import https from 'node:https';
 
 import {
+  context,
+  isSpanContextValid,
+  propagation,
+  SpanKind,
+  SpanStatusCode,
+  trace,
+} from '@opentelemetry/api';
+
+import {
   createQfjScaleMetadata,
   qfjScaleRetryable,
   signQfjScaleHeaders,
@@ -152,65 +161,92 @@ export function createQfjScaleTransport(gate: QfjIsolationGate = defaultGate) {
     readonly signal?: AbortSignal;
     readonly httpPost?: QfjScaleHttpPost;
   }): Promise<QfjScaleTransportResult> {
-    const timeoutMs = args.timeoutMs ?? QFJ_SCALE_DEFAULTS.timeoutMs;
-    const metadata = createQfjScaleMetadata({
-      requestId: args.requestId,
-      idempotencyKey: args.idempotencyKey,
-      actor: args.actor,
-      timeoutMs,
-      ...(args.expectedRevision === undefined ? {} : { expectedRevision: args.expectedRevision }),
-      ...(args.correlationId === undefined ? {} : { correlationId: args.correlationId }),
-      ...(args.traceId === undefined ? {} : { traceId: args.traceId }),
-    });
-    const rawBody = Buffer.from(args.body, 'utf8');
-    const scaleHeaders = signQfjScaleHeaders({
-      method: 'POST',
-      path: args.path,
-      metadata,
-      keyId: args.keyId,
-      privateKeyPem: args.privateKeyPem,
-      rawBody,
-    });
-    const post = args.httpPost ?? boundedNodeHttpPost;
+    const tracer = trace.getTracer('qfj.cross-system-scale', '1');
+    return tracer.startActiveSpan(
+      'qfj.http.client',
+      {
+        kind: SpanKind.CLIENT,
+        attributes: { 'http.request.method': 'POST', 'qfj.route': args.path },
+      },
+      async (span) => {
+        const timeoutMs = args.timeoutMs ?? QFJ_SCALE_DEFAULTS.timeoutMs;
+        const current = span.spanContext();
+        const activeTraceId = isSpanContextValid(current) ? current.traceId : undefined;
+        const selectedTraceId = args.traceId ?? activeTraceId;
+        const metadata = createQfjScaleMetadata({
+          requestId: args.requestId,
+          idempotencyKey: args.idempotencyKey,
+          actor: args.actor,
+          timeoutMs,
+          ...(args.expectedRevision === undefined
+            ? {}
+            : { expectedRevision: args.expectedRevision }),
+          ...(args.correlationId === undefined ? {} : { correlationId: args.correlationId }),
+          ...(selectedTraceId === undefined ? {} : { traceId: selectedTraceId }),
+        });
+        const rawBody = Buffer.from(args.body, 'utf8');
+        const scaleHeaders = signQfjScaleHeaders({
+          method: 'POST',
+          path: args.path,
+          metadata,
+          keyId: args.keyId,
+          privateKeyPem: args.privateKeyPem,
+          rawBody,
+        });
+        const baseHeaders: Record<string, string> = {
+          ...(args.headers ?? {}),
+          ...scaleHeaders,
+        };
+        if (activeTraceId !== undefined && activeTraceId === metadata.traceId) {
+          propagation.inject(context.active(), baseHeaders);
+        }
+        const post = args.httpPost ?? boundedNodeHttpPost;
 
-    try {
-      const response = await gate.run({
-        deadlineAt: metadata.deadlineAt,
-        task: async (signal) => {
-          const effectiveSignal =
-            args.signal === undefined ? signal : AbortSignal.any([signal, args.signal]);
-          const value = await post(args.url, {
-            method: 'POST',
-            redirect: 'error',
-            signal: effectiveSignal,
-            headers: Object.freeze({
-              ...(args.headers ?? {}),
-              ...scaleHeaders,
-            }),
-            body: args.body,
+        try {
+          const response = await gate.run({
+            deadlineAt: metadata.deadlineAt,
+            task: async (signal) => {
+              const effectiveSignal =
+                args.signal === undefined ? signal : AbortSignal.any([signal, args.signal]);
+              const value = await post(args.url, {
+                method: 'POST',
+                redirect: 'error',
+                signal: effectiveSignal,
+                headers: Object.freeze(baseHeaders),
+                body: args.body,
+              });
+              if (value.status === 429) {
+                throw new QfjIsolationFailure('QFJ_BACKPRESSURE', true);
+              }
+              if (value.status >= 500) {
+                throw new QfjIsolationFailure('QFJ_UPSTREAM_UNAVAILABLE', true);
+              }
+              return value;
+            },
           });
-          if (value.status === 429) {
-            throw new QfjIsolationFailure('QFJ_BACKPRESSURE', true);
-          }
-          if (value.status >= 500) {
-            throw new QfjIsolationFailure('QFJ_UPSTREAM_UNAVAILABLE', true);
-          }
-          return value;
-        },
-      });
-      return Object.freeze({ ok: true as const, response, metadata });
-    } catch (error) {
-      const failure =
-        error instanceof QfjIsolationFailure
-          ? error
-          : new QfjIsolationFailure('QFJ_UPSTREAM_UNAVAILABLE', true);
-      return Object.freeze({
-        ok: false as const,
-        errorClass: failure.errorClass,
-        retryable: qfjScaleRetryable(failure.errorClass),
-        metadata,
-      });
-    }
+          span.setAttribute('http.response.status_code', response.status);
+          span.setStatus({
+            code: response.status >= 400 ? SpanStatusCode.ERROR : SpanStatusCode.OK,
+          });
+          return Object.freeze({ ok: true as const, response, metadata });
+        } catch (error) {
+          const failure =
+            error instanceof QfjIsolationFailure
+              ? error
+              : new QfjIsolationFailure('QFJ_UPSTREAM_UNAVAILABLE', true);
+          span.setAttribute('qfj.error_class', failure.errorClass);
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          return Object.freeze({
+            ok: false as const,
+            errorClass: failure.errorClass,
+            retryable: qfjScaleRetryable(failure.errorClass),
+            metadata,
+          });
+        } finally {
+          span.end();
+        }
+      },
+    );
   };
 }
 

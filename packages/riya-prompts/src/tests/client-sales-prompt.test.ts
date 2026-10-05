@@ -396,8 +396,8 @@ describe('a prompt definition reaches nothing', () => {
     )
       .filter((name) => name.endsWith('.sql'))
       .sort();
-    expect(migrations).toHaveLength(19);
-    expect(migrations.at(-1)).toBe('0019_scale_phase12_horizontal_worker_ordering.sql');
+    expect(migrations).toHaveLength(20);
+    expect(migrations.at(-1)).toBe('0020_scale_phase14_trace_context.sql');
   });
 });
 

@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 import { isAbsolute } from 'node:path';
 
+import { startObservability, type ObservabilityRuntime } from '@qf-jarvis/observability';
+
 import { loadQuickFurnoWhatsAppProductionWorkerConfig } from '../quickfurno-whatsapp/production-worker-config.js';
 import { createQuickFurnoWhatsAppProductionWorker } from '../quickfurno-whatsapp/production-worker.js';
+
+const PHASE14_MIGRATION_HEAD = '0020_scale_phase14_trace_context';
 
 function configPathOf(argv: readonly string[]): string {
   if (argv.length !== 2 || argv[0] !== '--config') {
@@ -15,10 +19,20 @@ function configPathOf(argv: readonly string[]): string {
 
 async function main(): Promise<void> {
   let worker: Awaited<ReturnType<typeof createQuickFurnoWhatsAppProductionWorker>> | undefined;
+  let observability: ObservabilityRuntime | undefined;
   try {
     const config = loadQuickFurnoWhatsAppProductionWorkerConfig(
       configPathOf(process.argv.slice(2)),
     );
+    observability = startObservability({
+      serviceName: config.serviceId,
+      serviceVersion: config.revision,
+      serviceInstanceId: config.runtimeId,
+      environment: config.environment,
+      imageSha: config.revision,
+      migrationHead: PHASE14_MIGRATION_HEAD,
+      configSchemaVersion: String(config.schemaVersion),
+    });
     worker = await createQuickFurnoWhatsAppProductionWorker(config);
 
     process.stdout.write(
@@ -44,6 +58,7 @@ async function main(): Promise<void> {
     await worker?.close().catch(() => {
       return undefined;
     });
+    await observability?.shutdown().catch(() => undefined);
   }
 }
 

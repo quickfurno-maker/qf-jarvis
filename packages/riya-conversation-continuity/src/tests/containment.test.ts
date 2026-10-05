@@ -530,6 +530,9 @@ describe('(55-57) the migration set is untouched', () => {
 
       '0019_scale_phase12_horizontal_worker_ordering.sql':
         '89354da09dc79313556b4b673f97444bac86b248184b045bb9b36cec9d60a6ad',
+
+      '0020_scale_phase14_trace_context.sql':
+        'ea34c690b4298b82348a722f4f250bd723b76ccd0133252fa88af0fa417b52ab',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -545,7 +548,7 @@ describe('(55-57) the migration set is untouched', () => {
       ).toBe(hash);
     }
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition.
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 19)).toBe(false);
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 20)).toBe(false);
   });
 
   it('migration 0008 is not extended with continuity columns', () => {

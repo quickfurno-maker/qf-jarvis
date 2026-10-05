@@ -46,6 +46,9 @@
     // vocabulary the classification-policy output is validated against.
     { "path": "../../packages/riya-web-conversation-service/tsconfig.build.json" },
     { "path": "../../packages/cross-system-scale-contract/tsconfig.build.json" },
+    // Phase 14: production ingress/workers emit through the shared OTel runtime. This explicit
+    // project edge guarantees a clean checkout builds observability declarations before apps/api.
+    { "path": "../../packages/observability/tsconfig.build.json" },
     { "path": "../../packages/agent-runtime/tsconfig.build.json" },
     { "path": "../../packages/action-kernel/tsconfig.build.json" },
     { "path": "../../packages/durable-orchestration-contracts/tsconfig.build.json" },

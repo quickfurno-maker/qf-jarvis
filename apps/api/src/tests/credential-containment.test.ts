@@ -833,6 +833,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       // controls. The package holds no provider credential, network client, database or execution port.
       '@qf-jarvis/model-intelligence-control',
       '@qf-jarvis/model-reply-adapter',
+      // Phase 14: vendor-neutral telemetry runtime only. It adds no business authority and the
+      // serving bin still reads no environment directly; the package is pinned as an exact edge.
+      '@qf-jarvis/observability',
       '@qf-jarvis/openai-compatible-embedding-adapter',
       '@qf-jarvis/postgres-approval-queue',
       '@qf-jarvis/postgres-conversation-state',
@@ -1153,6 +1156,8 @@ describe('(78, 79, 80, 81) repository invariants', () => {
         '1170c1b6b126871108b6a5a7326dcf2619fe3eadd2400c85a8580966a555dc74',
       '0019_scale_phase12_horizontal_worker_ordering.sql':
         '89354da09dc79313556b4b673f97444bac86b248184b045bb9b36cec9d60a6ad',
+      '0020_scale_phase14_trace_context.sql':
+        'ea34c690b4298b82348a722f4f250bd723b76ccd0133252fa88af0fa417b52ab',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -1168,7 +1173,7 @@ describe('(78, 79, 80, 81) repository invariants', () => {
     }
     // SCALE-P09 explicitly authorizes 0018 and pins its exact bytes above. The exact-set
     // equality remains fail-closed: any 0019 or unreviewed migration still fails this test.
-    expect(sql.at(-1)).toBe('0019_scale_phase12_horizontal_worker_ordering.sql');
+    expect(sql.at(-1)).toBe('0020_scale_phase14_trace_context.sql');
   });
 
   it('(80) no source references the protected reconciliation directory', () => {

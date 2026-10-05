@@ -5,6 +5,15 @@ import {
   verifyQfjScaleRequest,
   type QfjScaleErrorClass,
 } from '@qf-jarvis/cross-system-scale-contract';
+import {
+  addMetric,
+  extractRemoteContext,
+  recordMetric,
+  SpanKind,
+  SpanStatusCode,
+  trace,
+  withSpan,
+} from '@qf-jarvis/observability';
 
 import type { GatewayConfig } from './config.js';
 import {
@@ -30,12 +39,29 @@ import {
 const MAX_BODY_BYTES = 8_192;
 const JSON_TYPE = 'application/json; charset=utf-8';
 
+function recordSecurityFailure(kind: 'authentication' | 'contract' | 'signature'): void {
+  try {
+    addMetric('qf.security.auth.failures', 1, { operation: 'qfj_gateway', result: kind });
+    if (kind === 'signature') {
+      addMetric('qf.security.signature.failures', 1, {
+        operation: 'qfj_gateway',
+        result: 'invalid',
+      });
+    }
+  } catch {
+    // Security telemetry is powerless; request validation remains authoritative.
+  }
+}
+
 function writeJson(
   response: ServerResponse,
   status: number,
   body: unknown,
   extraHeaders: Record<string, string> = {},
 ): void {
+  const span = trace.getActiveSpan();
+  span?.setAttribute('http.response.status_code', status);
+  if (status >= 500) span?.setStatus({ code: SpanStatusCode.ERROR });
   const serialized = JSON.stringify(body);
   response.writeHead(status, {
     'content-type': JSON_TYPE,
@@ -117,33 +143,161 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
   const now = dependencies.now ?? (() => new Date());
 
   const server = createServer((request, response) => {
-    void (async () => {
+    const startedAt = performance.now();
+    const pathname = (() => {
       try {
-        const url = new URL(request.url ?? '/', 'http://gateway.invalid');
-        if (url.search !== '') {
-          writeJson(response, 400, { error: 'invalid_request' });
-          return;
-        }
+        return new URL(request.url ?? '/', 'http://gateway.invalid').pathname;
+      } catch {
+        return 'invalid';
+      }
+    })();
+    const metricRoute =
+      pathname === WHATSAPP_TURN_PATH
+        ? 'whatsapp-turn'
+        : pathname === HANDSHAKE_PATH
+          ? 'handshake'
+          : pathname === '/healthz'
+            ? 'healthz'
+            : 'other';
+    const parent = extractRemoteContext(request.headers);
+    void withSpan(
+      'jarvis.gateway',
+      SpanKind.SERVER,
+      {
+        'http.request.method': request.method ?? 'UNKNOWN',
+        'http.route': metricRoute,
+      },
+      async () => {
+        try {
+          const url = new URL(request.url ?? '/', 'http://gateway.invalid');
+          if (url.search !== '') {
+            writeJson(response, 400, { error: 'invalid_request' });
+            return;
+          }
 
-        if (request.method === 'GET' && url.pathname === '/healthz') {
-          writeJson(response, 200, { status: 'ok', service: 'qf-jarvis-gateway', version: 1 });
-          return;
-        }
+          if (request.method === 'GET' && url.pathname === '/healthz') {
+            writeJson(response, 200, { status: 'ok', service: 'qf-jarvis-gateway', version: 1 });
+            return;
+          }
 
-        if (request.method === WHATSAPP_TURN_METHOD && url.pathname === WHATSAPP_TURN_PATH) {
-          if (dependencies.turnSpool === undefined) {
-            writeJson(response, 503, { error: 'service_unavailable' });
+          if (request.method === WHATSAPP_TURN_METHOD && url.pathname === WHATSAPP_TURN_PATH) {
+            if (dependencies.turnSpool === undefined) {
+              writeJson(response, 503, { error: 'service_unavailable' });
+              return;
+            }
+            if (!contentTypeAllowed(request)) {
+              writeJson(response, 415, { error: 'invalid_request' });
+              return;
+            }
+            const rawBody = await readBoundedBody(request);
+            if (rawBody === null) {
+              writeJson(response, 413, { error: 'invalid_request' });
+              return;
+            }
+            let decoded: unknown;
+            try {
+              decoded = JSON.parse(Buffer.from(rawBody).toString('utf8'));
+            } catch {
+              writeJson(response, 400, { error: 'invalid_request' });
+              return;
+            }
+            const turn = parseWhatsAppTurn(decoded);
+            if (turn === null) {
+              writeJson(response, 400, { error: 'invalid_request' });
+              return;
+            }
+            const current = now();
+            const scaleContract = verifyQfjScaleRequest({
+              headers: scaleHeaderRecord(request),
+              method: WHATSAPP_TURN_METHOD,
+              path: WHATSAPP_TURN_PATH,
+              rawBody,
+              verificationKeys: scaleVerificationKeys(dependencies.config),
+              nowMs: current.getTime(),
+              allowLegacy: true,
+            });
+            if (!scaleContract.ok) {
+              recordSecurityFailure(
+                scaleContract.errorClass === 'QFJ_AUTHENTICATION_FAILED' ? 'signature' : 'contract',
+              );
+              writeJson(response, scaleStatus(scaleContract.errorClass), {
+                error: 'scale_contract_rejected',
+                errorClass: scaleContract.errorClass,
+              });
+              return;
+            }
+            const scaleResponseHeaders =
+              scaleContract.mode === 'v1' ? qfjScaleResponseHeaders(scaleContract.metadata) : {};
+            const authenticated = verifyWhatsAppTurnSignature({
+              rawBody,
+              turn,
+              keyId: singleHeader(request, KEY_ID_HEADER),
+              signature: singleHeader(request, SIGNATURE_HEADER),
+              verificationKeys: dependencies.config.verificationKeys,
+              nowMs: current.getTime(),
+              maxClockSkewMs: dependencies.config.maxClockSkewMs,
+            });
+            if (!authenticated) {
+              recordSecurityFailure('signature');
+              writeJson(response, 401, { error: 'authentication_failed' }, scaleResponseHeaders);
+              return;
+            }
+            const traceparent =
+              scaleContract.mode === 'v1'
+                ? (singleHeader(request, 'traceparent') ?? undefined)
+                : undefined;
+            const tracestate =
+              traceparent === undefined
+                ? undefined
+                : (singleHeader(request, 'tracestate') ?? undefined);
+            const accepted = await dependencies.turnSpool.accept(
+              turn,
+              current.toISOString(),
+              traceparent === undefined
+                ? undefined
+                : {
+                    traceparent,
+                    ...(tracestate === undefined ? {} : { tracestate }),
+                  },
+            );
+            if (accepted.outcome === 'replay') {
+              writeJson(response, 409, { error: 'replay_rejected' }, scaleResponseHeaders);
+              return;
+            }
+            if (accepted.outcome === 'conflict') {
+              writeJson(response, 409, { error: 'turn_identity_conflict' }, scaleResponseHeaders);
+              return;
+            }
+            writeJson(
+              response,
+              202,
+              {
+                protocol: WHATSAPP_TURN_PROTOCOL,
+                version: 1,
+                requestId: turn.requestId,
+                status: accepted.outcome,
+                durable: true,
+              },
+              scaleResponseHeaders,
+            );
+            return;
+          }
+
+          if (request.method !== HANDSHAKE_METHOD || url.pathname !== HANDSHAKE_PATH) {
+            writeJson(response, 404, { error: 'not_found' });
             return;
           }
           if (!contentTypeAllowed(request)) {
             writeJson(response, 415, { error: 'invalid_request' });
             return;
           }
+
           const rawBody = await readBoundedBody(request);
           if (rawBody === null) {
             writeJson(response, 413, { error: 'invalid_request' });
             return;
           }
+
           let decoded: unknown;
           try {
             decoded = JSON.parse(Buffer.from(rawBody).toString('utf8'));
@@ -151,22 +305,26 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
             writeJson(response, 400, { error: 'invalid_request' });
             return;
           }
-          const turn = parseWhatsAppTurn(decoded);
-          if (turn === null) {
+          const challenge = parseHandshakeChallenge(decoded);
+          if (challenge === null) {
             writeJson(response, 400, { error: 'invalid_request' });
             return;
           }
+
           const current = now();
           const scaleContract = verifyQfjScaleRequest({
             headers: scaleHeaderRecord(request),
-            method: WHATSAPP_TURN_METHOD,
-            path: WHATSAPP_TURN_PATH,
+            method: HANDSHAKE_METHOD,
+            path: HANDSHAKE_PATH,
             rawBody,
             verificationKeys: scaleVerificationKeys(dependencies.config),
             nowMs: current.getTime(),
             allowLegacy: true,
           });
           if (!scaleContract.ok) {
+            recordSecurityFailure(
+              scaleContract.errorClass === 'QFJ_AUTHENTICATION_FAILED' ? 'signature' : 'contract',
+            );
             writeJson(response, scaleStatus(scaleContract.errorClass), {
               error: 'scale_contract_rejected',
               errorClass: scaleContract.errorClass,
@@ -175,9 +333,9 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
           }
           const scaleResponseHeaders =
             scaleContract.mode === 'v1' ? qfjScaleResponseHeaders(scaleContract.metadata) : {};
-          const authenticated = verifyWhatsAppTurnSignature({
+          const authenticated = verifyHandshakeSignature({
             rawBody,
-            turn,
+            challenge,
             keyId: singleHeader(request, KEY_ID_HEADER),
             signature: singleHeader(request, SIGNATURE_HEADER),
             verificationKeys: dependencies.config.verificationKeys,
@@ -185,115 +343,47 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
             maxClockSkewMs: dependencies.config.maxClockSkewMs,
           });
           if (!authenticated) {
+            recordSecurityFailure('signature');
             writeJson(response, 401, { error: 'authentication_failed' }, scaleResponseHeaders);
             return;
           }
-          const accepted = await dependencies.turnSpool.accept(turn, current.toISOString());
-          if (accepted.outcome === 'replay') {
+
+          if (!replayGuard.claim(challenge.requestId, current.getTime())) {
             writeJson(response, 409, { error: 'replay_rejected' }, scaleResponseHeaders);
             return;
           }
-          if (accepted.outcome === 'conflict') {
-            writeJson(response, 409, { error: 'turn_identity_conflict' }, scaleResponseHeaders);
-            return;
-          }
-          writeJson(
-            response,
-            202,
-            {
-              protocol: WHATSAPP_TURN_PROTOCOL,
-              version: 1,
-              requestId: turn.requestId,
-              status: accepted.outcome,
-              durable: true,
-            },
-            scaleResponseHeaders,
-          );
-          return;
-        }
 
-        if (request.method !== HANDSHAKE_METHOD || url.pathname !== HANDSHAKE_PATH) {
-          writeJson(response, 404, { error: 'not_found' });
-          return;
-        }
-        if (!contentTypeAllowed(request)) {
-          writeJson(response, 415, { error: 'invalid_request' });
-          return;
-        }
-
-        const rawBody = await readBoundedBody(request);
-        if (rawBody === null) {
-          writeJson(response, 413, { error: 'invalid_request' });
-          return;
-        }
-
-        let decoded: unknown;
-        try {
-          decoded = JSON.parse(Buffer.from(rawBody).toString('utf8'));
-        } catch {
-          writeJson(response, 400, { error: 'invalid_request' });
-          return;
-        }
-        const challenge = parseHandshakeChallenge(decoded);
-        if (challenge === null) {
-          writeJson(response, 400, { error: 'invalid_request' });
-          return;
-        }
-
-        const current = now();
-        const scaleContract = verifyQfjScaleRequest({
-          headers: scaleHeaderRecord(request),
-          method: HANDSHAKE_METHOD,
-          path: HANDSHAKE_PATH,
-          rawBody,
-          verificationKeys: scaleVerificationKeys(dependencies.config),
-          nowMs: current.getTime(),
-          allowLegacy: true,
-        });
-        if (!scaleContract.ok) {
-          writeJson(response, scaleStatus(scaleContract.errorClass), {
-            error: 'scale_contract_rejected',
-            errorClass: scaleContract.errorClass,
+          const body = createHandshakeResponse({ challenge, now: current });
+          const rawResponse = Buffer.from(JSON.stringify(body), 'utf8');
+          const signature = signHandshakeResponse({
+            rawBody: rawResponse,
+            response: body,
+            signingKey: dependencies.config.signingKey,
           });
-          return;
+          writeJson(response, 200, body, {
+            ...scaleResponseHeaders,
+            [KEY_ID_HEADER]: dependencies.config.signingKey.keyId,
+            [SIGNATURE_HEADER]: signature,
+          });
+        } catch {
+          trace.getActiveSpan()?.setStatus({ code: SpanStatusCode.ERROR });
+          writeJson(response, 503, { error: 'service_unavailable' });
+        } finally {
+          const statusClass = String(Math.floor(response.statusCode / 100)) + 'xx';
+          const labels = {
+            service: 'qf-jarvis-gateway',
+            route: metricRoute,
+            method: request.method ?? 'UNKNOWN',
+            status_class: statusClass,
+          };
+          addMetric('qf.http.server.requests', 1, labels);
+          recordMetric('qf.http.server.duration', performance.now() - startedAt, labels);
         }
-        const scaleResponseHeaders =
-          scaleContract.mode === 'v1' ? qfjScaleResponseHeaders(scaleContract.metadata) : {};
-        const authenticated = verifyHandshakeSignature({
-          rawBody,
-          challenge,
-          keyId: singleHeader(request, KEY_ID_HEADER),
-          signature: singleHeader(request, SIGNATURE_HEADER),
-          verificationKeys: dependencies.config.verificationKeys,
-          nowMs: current.getTime(),
-          maxClockSkewMs: dependencies.config.maxClockSkewMs,
-        });
-        if (!authenticated) {
-          writeJson(response, 401, { error: 'authentication_failed' }, scaleResponseHeaders);
-          return;
-        }
-
-        if (!replayGuard.claim(challenge.requestId, current.getTime())) {
-          writeJson(response, 409, { error: 'replay_rejected' }, scaleResponseHeaders);
-          return;
-        }
-
-        const body = createHandshakeResponse({ challenge, now: current });
-        const rawResponse = Buffer.from(JSON.stringify(body), 'utf8');
-        const signature = signHandshakeResponse({
-          rawBody: rawResponse,
-          response: body,
-          signingKey: dependencies.config.signingKey,
-        });
-        writeJson(response, 200, body, {
-          ...scaleResponseHeaders,
-          [KEY_ID_HEADER]: dependencies.config.signingKey.keyId,
-          [SIGNATURE_HEADER]: signature,
-        });
-      } catch {
-        writeJson(response, 503, { error: 'service_unavailable' });
-      }
-    })();
+      },
+      parent,
+    ).catch(() => {
+      if (!response.headersSent) writeJson(response, 503, { error: 'service_unavailable' });
+    });
   });
 
   server.requestTimeout = 10_000;

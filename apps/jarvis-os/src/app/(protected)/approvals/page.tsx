@@ -165,7 +165,12 @@ export default async function ApprovalsPage({
                         {STATE_LABEL[row.state]}
                       </Cell>
                       <Cell nowrap>
-                        <ApprovalDecisionControls approvalId={row.id} state={row.state} />
+                        <ApprovalDecisionControls
+                          approvalId={row.id}
+                          state={row.state}
+                          kind={row.kind}
+                          actionFingerprint={row.actionFingerprint}
+                        />
                       </Cell>
                     </Row>
                   ))}
@@ -220,7 +225,12 @@ export default async function ApprovalsPage({
                     <InspectorRow label="SLA" value={SLA_LABEL[selected.slaState]} />
                   </dl>
                   <div className="border-t border-[var(--color-line)] pt-3">
-                    <ApprovalDecisionControls approvalId={selected.id} state={selected.state} />
+                    <ApprovalDecisionControls
+                      approvalId={selected.id}
+                      state={selected.state}
+                      kind={selected.kind}
+                      actionFingerprint={selected.actionFingerprint}
+                    />
                   </div>
                   <p className="border-t border-[var(--color-line)] pt-3 text-[10.5px] leading-relaxed text-[var(--color-ink-faint)]">
                     Recommendation fingerprint, cited policy and per-event decision lineage are not

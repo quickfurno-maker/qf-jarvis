@@ -183,6 +183,8 @@ export function mapSnapshotToReadModel(snapshot: ControlPlaneSnapshotV2): Contro
   }));
   const approvalQueue = section(sections.approvalQueue, (row) => ({
     id: row.id,
+    ...(row.kind === undefined ? {} : { kind: row.kind }),
+    ...(row.actionFingerprint === undefined ? {} : { actionFingerprint: row.actionFingerprint }),
     requestedAction: row.requestedAction,
     risk: row.risk,
     requestedAuthority: row.requestedAuthority,

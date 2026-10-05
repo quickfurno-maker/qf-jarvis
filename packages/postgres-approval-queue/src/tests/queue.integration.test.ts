@@ -213,13 +213,13 @@ describe('migration 0009 and the schema it creates', () => {
     const sql = readdirSync(MIGRATIONS_DIR)
       .filter((f) => f.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(19);
+    expect(sql).toHaveLength(20);
     expect(sql[9]).toBe('0010_execution_replay_claim.sql');
     expect(sql[10]).toBe('0011_riya_conversation_continuity.sql');
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.at(-1)).toBe('0019_scale_phase12_horizontal_worker_ordering.sql');
+    expect(sql.at(-1)).toBe('0020_scale_phase14_trace_context.sql');
   });
 
   it('creates exactly the five approval tables, in qf_jarvis and nowhere else', async () => {

@@ -5,6 +5,7 @@ import {
   createDatabasePool,
   type DatabasePool,
 } from '@qf-jarvis/event-backbone';
+import { startObservability } from '@qf-jarvis/observability';
 
 import { loadGatewayConfig } from './config.js';
 import { loadGatewayDatabaseConfig } from './database-config.js';
@@ -63,6 +64,20 @@ const config = loadGatewayConfig(configPath);
 if (process.env['NODE_ENV'] === 'production' && config.environment !== 'production') {
   throw new Error('gateway_environment_mismatch');
 }
+const buildSha = process.env['QFJ_BUILD_SHA']?.trim();
+const instanceId = process.env['QFJ_SERVICE_INSTANCE_ID']?.trim();
+const imageSha = process.env['QFJ_IMAGE_SHA']?.trim();
+const migrationHead = process.env['QFJ_MIGRATION_HEAD']?.trim();
+const observability = startObservability({
+  serviceName: config.serviceId,
+  serviceVersion: buildSha === undefined || buildSha === '' ? 'unknown' : buildSha,
+  serviceInstanceId:
+    instanceId === undefined || instanceId === '' ? `${config.serviceId}:unknown` : instanceId,
+  environment: config.environment,
+  imageSha: imageSha === undefined || imageSha === '' ? 'unknown' : imageSha,
+  migrationHead: migrationHead === undefined || migrationHead === '' ? 'unknown' : migrationHead,
+  configSchemaVersion: String(config.schemaVersion),
+});
 const server = createGatewayServer({ config, turnSpool });
 
 server.listen(PORT, HOST, () => {
@@ -78,6 +93,7 @@ function stop(): void {
       try {
         if (databasePool !== undefined) await closeDatabasePool(databasePool);
       } finally {
+        await observability.shutdown().catch(() => undefined);
         process.exit(error === undefined ? 0 : 1);
       }
     })();

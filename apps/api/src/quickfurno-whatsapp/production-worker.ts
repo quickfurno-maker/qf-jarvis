@@ -22,6 +22,8 @@ import {
   createSystemClock,
   GroqModelProvider,
   OpenAIModelProvider,
+  type GatewayEvent,
+  type GatewayObservabilityHook,
 } from '@qf-jarvis/model-gateway';
 import {
   createLiveModelGatewayInvoker,
@@ -55,6 +57,7 @@ import {
   RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1,
   RIYA_PRODUCTION_PROMPTS,
 } from '@qf-jarvis/riya-prompts';
+import { addMetric, emitStructuredLog, recordMetric, setMetric } from '@qf-jarvis/observability';
 
 import { createFileGroqCredentialBinding } from '../secrets/file-groq-credential-binding.js';
 import { createFileOpenAICredentialBinding } from '../secrets/file-openai-credential-binding.js';
@@ -91,6 +94,46 @@ import { bindJf5cSealForProduction } from './production-seal-binding.js';
 import type { QuickFurnoWhatsAppProductionWorkerConfig } from './production-worker-config.js';
 import { createAgentFlowTraceObservationWriter } from './agent-flow-trace-observation.js';
 import { createQuickFurnoWorkerObservationWriter } from './production-observation.js';
+
+function boundedProvider(event: GatewayEvent): 'openai' | 'groq' | 'other' {
+  const value = event.providerId?.toLowerCase() ?? '';
+  if (value.includes('openai')) return 'openai';
+  if (value.includes('groq')) return 'groq';
+  return 'other';
+}
+
+const OTEL_MODEL_GATEWAY_OBSERVABILITY: GatewayObservabilityHook = Object.freeze({
+  record(event: GatewayEvent): void {
+    const provider = boundedProvider(event);
+    const result = event.code ?? event.type;
+    if (event.latencyMs !== undefined) {
+      recordMetric('qfj.model.duration', event.latencyMs, { provider, result });
+    }
+    if (event.cost !== undefined) {
+      recordMetric('qfj.model.cost', event.cost, { provider, result: 'completed' });
+    }
+    if (event.type === 'invocation-failed' || event.type === 'timeout') {
+      addMetric('qfj.model.errors', 1, { provider, result });
+    }
+    if (event.type === 'concurrency-refused' || event.type === 'queue-refused') {
+      addMetric('qfj.provider.saturation', 1, { provider, result: event.type });
+    }
+    if (event.type === 'invocation-started') {
+      addMetric('qfj.provider.concurrency', 1, { provider, result: 'admitted' });
+    }
+    emitStructuredLog(
+      event.type === 'invocation-failed' || event.type === 'timeout' ? 'WARN' : 'INFO',
+      `model_gateway.${event.type}`,
+      {
+        'model.provider': provider,
+        'model.outcome': result,
+        ...(event.latencyMs === undefined ? {} : { 'model.latency_ms': event.latencyMs }),
+        ...(event.cost === undefined ? {} : { 'model.cost': event.cost }),
+        ...(event.totalTokens === undefined ? {} : { 'model.tokens.total': event.totalTokens }),
+      },
+    );
+  },
+});
 
 export interface QuickFurnoWhatsAppProductionWorker {
   readonly revision: string;
@@ -229,6 +272,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       budgetPolicy: createEstimatedBudgetPolicy({}),
       killSwitch,
       clock: gatewayClock,
+      observability: OTEL_MODEL_GATEWAY_OBSERVABILITY,
       concurrency: config.concurrency.modelGateway,
       circuit: { failureThreshold: 3, cooldownMs: 30_000 },
       defaultRetryBudget: 0,
@@ -295,6 +339,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         budgetPolicy: createEstimatedBudgetPolicy({}),
         killSwitch,
         clock: gatewayClock,
+        observability: OTEL_MODEL_GATEWAY_OBSERVABILITY,
         concurrency: concurrency[tier],
         circuit: { failureThreshold: 3, cooldownMs: 30_000 },
         defaultRetryBudget: 0,
@@ -611,6 +656,18 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         const nowMs = Date.now();
         if (!force && nowMs - lastObservationMs < 10_000) return;
         const spoolState = await spool.snapshot(nowMs);
+        setMetric('qf.job.queue.depth', spoolState.pending, {
+          lane: 'jarvis-whatsapp',
+          result: 'pending',
+        });
+        setMetric('qf.job.queue.oldest.age', spoolState.oldestPendingAgeMs ?? 0, {
+          lane: 'jarvis-whatsapp',
+          result: spoolState.oldestPendingAgeMs === null ? 'empty' : 'pending',
+        });
+        setMetric('qf.worker.dlq', spoolState.failed, {
+          worker_role: 'whatsapp-worker',
+          result: 'failed',
+        });
         await observation.write(state, spoolState, new Date(nowMs).toISOString());
         lastObservationMs = nowMs;
       });
@@ -643,6 +700,16 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       outcome: QuickFurnoWhatsAppProcessorOutcome,
     ): Promise<void> => {
       observation.recordOutcome(outcome);
+      addMetric('qf.worker.jobs', 1, {
+        worker_role: 'whatsapp-worker',
+        result: outcome,
+      });
+      if (outcome === 'released-pre-agent') {
+        addMetric('qf.worker.retries', 1, {
+          worker_role: 'whatsapp-worker',
+          result: 'released',
+        });
+      }
       const state = killSwitch.active()
         ? 'DISABLED'
         : outcome === 'failed-indeterminate'
@@ -652,7 +719,12 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       if (outcome !== 'idle') await writeTraceObservationBestEffort();
     };
     const processObservedOne = async (): Promise<QuickFurnoWhatsAppProcessorOutcome> => {
+      const startedAt = performance.now();
       const outcome = await processor.processOne();
+      recordMetric('qf.worker.duration', performance.now() - startedAt, {
+        worker_role: 'whatsapp-worker',
+        result: outcome,
+      });
       await recordObservedOutcome(outcome);
       return outcome;
     };

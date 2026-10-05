@@ -1,6 +1,7 @@
 import type { DatabasePool } from '@qf-jarvis/event-backbone';
 
 import type {
+  DurableTraceContextV1,
   DurableTurnClaimSelection,
   DurableTurnRecordV1,
   DurableTurnSpool,
@@ -11,6 +12,8 @@ import type { WhatsAppTurnV1 } from './whatsapp-turn-protocol.js';
 
 interface TurnRow {
   readonly request_id: string | null;
+  readonly traceparent: string | null;
+  readonly tracestate: string | null;
   readonly conversation_id: string;
   readonly conversation_revision: string | number;
   readonly inbound_message_id: string;
@@ -26,6 +29,8 @@ const TABLE = 'qf_jarvis.quickfurno_turn_spool';
 
 const RETURNING = `
   request_id,
+  traceparent,
+  tracestate,
   conversation_id,
   conversation_revision,
   inbound_message_id,
@@ -39,6 +44,8 @@ const RETURNING = `
 
 const RETURNING_TURN = `
   turn.request_id,
+  turn.traceparent,
+  turn.tracestate,
   turn.conversation_id,
   turn.conversation_revision,
   turn.inbound_message_id,
@@ -64,6 +71,8 @@ function record(row: TurnRow): DurableTurnRecordV1 {
   return Object.freeze({
     version: 1,
     ...(row.request_id === null ? {} : { requestId: row.request_id }),
+    ...(row.traceparent === null ? {} : { traceparent: row.traceparent }),
+    ...(row.tracestate === null ? {} : { tracestate: row.tracestate }),
     conversationId: row.conversation_id,
     conversationRevision: revision,
     inboundMessageId: row.inbound_message_id,
@@ -93,10 +102,20 @@ function sameIdentity(a: DurableTurnRecordV1, b: DurableTurnRecordV1): boolean {
   );
 }
 
-function candidateRecord(turn: WhatsAppTurnV1, acceptedAt: string): DurableTurnRecordV1 {
+function candidateRecord(
+  turn: WhatsAppTurnV1,
+  acceptedAt: string,
+  traceContext?: DurableTraceContextV1,
+): DurableTurnRecordV1 {
   return Object.freeze({
     version: 1,
     requestId: turn.requestId,
+    ...(traceContext === undefined
+      ? {}
+      : {
+          traceparent: traceContext.traceparent,
+          ...(traceContext.tracestate === undefined ? {} : { tracestate: traceContext.tracestate }),
+        }),
     conversationId: turn.conversationId,
     conversationRevision: turn.conversationRevision,
     inboundMessageId: turn.inboundMessageId,
@@ -125,18 +144,24 @@ function transitionCount(rowCount: number | null): void {
  */
 export function createPostgresDurableTurnSpool(pool: DatabasePool): DurableTurnSpool {
   return Object.freeze({
-    async accept(turn: WhatsAppTurnV1, acceptedAt: string): Promise<TurnAcceptResult> {
-      const expected = candidateRecord(turn, acceptedAt);
+    async accept(
+      turn: WhatsAppTurnV1,
+      acceptedAt: string,
+      traceContext?: DurableTraceContextV1,
+    ): Promise<TurnAcceptResult> {
+      const expected = candidateRecord(turn, acceptedAt, traceContext);
       const inserted = await pool.query<TurnRow>(
         `INSERT INTO ${TABLE}
-          (request_id, conversation_id, conversation_revision, inbound_message_id,
-           received_at, assigned_actor, subject_type, turn_purpose,
+          (request_id, traceparent, tracestate, conversation_id, conversation_revision,
+           inbound_message_id, received_at, assigned_actor, subject_type, turn_purpose,
            qualification_request_id, accepted_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
          ON CONFLICT (inbound_message_id) DO NOTHING
          RETURNING ${RETURNING}`,
         [
           turn.requestId,
+          traceContext?.traceparent ?? null,
+          traceContext?.tracestate ?? null,
           turn.conversationId,
           turn.conversationRevision,
           turn.inboundMessageId,

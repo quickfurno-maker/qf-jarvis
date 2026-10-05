@@ -219,6 +219,8 @@ export interface ActivityEntry {
 /** One row of the approval desk. */
 export interface ApprovalQueueRow {
   readonly id: string;
+  readonly kind?: 'AUTOMATION' | 'AGNI';
+  readonly actionFingerprint?: string;
   readonly requestedAction: string;
   readonly risk:
     | 'informational'
