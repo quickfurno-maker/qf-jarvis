@@ -1008,7 +1008,9 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // D2a (ADR-0138) removed exactly one root symbol: `storeValidatedEvent`, the
       // accepted-event write authority. It is now reachable only through the governed
       // `internal/event-write` subpath, which lint restricts to the ingestion bridge.
-      'event-backbone': 38,
+      // SCALE-P09: 38 -> 47. Nine reviewed root values expose only connection-budget
+      // and lifecycle policy/validation; no raw pool, delete authority, or business effect.
+      'event-backbone': 47,
       // QFJ-S3-D-A (ADR-0070): the new Anisha behaviour package, locked from the day it lands.
       'anisha-agent': 14,
       // QFJ-S3-I-A (ADR-0072): the prompt registry foundation, locked from the day it lands.
@@ -1142,6 +1144,10 @@ describe('(78, 79, 80, 81) repository invariants', () => {
         'e389afa44ef080e3808845ee8900463f94e130448e4beed3d5dbcd243440539e',
       '0017_quickfurno_durable_turn_spool.sql':
         'fb14e55292eaac4682c2b6f431e718d33aefbe1f7dfa6c7f78be9bf36b4bcb09',
+      // SCALE-P09: reviewed lifecycle migration. Canonical event deletion remains absent;
+      // the maintenance-only prune path is limited to terminal opaque turn-spool rows.
+      '0018_scale_phase09_data_lifecycle.sql':
+        '1170c1b6b126871108b6a5a7326dcf2619fe3eadd2400c85a8580966a555dc74',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -1155,10 +1161,9 @@ describe('(78, 79, 80, 81) repository invariants', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
-    // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
-    // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((name) => name.startsWith('0018'))).toBe(false);
+    // SCALE-P09 explicitly authorizes 0018 and pins its exact bytes above. The exact-set
+    // equality remains fail-closed: any 0019 or unreviewed migration still fails this test.
+    expect(sql.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
   });
 
   it('(80) no source references the protected reconciliation directory', () => {

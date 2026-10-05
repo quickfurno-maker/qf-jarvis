@@ -27,12 +27,16 @@
     "db:preflight": "pnpm --filter @qf-jarvis/event-backbone db:preflight",
     "inspect:failures": "pnpm --filter @qf-jarvis/event-backbone inspect:failures --",
     "check:dist-containment": "node scripts/check-dist-containment.mjs",
-    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:dist-containment && pnpm run check:scale:containers && pnpm run check:scale:coordination && pnpm run check:scale:durable-jobs",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:dist-containment && pnpm run check:scale:containers && pnpm run check:scale:coordination && pnpm run check:scale:durable-jobs && pnpm run check:scale:db-lifecycle",
     "riya:as3:pilot": "node packages/riya-ai-synthetic-provider-adapters/dist/cli/bin.js",
     "check:scale:containers": "node scripts/scale/validate-container-contract.mjs",
     "test:scale:artifact": "node scripts/scale/validate-artifact-contract.mjs",
     "check:scale:coordination": "node scripts/scale/validate-coordination-contract.mjs",
-    "check:scale:durable-jobs": "node scripts/scale/validate-durable-jobs-contract.mjs"
+    "check:scale:durable-jobs": "node scripts/scale/validate-durable-jobs-contract.mjs",
+    "check:scale:db-lifecycle": "node scripts/scale/validate-db-lifecycle-contract.mjs",
+    "test:scale:db-connection-budget": "node scripts/scale/certify-db-connection-budget-postgres.mjs",
+    "test:scale:data-lifecycle-postgres": "node scripts/scale/certify-data-lifecycle-postgres.mjs",
+    "test:scale:phase09": "pnpm run check:scale:db-lifecycle && pnpm run test:scale:db-connection-budget && pnpm run test:scale:data-lifecycle-postgres"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

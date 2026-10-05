@@ -415,6 +415,10 @@ describe('public API and repository invariants', () => {
       'e389afa44ef080e3808845ee8900463f94e130448e4beed3d5dbcd243440539e',
     '0017_quickfurno_durable_turn_spool.sql':
       'fb14e55292eaac4682c2b6f431e718d33aefbe1f7dfa6c7f78be9bf36b4bcb09',
+    // SCALE-P09: reviewed lifecycle migration. Canonical event deletion remains absent;
+    // only bounded maintenance pruning of terminal opaque turn-spool rows is introduced.
+    '0018_scale_phase09_data_lifecycle.sql':
+      '1170c1b6b126871108b6a5a7326dcf2619fe3eadd2400c85a8580966a555dc74',
   };
 
   it('(11, 12) migrations 0001-0012 are byte-identical and 0013 is absent', () => {
@@ -432,10 +436,8 @@ describe('public API and repository invariants', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
-    // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
-    // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((name) => name.startsWith('0018'))).toBe(false);
+    // SCALE-P09 authorizes exactly 0018; exact-set equality and byte hashes remain the lock.
+    expect(sql.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
   });
 
   it('(13) the event-backbone root API lock remains 39', () => {
@@ -444,7 +446,7 @@ describe('public API and repository invariants', () => {
         fileURLToPath(new URL('packages/event-backbone/src/tests/public-api.test.ts', REPO_ROOT)),
         'utf8',
       ),
-    ).toContain('toHaveLength(38)');
+    ).toContain('toHaveLength(47)');
   });
 
   it('(14) no source touched by this repair references the protected directory', () => {

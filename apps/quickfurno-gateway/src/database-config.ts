@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 
 import {
+  assertProductionDatabaseRoleBudget,
   createDatabaseConfig,
+  rolePoolLimit,
   type DatabaseConfig,
   type DatabaseConfigInput,
 } from '@qf-jarvis/event-backbone';
@@ -113,9 +115,9 @@ export function loadGatewayDatabaseConfig(path: string): DatabaseConfig {
     };
   }
 
-  return createDatabaseConfig({
+  const config = createDatabaseConfig({
     connectionString: raw.connectionString,
-    ...(raw.maxConnections === undefined ? {} : { maxConnections: raw.maxConnections }),
+    maxConnections: raw.maxConnections ?? rolePoolLimit('gateway'),
     ...(raw.connectionTimeoutMillis === undefined
       ? {}
       : { connectionTimeoutMillis: raw.connectionTimeoutMillis }),
@@ -126,4 +128,6 @@ export function loadGatewayDatabaseConfig(path: string): DatabaseConfig {
     applicationName: 'qf-jarvis-gateway-turn-spool',
     tls,
   });
+  assertProductionDatabaseRoleBudget('gateway', config.maxConnections);
+  return config;
 }

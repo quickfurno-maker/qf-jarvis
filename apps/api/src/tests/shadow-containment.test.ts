@@ -999,7 +999,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // D2a (ADR-0138) removed exactly one root symbol: `storeValidatedEvent`, the
       // accepted-event write authority. It is now reachable only through the governed
       // `internal/event-write` subpath, which lint restricts to the ingestion bridge.
-      'event-backbone': 38,
+      // SCALE-P09: 38 -> 47. Nine reviewed root values expose only connection-budget
+      // and lifecycle policy/validation; no raw pool, delete authority, or business effect.
+      'event-backbone': 47,
       // QFJ-S3-D-A (ADR-0070): the new Anisha behaviour package, locked from the day it lands.
       'anisha-agent': 14,
       // QFJ-S3-I-A (ADR-0072): the prompt registry foundation, locked from the day it lands.

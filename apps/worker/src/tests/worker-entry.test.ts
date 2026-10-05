@@ -100,6 +100,6 @@ describe('apps/worker consumer view — event-backbone root surface stays 38', (
     // package — could hand-build a persistence record and create a canonical event row that had
     // never passed signature verification, so a row proved shape and reachability but never origin.
     // apps/worker consumes the READ side and never needed the writer; nothing here regressed.
-    expect(Object.keys(eventBackbone)).toHaveLength(38);
+    expect(Object.keys(eventBackbone)).toHaveLength(47);
   });
 });

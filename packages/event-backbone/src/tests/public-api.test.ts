@@ -53,11 +53,14 @@ const EXPECTED_ROOT_SURFACE = [
   'DATABASE_CONFIG_BOUNDS',
   'DATABASE_CONFIG_DEFAULTS',
   'DatabaseConfigError',
+  'DatabaseConnectionBudgetError',
   'DatabaseTlsError',
   'DuplicateMigrationVersionError',
   'EventPersistenceConsistencyError',
   'INGESTION_REJECTION_ISSUE_CODES',
   'INGESTION_REJECTION_REASON_CODES',
+  'JARVIS_DATA_LIFECYCLE',
+  'JARVIS_DB_CONNECTION_BUDGET',
   'MAX_INGESTION_REJECTION_ISSUES',
   'MIGRATION_ADVISORY_LOCK_KEY',
   'MIGRATION_FILENAME_PATTERN',
@@ -73,7 +76,10 @@ const EXPECTED_ROOT_SURFACE = [
   'REQUIRED_POSTGRES_MAJOR_VERSION',
   'UnsupportedConnectionModeError',
   'assertCaCertificateBundle',
+  'assertConnectionBudgetInvariant',
   'assertConnectionUrlIsSupported',
+  'assertProductionDatabaseRoleBudget',
+  'assertWorkerTurnConcurrencyBudget',
   'closeDatabasePool',
   'createDatabaseConfig',
   'createDatabasePool',
@@ -81,10 +87,13 @@ const EXPECTED_ROOT_SURFACE = [
   'describeConnectionTarget',
   'describeTls',
   'isLoopbackConnectionTarget',
+  'jarvisReadConsistencyFor',
   'migrateWithPreflight',
   'recordIngestionRejection',
+  'rolePoolLimit',
   'runPreflight',
   'runPreflightOnClient',
+  'targetApplicationConnectionCeiling',
   'withClient',
   'withTransaction',
 ] as const;
@@ -267,14 +276,24 @@ describe('the Stage 3.4.5B real handlers, production registry, and worker CLI ar
     // The write-side `EventPersistenceRecord` type left the barrel with it; being a type, it never
     // counted toward this runtime surface. Every read-side result type and error stayed. This
     // package is workspace-private (`"private": true`), so no external contract depended on either.
-    expect(EXPECTED_ROOT_SURFACE).toHaveLength(38);
+    // SCALE-P09: 38 -> 47. The nine reviewed additions are connection-budget and lifecycle
+    // policy/validation values only; no raw Pool, credential, migration bypass, delete primitive,
+    // or business-effect authority is exported.
+    expect(EXPECTED_ROOT_SURFACE).toHaveLength(47);
     expect(EXPECTED_ROOT_SURFACE).not.toContain('storeValidatedEvent');
     expect(Object.keys(publicApi).sort()).toEqual(EXPECTED_ROOT_SURFACE);
   });
 
-  it('exposes no handler, registry, or worker vocabulary under any root key', () => {
+  it('exposes no handler, registry, or worker-execution vocabulary under any root key', () => {
     const rootKeys = Object.keys(publicApi);
-    expect(rootKeys.filter((key) => key.toLowerCase().includes('worker'))).toEqual([]);
+    // SCALE-P09 adds one pure worker-capacity validator by exact name. It can reject
+    // an unsafe configuration but cannot start, schedule, claim, or execute work.
+    expect(
+      rootKeys.filter(
+        (key) =>
+          key.toLowerCase().includes('worker') && key !== 'assertWorkerTurnConcurrencyBudget',
+      ),
+    ).toEqual([]);
     expect(rootKeys.filter((key) => key.toLowerCase().includes('handler'))).toEqual([]);
     expect(rootKeys.some((key) => key.toLowerCase().includes('subject'))).toBe(false);
   });

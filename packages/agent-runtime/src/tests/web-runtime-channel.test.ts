@@ -513,6 +513,9 @@ describe('(12, 13) the repository invariants this slice must not move', () => {
         'e389afa44ef080e3808845ee8900463f94e130448e4beed3d5dbcd243440539e',
       '0017_quickfurno_durable_turn_spool.sql':
         'fb14e55292eaac4682c2b6f431e718d33aefbe1f7dfa6c7f78be9bf36b4bcb09',
+
+      '0018_scale_phase09_data_lifecycle.sql':
+        '1170c1b6b126871108b6a5a7326dcf2619fe3eadd2400c85a8580966a555dc74',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -528,7 +531,7 @@ describe('(12, 13) the repository invariants this slice must not move', () => {
       ).toBe(hash);
     }
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition.
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 17)).toBe(false);
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 18)).toBe(false);
   });
 
   it('no memory, transcript or session store was introduced', () => {

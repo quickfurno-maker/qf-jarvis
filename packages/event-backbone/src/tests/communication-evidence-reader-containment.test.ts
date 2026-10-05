@@ -222,7 +222,7 @@ describe('D4 — the reader is not part of any public surface', () => {
 
   it('leaves the package-root runtime surface at 38 — D4 adds nothing to it', () => {
     // D4 is a purpose-bounded internal capability. If it ever appears here, the boundary is gone.
-    expect(Object.keys(barrel)).toHaveLength(38);
+    expect(Object.keys(barrel)).toHaveLength(47);
   });
 
   it('adds no package export subpath', async () => {

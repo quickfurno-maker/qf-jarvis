@@ -390,12 +390,14 @@ describe('a prompt definition reaches nothing', () => {
     ]);
   });
 
-  it('migrations are unchanged and there is no 0018', () => {
+  it('migration surface includes exactly the reviewed SCALE-P09 0018 addition', () => {
     const migrations = readdirSync(
       join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations'),
-    ).filter((name) => name.endsWith('.sql'));
-    expect(migrations).toHaveLength(17);
-    expect(migrations.some((name) => name.startsWith('0018'))).toBe(false);
+    )
+      .filter((name) => name.endsWith('.sql'))
+      .sort();
+    expect(migrations).toHaveLength(18);
+    expect(migrations.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
   });
 });
 
