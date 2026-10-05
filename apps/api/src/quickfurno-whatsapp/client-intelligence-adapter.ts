@@ -156,6 +156,7 @@ export function buildWhatsAppClientIntelligence(
     vendorNoContactCount: journeyState.vendorNoContactCount,
     allReleasedVendorsContacted: journeyState.allReleasedVendorsContacted,
     satisfactionKnown: journeyState.satisfactionState !== 'UNKNOWN',
+    satisfactionPositive: journeyState.satisfactionState === 'SATISFIED',
     followUpDue: journeyState.followUpDue,
     opportunities: Object.freeze([]),
   });

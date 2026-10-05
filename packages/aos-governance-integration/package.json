@@ -1,0 +1,31 @@
+{
+  "name": "@qf-jarvis/aos-governance-integration",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Governed AOS integration with certified model routing, selective decision adjudication, digital-twin rehearsal and canonical recommendations.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/aos-intelligence": "workspace:*",
+    "@qf-jarvis/aos-model-reasoning": "workspace:*",
+    "@qf-jarvis/aos-recommendation-adapter": "workspace:*",
+    "@qf-jarvis/contracts": "workspace:*",
+    "@qf-jarvis/decision-intelligence": "workspace:*",
+    "@qf-jarvis/digital-twin-simulation": "workspace:*",
+    "@qf-jarvis/model-gateway": "workspace:*",
+    "@qf-jarvis/model-intelligence-control": "workspace:*",
+    "@qf-jarvis/model-reply-adapter": "workspace:*",
+    "@qf-jarvis/recommendation-runtime": "workspace:*"
+  }
+}

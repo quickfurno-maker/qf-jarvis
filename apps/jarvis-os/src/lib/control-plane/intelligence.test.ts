@@ -1,3 +1,4 @@
+import { createAosOwnerAttentionObservation } from '@qf-jarvis/aos-intelligence';
 import { describe, expect, it } from 'vitest';
 
 import { controlPlane } from './index';
@@ -70,6 +71,34 @@ describe('Jarvis OS intelligence surfaces', () => {
       effective: 'ROLLOUT_OFF',
       source: 'GOVERNED_DECLARATION',
     });
+  });
+
+  it('merges content-minimized AOS shadow findings into the shared owner attention center', async () => {
+    const observation = createAosOwnerAttentionObservation({
+      cycleId: 'aos.proactive.cycle.ui-test',
+      emittedAt: '2026-10-01T10:00:00.000Z',
+      items: [
+        {
+          caseId: 'case.aos.ui-test',
+          priority: 'P1',
+          lane: 'SOON',
+          attentionScore: 62,
+          reasonCodes: ['PRIORITY_P1', 'OWNER_REVIEW_REQUIRED'],
+          requiresOwnerReview: true,
+          recommendationAction: 'REQUEST_REPLACEMENT_BATCH',
+          executionAuthority: 'NONE',
+          businessEffect: false,
+        },
+      ],
+    });
+    const items = operationalAttention(await controlPlane(), observation);
+    const aos = items.find((item) => item.id === 'aos:case.aos.ui-test');
+    expect(aos).toMatchObject({
+      kind: 'escalation',
+      severity: 'warning',
+      href: '/aos',
+    });
+    expect(aos?.context).toContain('QuickFurno Core remains business authority');
   });
 
   it('promotes proactive findings into the shared attention center', async () => {

@@ -218,6 +218,9 @@ importers:
       '@qf-jarvis/agent-flow-trace-contract':
         specifier: workspace:*
         version: link:../../packages/agent-flow-trace-contract
+      '@qf-jarvis/aos-intelligence':
+        specifier: workspace:*
+        version: link:../../packages/aos-intelligence
       '@qf-jarvis/control-plane-read-contract':
         specifier: workspace:*
         version: link:../../packages/control-plane-read-contract
@@ -297,6 +300,21 @@ importers:
 
   apps/proactive-worker:
     dependencies:
+      '@qf-jarvis/aos-behaviour-control':
+        specifier: workspace:*
+        version: link:../../packages/aos-behaviour-control
+      '@qf-jarvis/aos-core-event-bridge':
+        specifier: workspace:*
+        version: link:../../packages/aos-core-event-bridge
+      '@qf-jarvis/aos-governance-integration':
+        specifier: workspace:*
+        version: link:../../packages/aos-governance-integration
+      '@qf-jarvis/aos-intelligence':
+        specifier: workspace:*
+        version: link:../../packages/aos-intelligence
+      '@qf-jarvis/aos-model-reasoning':
+        specifier: workspace:*
+        version: link:../../packages/aos-model-reasoning
       '@qf-jarvis/event-backbone':
         specifier: workspace:*
         version: link:../../packages/event-backbone
@@ -455,6 +473,86 @@ importers:
       '@qf-jarvis/prompt-registry':
         specifier: workspace:*
         version: link:../prompt-registry
+
+  packages/aos-behaviour-control:
+    dependencies:
+      '@qf-jarvis/aos-intelligence':
+        specifier: workspace:*
+        version: link:../aos-intelligence
+
+  packages/aos-core-event-bridge:
+    dependencies:
+      '@qf-jarvis/aos-intelligence':
+        specifier: workspace:*
+        version: link:../aos-intelligence
+      '@qf-jarvis/client-intelligence':
+        specifier: workspace:*
+        version: link:../client-intelligence
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
+  packages/aos-governance-integration:
+    dependencies:
+      '@qf-jarvis/aos-intelligence':
+        specifier: workspace:*
+        version: link:../aos-intelligence
+      '@qf-jarvis/aos-model-reasoning':
+        specifier: workspace:*
+        version: link:../aos-model-reasoning
+      '@qf-jarvis/aos-recommendation-adapter':
+        specifier: workspace:*
+        version: link:../aos-recommendation-adapter
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@qf-jarvis/decision-intelligence':
+        specifier: workspace:*
+        version: link:../decision-intelligence
+      '@qf-jarvis/digital-twin-simulation':
+        specifier: workspace:*
+        version: link:../digital-twin-simulation
+      '@qf-jarvis/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@qf-jarvis/model-intelligence-control':
+        specifier: workspace:*
+        version: link:../model-intelligence-control
+      '@qf-jarvis/model-reply-adapter':
+        specifier: workspace:*
+        version: link:../model-reply-adapter
+      '@qf-jarvis/recommendation-runtime':
+        specifier: workspace:*
+        version: link:../recommendation-runtime
+
+  packages/aos-intelligence: {}
+
+  packages/aos-model-reasoning:
+    dependencies:
+      '@qf-jarvis/aos-intelligence':
+        specifier: workspace:*
+        version: link:../aos-intelligence
+      '@qf-jarvis/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@qf-jarvis/model-reply-adapter':
+        specifier: workspace:*
+        version: link:../model-reply-adapter
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  packages/aos-recommendation-adapter:
+    dependencies:
+      '@qf-jarvis/aos-intelligence':
+        specifier: workspace:*
+        version: link:../aos-intelligence
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@qf-jarvis/recommendation-runtime':
+        specifier: workspace:*
+        version: link:../recommendation-runtime
 
   packages/approval-core-adapter:
     dependencies:
@@ -908,6 +1006,22 @@ importers:
       '@qf-jarvis/operator-api-contract':
         specifier: workspace:*
         version: link:../operator-api-contract
+
+  packages/postgres-aos-intelligence-store:
+    dependencies:
+      '@qf-jarvis/aos-behaviour-control':
+        specifier: workspace:*
+        version: link:../aos-behaviour-control
+      '@qf-jarvis/aos-intelligence':
+        specifier: workspace:*
+        version: link:../aos-intelligence
+      pg:
+        specifier: 8.22.0
+        version: 8.22.0
+    devDependencies:
+      '@types/pg':
+        specifier: 8.20.0
+        version: 8.20.0
 
   packages/postgres-approval-queue:
     dependencies:

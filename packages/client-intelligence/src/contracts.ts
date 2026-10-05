@@ -125,6 +125,7 @@ export interface ClientNextBestActionInput {
   readonly vendorNoContactCount: number;
   readonly allReleasedVendorsContacted: boolean;
   readonly satisfactionKnown: boolean;
+  readonly satisfactionPositive: boolean;
   readonly followUpDue: boolean;
   readonly opportunities: readonly ClientServiceOpportunity[];
 }
