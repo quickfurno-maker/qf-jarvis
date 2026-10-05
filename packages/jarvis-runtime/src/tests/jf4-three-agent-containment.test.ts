@@ -269,13 +269,13 @@ describe('JF-4B/C/D repository boundaries', () => {
     }
   });
 
-  it('(J93) migrations are unchanged: 0001-0014, and no 0018', () => {
+  it('(J93) migrations are unchanged: 0001-0014, with reviewed 0018', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(17);
-    expect(sql.some((n) => n.startsWith('0018'))).toBe(false);
+    expect(sql).toHaveLength(18);
+    expect(sql.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
   });
 
   it('(J91,J92) D5 is neither activated nor granted new permissions by this lane', () => {
@@ -501,6 +501,7 @@ describe('JF-4 correction: there is ONE governed RAG, not three', () => {
       '0015',
       '0016',
       '0017',
+    '0018',
     ]);
     expect(sql[13]).toBe('0014_conversation_prospect_party_type.sql');
     expect(sql[14]).toBe('0015_correlation_timeline_projection.sql');
