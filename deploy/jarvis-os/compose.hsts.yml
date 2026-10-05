@@ -47,8 +47,8 @@ services:
       #
       # The login router is included deliberately: a response that sets a session cookie is the
       # last one that should be reachable over plain HTTP.
-      traefik.http.routers.qf-jarvis-os.middlewares: 'qf-jarvis-os-ratelimit@docker,qf-jarvis-os-hsts@docker'
-      traefik.http.routers.qf-jarvis-os-login.middlewares: 'qf-jarvis-os-login-ratelimit@docker,qf-jarvis-os-login-buffer@docker,qf-jarvis-os-hsts@docker'
+      traefik.http.routers.qf-jarvis-os.middlewares: 'qf-jarvis-os-cloudflare-ip@docker,qf-jarvis-os-ratelimit@docker,qf-jarvis-os-hsts@docker'
+      traefik.http.routers.qf-jarvis-os-login.middlewares: 'qf-jarvis-os-cloudflare-ip@docker,qf-jarvis-os-login-ratelimit@docker,qf-jarvis-os-login-buffer@docker,qf-jarvis-os-hsts@docker'
 
       # Still no `headers.contentSecurityPolicy`. This middleware sets STS fields and nothing else:
       # Traefik's headers middleware can also set a static CSP, and doing so here would collide
