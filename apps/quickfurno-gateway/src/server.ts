@@ -1,5 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
+import {
+  qfjScaleResponseHeaders,
+  verifyQfjScaleRequest,
+  type QfjScaleErrorClass,
+} from '@qf-jarvis/cross-system-scale-contract';
+
 import type { GatewayConfig } from './config.js';
 import {
   HANDSHAKE_METHOD,
@@ -77,6 +83,26 @@ function contentTypeAllowed(request: IncomingMessage): boolean {
   return value !== null && value.toLowerCase().split(';', 1)[0]?.trim() === 'application/json';
 }
 
+function scaleVerificationKeys(config: GatewayConfig) {
+  return config.verificationKeys.map((entry) => ({
+    keyId: entry.keyId,
+    publicKeyPem: entry.publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+  }));
+}
+
+function scaleStatus(errorClass: QfjScaleErrorClass): number {
+  if (errorClass === 'QFJ_AUTHENTICATION_FAILED') return 401;
+  if (errorClass === 'QFJ_DEADLINE_EXCEEDED') return 408;
+  if (errorClass === 'QFJ_BACKPRESSURE' || errorClass === 'QFJ_CIRCUIT_OPEN') return 429;
+  return 400;
+}
+
+function scaleHeaderRecord(
+  request: IncomingMessage,
+): Readonly<Record<string, string | readonly string[] | undefined>> {
+  return request.headers;
+}
+
 export interface GatewayServerDependencies {
   readonly config: GatewayConfig;
   readonly replayGuard?: ReplayGuard;
@@ -131,6 +157,24 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
             return;
           }
           const current = now();
+          const scaleContract = verifyQfjScaleRequest({
+            headers: scaleHeaderRecord(request),
+            method: WHATSAPP_TURN_METHOD,
+            path: WHATSAPP_TURN_PATH,
+            rawBody,
+            verificationKeys: scaleVerificationKeys(dependencies.config),
+            nowMs: current.getTime(),
+            allowLegacy: true,
+          });
+          if (!scaleContract.ok) {
+            writeJson(response, scaleStatus(scaleContract.errorClass), {
+              error: 'scale_contract_rejected',
+              errorClass: scaleContract.errorClass,
+            });
+            return;
+          }
+          const scaleResponseHeaders =
+            scaleContract.mode === 'v1' ? qfjScaleResponseHeaders(scaleContract.metadata) : {};
           const authenticated = verifyWhatsAppTurnSignature({
             rawBody,
             turn,
@@ -141,25 +185,30 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
             maxClockSkewMs: dependencies.config.maxClockSkewMs,
           });
           if (!authenticated) {
-            writeJson(response, 401, { error: 'authentication_failed' });
+            writeJson(response, 401, { error: 'authentication_failed' }, scaleResponseHeaders);
             return;
           }
           const accepted = await dependencies.turnSpool.accept(turn, current.toISOString());
           if (accepted.outcome === 'replay') {
-            writeJson(response, 409, { error: 'replay_rejected' });
+            writeJson(response, 409, { error: 'replay_rejected' }, scaleResponseHeaders);
             return;
           }
           if (accepted.outcome === 'conflict') {
-            writeJson(response, 409, { error: 'turn_identity_conflict' });
+            writeJson(response, 409, { error: 'turn_identity_conflict' }, scaleResponseHeaders);
             return;
           }
-          writeJson(response, 202, {
-            protocol: WHATSAPP_TURN_PROTOCOL,
-            version: 1,
-            requestId: turn.requestId,
-            status: accepted.outcome,
-            durable: true,
-          });
+          writeJson(
+            response,
+            202,
+            {
+              protocol: WHATSAPP_TURN_PROTOCOL,
+              version: 1,
+              requestId: turn.requestId,
+              status: accepted.outcome,
+              durable: true,
+            },
+            scaleResponseHeaders,
+          );
           return;
         }
 
@@ -192,6 +241,24 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
         }
 
         const current = now();
+        const scaleContract = verifyQfjScaleRequest({
+          headers: scaleHeaderRecord(request),
+          method: HANDSHAKE_METHOD,
+          path: HANDSHAKE_PATH,
+          rawBody,
+          verificationKeys: scaleVerificationKeys(dependencies.config),
+          nowMs: current.getTime(),
+          allowLegacy: true,
+        });
+        if (!scaleContract.ok) {
+          writeJson(response, scaleStatus(scaleContract.errorClass), {
+            error: 'scale_contract_rejected',
+            errorClass: scaleContract.errorClass,
+          });
+          return;
+        }
+        const scaleResponseHeaders =
+          scaleContract.mode === 'v1' ? qfjScaleResponseHeaders(scaleContract.metadata) : {};
         const authenticated = verifyHandshakeSignature({
           rawBody,
           challenge,
@@ -202,12 +269,12 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
           maxClockSkewMs: dependencies.config.maxClockSkewMs,
         });
         if (!authenticated) {
-          writeJson(response, 401, { error: 'authentication_failed' });
+          writeJson(response, 401, { error: 'authentication_failed' }, scaleResponseHeaders);
           return;
         }
 
         if (!replayGuard.claim(challenge.requestId, current.getTime())) {
-          writeJson(response, 409, { error: 'replay_rejected' });
+          writeJson(response, 409, { error: 'replay_rejected' }, scaleResponseHeaders);
           return;
         }
 
@@ -219,6 +286,7 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
           signingKey: dependencies.config.signingKey,
         });
         writeJson(response, 200, body, {
+          ...scaleResponseHeaders,
           [KEY_ID_HEADER]: dependencies.config.signingKey.keyId,
           [SIGNATURE_HEADER]: signature,
         });

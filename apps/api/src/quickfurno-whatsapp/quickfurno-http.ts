@@ -1,4 +1,5 @@
 import { createHash, createPrivateKey, sign, type KeyObject } from 'node:crypto';
+import { executeQfjScaleRequest, type QfjScaleActor } from '@qf-jarvis/cross-system-scale-contract';
 import { parseCoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import type { AarohiAcquisitionBehaviourInputPort } from '@qf-jarvis/jarvis-runtime';
 import {
@@ -48,7 +49,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const KEY_ID = /^[A-Za-z0-9._:-]{1,64}$/u;
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,239}$/u;
 const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u;
-const DEFAULT_TIMEOUT_MS = 5_000;
+const DEFAULT_TIMEOUT_MS = 2_500;
 const MAX_RESPONSE_BYTES = 12_288;
 
 const QFJ_AAROHI_RUNTIME_PATH = '/api/internal/jarvis/aarohi-runtime-context';
@@ -1190,7 +1191,7 @@ function parsePrivateKey(config: QuickFurnoWhatsAppHttpConfig): {
     throw new QuickFurnoWhatsAppHttpError('invalid-config');
   }
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 30_000)
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 5_000)
     throw new QuickFurnoWhatsAppHttpError('invalid-config');
   let key: KeyObject;
   try {
@@ -1201,6 +1202,54 @@ function parsePrivateKey(config: QuickFurnoWhatsAppHttpConfig): {
   if (key.type !== 'private' || key.asymmetricKeyType !== 'ed25519')
     throw new QuickFurnoWhatsAppHttpError('invalid-config');
   return { key, timeoutMs };
+}
+
+function scaleIdentityFromBody(
+  body: string,
+  requestId: string,
+): {
+  readonly idempotencyKey: string;
+  readonly correlationId: string;
+  readonly expectedRevision?: number;
+  readonly actor: QfjScaleActor;
+} {
+  let record: Record<string, unknown> | null;
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    record = isRecord(parsed) ? parsed : null;
+  } catch {
+    record = null;
+  }
+  const safeId = (value: unknown): value is string =>
+    typeof value === 'string' && /^[A-Za-z0-9._:-]{1,160}$/u.test(value);
+  const idempotencyKey = safeId(record?.['idempotencyKey']) ? record['idempotencyKey'] : requestId;
+  const correlationId = safeId(record?.['correlationId']) ? record['correlationId'] : requestId;
+  const revisionCandidate =
+    typeof record?.['expectedRevision'] === 'number'
+      ? record['expectedRevision']
+      : typeof record?.['revision'] === 'number'
+        ? record['revision']
+        : undefined;
+  const expectedRevision =
+    typeof revisionCandidate === 'number' &&
+    Number.isSafeInteger(revisionCandidate) &&
+    revisionCandidate >= 0
+      ? revisionCandidate
+      : undefined;
+  const actorCandidate = record?.['assignedActor'];
+  const actor: QfjScaleActor =
+    actorCandidate === 'RIYA' ||
+    actorCandidate === 'ANISHA' ||
+    actorCandidate === 'AAROHI' ||
+    actorCandidate === 'JARVIS'
+      ? actorCandidate
+      : 'qf-jarvis';
+  return Object.freeze({
+    idempotencyKey,
+    correlationId,
+    ...(expectedRevision === undefined ? {} : { expectedRevision }),
+    actor,
+  });
 }
 
 async function signedPost(args: {
@@ -1228,27 +1277,28 @@ async function signedPost(args: {
     ),
     args.key,
   ).toString('base64url');
-  const controller = new AbortController();
-  const timer = setTimeout(() => {
-    controller.abort();
-  }, args.timeoutMs);
-  try {
-    return await args.config.httpPost(endpointFor(args.config.baseUrl, args.path), {
-      method: 'POST',
-      redirect: 'error',
-      signal: controller.signal,
-      body: args.body,
-      headers: Object.freeze({
-        'content-type': 'application/json',
-        [KEY_ID_HEADER]: args.config.keyId,
-        [SIGNATURE_HEADER]: signature,
-      }),
-    });
-  } catch {
-    throw new QuickFurnoWhatsAppHttpError('request-failed');
-  } finally {
-    clearTimeout(timer);
-  }
+  const scale = scaleIdentityFromBody(args.body, args.requestId);
+  const result = await executeQfjScaleRequest({
+    url: endpointFor(args.config.baseUrl, args.path),
+    path: args.path,
+    body: args.body,
+    keyId: args.config.keyId,
+    privateKeyPem: args.config.privateKeyPem,
+    actor: scale.actor,
+    requestId: args.requestId,
+    idempotencyKey: scale.idempotencyKey,
+    correlationId: scale.correlationId,
+    ...(scale.expectedRevision === undefined ? {} : { expectedRevision: scale.expectedRevision }),
+    timeoutMs: args.timeoutMs,
+    headers: Object.freeze({
+      'content-type': 'application/json',
+      [KEY_ID_HEADER]: args.config.keyId,
+      [SIGNATURE_HEADER]: signature,
+    }),
+    httpPost: args.config.httpPost,
+  });
+  if (!result.ok) throw new QuickFurnoWhatsAppHttpError('request-failed');
+  return result.response;
 }
 function parseQualificationMaterial(
   value: unknown,

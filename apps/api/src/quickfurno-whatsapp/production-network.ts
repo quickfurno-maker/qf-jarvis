@@ -1,3 +1,5 @@
+import { boundedNodeHttpPost } from '@qf-jarvis/cross-system-scale-contract';
+
 import type { QuickFurnoWhatsAppHttpPost } from './quickfurno-http.js';
 
 export type QuickFurnoWorkerAvailabilityHttpPost = (
@@ -17,23 +19,7 @@ export type QuickFurnoWorkerAvailabilityHttpPost = (
  * Callers provide the signed/bounded request, abort signal and fixed endpoint. This adapter performs
  * exactly one transport attempt, no redirect following, credential lookup, logging or response interpretation.
  */
-export const quickFurnoWorkerHttpPost: QuickFurnoWhatsAppHttpPost = async (url, init) =>
-  fetch(url, {
-    method: init.method,
-    headers: { ...init.headers },
-    body: init.body,
-    signal: init.signal,
-    redirect: init.redirect,
-  });
+export const quickFurnoWorkerHttpPost: QuickFurnoWhatsAppHttpPost = boundedNodeHttpPost;
 
-export const quickFurnoWorkerAvailabilityHttpPost: QuickFurnoWorkerAvailabilityHttpPost = async (
-  url,
-  init,
-) =>
-  fetch(url, {
-    method: init.method,
-    headers: { ...init.headers },
-    body: init.body,
-    signal: init.signal,
-    redirect: init.redirect,
-  });
+export const quickFurnoWorkerAvailabilityHttpPost: QuickFurnoWorkerAvailabilityHttpPost =
+  boundedNodeHttpPost;

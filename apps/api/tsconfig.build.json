@@ -45,6 +45,7 @@
     // SERVICE the handler delegates to, and `agent-runtime` for the closed `RUNTIME_DATA_CLASSES`
     // vocabulary the classification-policy output is validated against.
     { "path": "../../packages/riya-web-conversation-service/tsconfig.build.json" },
+    { "path": "../../packages/cross-system-scale-contract/tsconfig.build.json" },
     { "path": "../../packages/agent-runtime/tsconfig.build.json" },
     { "path": "../../packages/action-kernel/tsconfig.build.json" },
     { "path": "../../packages/durable-orchestration-contracts/tsconfig.build.json" },

@@ -21,6 +21,7 @@
     "start": "node ./dist/index.js"
   },
   "dependencies": {
+    "@qf-jarvis/cross-system-scale-contract": "workspace:*",
     "@qf-jarvis/event-backbone": "workspace:*"
   }
 }

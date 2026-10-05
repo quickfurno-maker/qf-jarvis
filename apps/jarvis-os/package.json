@@ -18,6 +18,7 @@
     "@qf-jarvis/agent-flow-governance": "workspace:*",
     "@qf-jarvis/agent-flow-orchestration": "workspace:*",
     "@qf-jarvis/control-plane-read-contract": "workspace:*",
+    "@qf-jarvis/cross-system-scale-contract": "workspace:*",
     "@qf-jarvis/operator-api-contract": "workspace:*",
     "@qf-jarvis/operator-client-core": "workspace:*",
     "@qf-jarvis/proactive-intelligence": "workspace:*",

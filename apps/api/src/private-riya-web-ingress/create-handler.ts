@@ -33,6 +33,11 @@
  */
 import type { IncomingMessage, RequestListener, ServerResponse } from 'node:http';
 
+import {
+  qfjScaleResponseHeaders,
+  verifyQfjScaleRequest,
+} from '@qf-jarvis/cross-system-scale-contract';
+
 import type {
   RiyaWebConversationResultV2,
   RiyaWebConversationService,
@@ -91,7 +96,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Headers every response carries. No CORS header, no `Set-Cookie`, no session of any kind. */
-function writeResponse(res: ServerResponse, status: number, body: unknown): void {
+function writeResponse(
+  res: ServerResponse,
+  status: number,
+  body: unknown,
+  extraHeaders: Readonly<Record<string, string>> = {},
+): void {
   const payload = JSON.stringify(body);
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -100,6 +110,7 @@ function writeResponse(res: ServerResponse, status: number, body: unknown): void
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  for (const [name, value] of Object.entries(extraHeaders)) res.setHeader(name, value);
   res.setHeader('Content-Length', String(Buffer.byteLength(payload, 'utf8')));
   res.end(payload);
 }
@@ -487,6 +498,23 @@ export function createPrivateRiyaWebIngressHandler(
           throw new PrivateRiyaWebIngressError('authentication-failed');
         }
 
+        const scaleContract = verifyQfjScaleRequest({
+          headers: req.headers,
+          method: PRIVATE_RIYA_WEB_INGRESS_METHOD,
+          path: PRIVATE_RIYA_WEB_INGRESS_PATH,
+          rawBody,
+          verificationKeys: config.verificationKeys,
+          nowMs,
+          allowLegacy: true,
+        });
+        if (!scaleContract.ok) {
+          throw new PrivateRiyaWebIngressError(
+            scaleContract.errorClass === 'QFJ_DEADLINE_EXCEEDED'
+              ? 'service-unavailable'
+              : 'authentication-failed',
+          );
+        }
+
         // 6. The replay claim -- AFTER verification, so an unauthenticated caller cannot burn
         //    identifiers a real gateway intends to use, and BEFORE the policy or the service, so a
         //    refused claim costs neither a classification nor an agent turn.
@@ -506,7 +534,12 @@ export function createPrivateRiyaWebIngressHandler(
           throw new PrivateRiyaWebIngressError(claim);
         }
 
-        writeResponse(res, 200, await serve(request));
+        writeResponse(
+          res,
+          200,
+          await serve(request),
+          scaleContract.mode === 'v1' ? qfjScaleResponseHeaders(scaleContract.metadata) : {},
+        );
       } catch (error: unknown) {
         if (error instanceof PrivateRiyaWebIngressError) {
           writeError(res, error.code);

@@ -1,6 +1,10 @@
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 
 import type { CoreDecisionTransport } from '@qf-jarvis/core-decision-adapter';
+import {
+  boundedNodeHttpPost,
+  executeQfjScaleRequest,
+} from '@qf-jarvis/cross-system-scale-contract';
 
 export const QUICKFURNO_CORE_DECISION_METHOD = 'POST' as const;
 export const QUICKFURNO_CORE_DECISION_PATH = '/api/internal/jarvis/core-decision' as const;
@@ -15,7 +19,7 @@ const MAX_COMMAND_BYTES = 32_768;
 const MAX_RESPONSE_BYTES = 65_536;
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MIN_TIMEOUT_MS = 100;
-const MAX_TIMEOUT_MS = 30_000;
+const MAX_TIMEOUT_MS = 5_000;
 
 export interface QuickFurnoCoreHttpResponse {
   readonly status: number;
@@ -57,6 +61,10 @@ export class QuickFurnoCoreTransportError extends Error {
 interface CommandIdentity {
   readonly commandId: string;
   readonly createdAt: string;
+  readonly idempotencyKey: string;
+  readonly correlationId: string;
+  readonly expectedRevision: number;
+  readonly assignedActor: 'RIYA' | 'ANISHA' | 'AAROHI' | 'JARVIS';
 }
 
 function parseCommandIdentity(serializedCommand: string): CommandIdentity {
@@ -79,17 +87,39 @@ function parseCommandIdentity(serializedCommand: string): CommandIdentity {
   const record = parsed as Record<string, unknown>;
   const commandId = record['commandId'];
   const createdAt = record['createdAt'];
+  const idempotencyKey = record['idempotencyKey'];
+  const correlationId = record['correlationId'];
+  const expectedRevision = record['expectedRevision'];
+  const assignedActor = record['assignedActor'];
   if (
     typeof commandId !== 'string' ||
     commandId.length < 1 ||
     commandId.length > 256 ||
     typeof createdAt !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(createdAt) ||
-    !Number.isFinite(Date.parse(createdAt))
+    !Number.isFinite(Date.parse(createdAt)) ||
+    typeof idempotencyKey !== 'string' ||
+    !/^[A-Za-z0-9._:-]{1,160}$/u.test(idempotencyKey) ||
+    typeof correlationId !== 'string' ||
+    !/^[A-Za-z0-9._:-]{1,160}$/u.test(correlationId) ||
+    typeof expectedRevision !== 'number' ||
+    !Number.isSafeInteger(expectedRevision) ||
+    expectedRevision < 0 ||
+    (assignedActor !== 'RIYA' &&
+      assignedActor !== 'ANISHA' &&
+      assignedActor !== 'AAROHI' &&
+      assignedActor !== 'JARVIS')
   ) {
     throw new QuickFurnoCoreTransportError('invalid-command');
   }
-  return Object.freeze({ commandId, createdAt });
+  return Object.freeze({
+    commandId,
+    createdAt,
+    idempotencyKey,
+    correlationId,
+    expectedRevision,
+    assignedActor,
+  });
 }
 
 function endpointFor(baseUrl: string): string {
@@ -141,16 +171,7 @@ function validateConfig(config: QuickFurnoCoreTransportConfig): Readonly<{
   if (privateKey.type !== 'private' || privateKey.asymmetricKeyType !== 'ed25519') {
     throw new QuickFurnoCoreTransportError('invalid-config');
   }
-  const httpPost: QuickFurnoCoreHttpPost =
-    config.httpPost ??
-    (async (url, init) =>
-      fetch(url, {
-        method: init.method,
-        headers: init.headers,
-        body: init.body,
-        signal: init.signal,
-        redirect: init.redirect,
-      }));
+  const httpPost: QuickFurnoCoreHttpPost = config.httpPost ?? boundedNodeHttpPost;
   return Object.freeze({
     endpoint: endpointFor(config.baseUrl),
     keyId: config.keyId,
@@ -204,39 +225,36 @@ export function createQuickFurnoCoreTransport(
         Buffer.from(signingInput, 'utf8'),
         validated.privateKey,
       ).toString('base64url');
-      const controller = new AbortController();
-      const timer = setTimeout(() => {
-        controller.abort();
-      }, validated.timeoutMs);
-      try {
-        const response = await validated.httpPost(validated.endpoint, {
-          method: QUICKFURNO_CORE_DECISION_METHOD,
-          redirect: 'error',
-          signal: controller.signal,
-          headers: Object.freeze({
-            'content-type': 'application/json',
-            [QUICKFURNO_CORE_DECISION_KEY_ID_HEADER]: validated.keyId,
-            [QUICKFURNO_CORE_DECISION_SIGNATURE_HEADER]: signature,
-          }),
-          body: serializedCommand,
-        });
-        if (response.status !== 200) {
-          throw new QuickFurnoCoreTransportError('request-failed');
-        }
-        const body = await response.text();
-        if (
-          Buffer.byteLength(body, 'utf8') < 2 ||
-          Buffer.byteLength(body, 'utf8') > MAX_RESPONSE_BYTES
-        ) {
-          throw new QuickFurnoCoreTransportError('response-invalid');
-        }
-        return body;
-      } catch (error) {
-        if (error instanceof QuickFurnoCoreTransportError) throw error;
+      const result = await executeQfjScaleRequest({
+        url: validated.endpoint,
+        path: QUICKFURNO_CORE_DECISION_PATH,
+        body: serializedCommand,
+        keyId: validated.keyId,
+        privateKeyPem: config.privateKeyPem,
+        actor: identity.assignedActor,
+        requestId: identity.commandId,
+        idempotencyKey: identity.idempotencyKey,
+        correlationId: identity.correlationId,
+        expectedRevision: identity.expectedRevision,
+        timeoutMs: validated.timeoutMs,
+        headers: Object.freeze({
+          'content-type': 'application/json',
+          [QUICKFURNO_CORE_DECISION_KEY_ID_HEADER]: validated.keyId,
+          [QUICKFURNO_CORE_DECISION_SIGNATURE_HEADER]: signature,
+        }),
+        httpPost: validated.httpPost,
+      });
+      if (!result.ok || result.response.status !== 200) {
         throw new QuickFurnoCoreTransportError('request-failed');
-      } finally {
-        clearTimeout(timer);
       }
+      const body = await result.response.text();
+      if (
+        Buffer.byteLength(body, 'utf8') < 2 ||
+        Buffer.byteLength(body, 'utf8') > MAX_RESPONSE_BYTES
+      ) {
+        throw new QuickFurnoCoreTransportError('response-invalid');
+      }
+      return body;
     },
   });
 }

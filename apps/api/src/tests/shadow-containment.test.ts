@@ -634,6 +634,10 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // neither ClientConfirmationV1 nor CommunicationAuthorizationV1.
       'core-riya-intake',
       'core-service-availability-read',
+      // SCALE-P11: shared QuickFurno↔Jarvis signed metadata, deadline, bulkhead and circuit-breaker
+      // primitives. Authority-neutral: no business state, provider, database, credential source or
+      // execution grant; this exact-set lock records the reviewed package addition.
+      'cross-system-scale-contract',
       // ADR-0171: provider-neutral bounded System One decision contracts. Advisory only: no
       // assignment mutation, action authorization, execution, persistence or transport.
       'decision-intelligence',

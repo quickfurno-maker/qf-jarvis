@@ -472,12 +472,13 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       // `packages/model-gateway`. `apps/api` supplies the credential and the composition; it never
       // opens a socket itself.
       //
-      // JF-7 adds exactly one direct QuickFurno HTTP adapter. It receives already bounded/signed
-      // requests and performs two plain fetch calls (authority/reply and availability), with no retry,
-      // redirect following, credential lookup or response interpretation. Every other direct fetch
-      // remains forbidden in apps/api.
+      // SCALE-P11 replaces JF-7's two direct fetch calls with the shared reviewed bounded
+      // transport. apps/api still opens no socket itself: the network seam only aliases
+      // boundedNodeHttpPost from the authority-neutral cross-system contract package.
       if (isJf7File(file, [JF7_NETWORK])) {
-        expect(code.match(/\bfetch\s*\(/g), file).toHaveLength(2);
+        expect(code, file).not.toMatch(/\bfetch\s*\(/);
+        expect(code, file).toContain('@qf-jarvis/cross-system-scale-contract');
+        expect(code, file).toContain('boundedNodeHttpPost');
       } else if (isAarohiPhase2File(file, AAROHI_PHASE2_NETWORK)) {
         expect(code.match(/\bfetch\s*\(/g), file).toHaveLength(1);
       } else {
@@ -488,7 +489,9 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         expect(code, file).not.toMatch(/\bexecSync\s*\(|\bspawn\w*\s*\(/);
         expect(code, file).toContain('execFileSync');
       } else {
-        expect(code, file).not.toMatch(/\bexec\w*\s*\(|\bspawn\w*\s*\(/);
+        expect(code, file).not.toMatch(
+          /\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync|fork)\s*\(/,
+        );
       }
     }
   });
@@ -664,20 +667,16 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     }
   });
 
-  it('exactly six reviewed modules arm timers, and every arm has its clear', () => {
-    // The second is the certification composition (JF-5B-R1, ADR-0152): the bounded discovery GET needs
-    // one abort deadline, or a hung provider would hang an owner's terminal indefinitely. JF-5B-R6 adds
-    // the evaluation-only pacing sleep in the same file. The RULE is unchanged -- every arm matched by a
-    // clear, nothing repeating, nothing rescheduling -- and it is now COUNTED per file rather than
-    // assumed to be one. JF-6 adds one abort deadline to the injected Core availability HTTP reader;
-    // it owns no retry loop and clears the timer in `finally` on every path. The QuickFurno
-    // WhatsApp signed HTTP client owns the same one-shot abort deadline for material reads/callbacks;
-    // it also has no retry loop and clears its timer in `finally`.
+  it('only reviewed modules arm timers, and every arm has its clear', () => {
+    // The certification composition (JF-5B-R1, ADR-0152) owns its bounded discovery deadline and
+    // evaluation-only pacing delay. JF-6 retains one abort deadline in the injected Core availability
+    // reader. SCALE-P11 removes the former quickfurno-http local timer entirely: its absolute deadline
+    // and cancellation now belong to the shared cross-system bulkhead. The RULE remains unchanged --
+    // every remaining timer arm is one-shot, paired with a clear, and never self-reschedules.
     const ARMS_BY_FILE: Readonly<Record<string, number>> = Object.freeze({
       [DESIGNATED_TIMER_MODULE]: 1,
       [JF5B_COMPOSITION]: 1,
       'src/jf6-private-process/create-core-service-availability-reader.ts': 1,
-      'src/quickfurno-whatsapp/quickfurno-http.ts': 1,
       // Signed media content reads use the same one-shot abort deadline. The reader receives
       // bounded QuickFurno-owned bytes only; it has no retry loop, provider credential or URL.
       'src/quickfurno-whatsapp/media-content-http.ts': 1,
@@ -790,6 +789,10 @@ describe('the staging smoke stays out of the production boundary', () => {
       // credential or Core mutation authority.
       '@qf-jarvis/core-riya-intake',
       '@qf-jarvis/core-service-availability-read',
+      // SCALE-P11: the shared QuickFurno↔Jarvis transport contract owns only signed metadata,
+      // bounded HTTP, deadlines and fail-fast isolation. It contributes no credential source,
+      // database access, business state or execution authority.
+      '@qf-jarvis/cross-system-scale-contract',
       // ADR-0154: the API owns only the content-minimized Temporal client contract. Workflow state
       // and execution authority remain outside this app boundary.
       '@qf-jarvis/durable-orchestration-contracts',

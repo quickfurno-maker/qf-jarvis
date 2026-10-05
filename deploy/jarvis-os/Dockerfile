@@ -46,6 +46,7 @@ COPY packages/anisha-prompts/package.json packages/anisha-prompts/
 COPY packages/client-intelligence/package.json packages/client-intelligence/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/control-plane-read-contract/package.json packages/control-plane-read-contract/
+COPY packages/cross-system-scale-contract/package.json packages/cross-system-scale-contract/
 COPY packages/core-service-availability-read/package.json packages/core-service-availability-read/
 COPY packages/decision-intelligence/package.json packages/decision-intelligence/
 COPY packages/digital-twin-simulation/package.json packages/digital-twin-simulation/
@@ -88,6 +89,7 @@ COPY packages/anisha-prompts packages/anisha-prompts
 COPY packages/client-intelligence packages/client-intelligence
 COPY packages/contracts packages/contracts
 COPY packages/control-plane-read-contract packages/control-plane-read-contract
+COPY packages/cross-system-scale-contract packages/cross-system-scale-contract
 COPY packages/core-service-availability-read packages/core-service-availability-read
 COPY packages/decision-intelligence packages/decision-intelligence
 COPY packages/digital-twin-simulation packages/digital-twin-simulation
