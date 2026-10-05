@@ -501,7 +501,7 @@ describe('JF-4 correction: there is ONE governed RAG, not three', () => {
       '0015',
       '0016',
       '0017',
-    '0018',
+      '0018',
     ]);
     expect(sql[13]).toBe('0014_conversation_prospect_party_type.sql');
     expect(sql[14]).toBe('0015_correlation_timeline_projection.sql');

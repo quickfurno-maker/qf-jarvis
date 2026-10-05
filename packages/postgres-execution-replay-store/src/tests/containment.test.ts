@@ -635,7 +635,7 @@ describe('the migration set is exactly 0001-0011', () => {
       '0015_correlation_timeline_projection.sql',
       '0016_client_lifetime_projection.sql',
       '0017_quickfurno_durable_turn_spool.sql',
-    '0018_scale_phase09_data_lifecycle.sql',
+      '0018_scale_phase09_data_lifecycle.sql',
     ]);
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the

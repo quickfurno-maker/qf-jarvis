@@ -148,7 +148,7 @@ describe('migrations are bounded at 0001–0012 with no 0014', () => {
       '0015_correlation_timeline_projection.sql',
       '0016_client_lifetime_projection.sql',
       '0017_quickfurno_durable_turn_spool.sql',
-    '0018_scale_phase09_data_lifecycle.sql',
+      '0018_scale_phase09_data_lifecycle.sql',
     ]);
   });
 
