@@ -96,6 +96,8 @@ export interface QuickFurnoWhatsAppProductionWorker {
   readonly revision: string;
   readonly providerMode: 'GROQ_ONLY' | 'OPENAI_LUNA_SOL';
   readonly verifiedApprovalCount: number;
+  readonly deploymentMode: 'SINGLE_OWNER' | 'MULTI_REPLICA';
+  readonly agentLanes: readonly ('RIYA' | 'ANISHA' | 'AAROHI')[];
   readonly maxConcurrentTurns: number;
   readonly maxConcurrentByAgent: Readonly<Record<'RIYA' | 'ANISHA' | 'AAROHI', number>>;
   run(signal: AbortSignal): Promise<void>;
@@ -657,6 +659,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
     const scheduler = createQuickFurnoWhatsAppParallelScheduler({
       queue: spool,
       processor,
+      agents: config.agentLanes,
       parallelism: {
         globalMaxConcurrentTurns: config.concurrency.globalMaxConcurrentTurns,
         maxConcurrentByAgent: config.concurrency.maxConcurrentByAgent,
@@ -680,12 +683,14 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       revision: config.revision,
       providerMode,
       verifiedApprovalCount,
+      deploymentMode: config.deploymentMode,
+      agentLanes: config.agentLanes,
       maxConcurrentTurns: config.concurrency.globalMaxConcurrentTurns,
       maxConcurrentByAgent: config.concurrency.maxConcurrentByAgent,
       processOne: processObservedOne,
       async run(signal: AbortSignal): Promise<void> {
-        // One SINGLE_OWNER worker may execute many conversations concurrently, but the scheduler
-        // admits at most one turn per conversation and round-robins the three bounded agent lanes.
+        // Process-local scheduling bounds each selected agent lane. In MULTI_REPLICA mode the
+        // PostgreSQL spool adds the shared per-conversation ordering fence across all replicas.
         await scheduler.run(signal);
       },
       async close(): Promise<void> {

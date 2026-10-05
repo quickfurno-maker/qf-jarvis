@@ -149,4 +149,43 @@ describe('QuickFurno WhatsApp parallel turn scheduler', () => {
     secondGate.resolve();
     await running;
   });
+
+  it('claims only configured agent lanes so Riya, Anisha and Aarohi can scale independently', async () => {
+    const pending = [ref('ANISHA', 0), ref('RIYA', 1), ref('AAROHI', 2), ref('RIYA', 3)];
+    const started: Agent[] = [];
+    const queue = {
+      claimNext(selection: QuickFurnoWhatsAppTurnClaimSelection = {}) {
+        const allowed = new Set(selection.allowedActors ?? ['RIYA', 'ANISHA', 'AAROHI']);
+        const index = pending.findIndex((item) => allowed.has(item.assignedActor));
+        return Promise.resolve(index < 0 ? null : (pending.splice(index, 1)[0] ?? null));
+      },
+    };
+    const processor = {
+      processClaimed(item: QuickFurnoWhatsAppTurnReference) {
+        started.push(item.assignedActor);
+        return Promise.resolve('completed-queued' as const);
+      },
+    };
+    const controller = new AbortController();
+    const scheduler = createQuickFurnoWhatsAppParallelScheduler({
+      queue,
+      processor,
+      agents: ['RIYA'],
+      parallelism: {
+        globalMaxConcurrentTurns: 2,
+        maxConcurrentByAgent: { RIYA: 2, ANISHA: 2, AAROHI: 2 },
+      },
+      idlePollMs: 2,
+      canClaim: () => true,
+      onOutcome: () => undefined,
+    });
+
+    const running = scheduler.run(controller.signal);
+    await until(() => started.length === 2);
+    controller.abort();
+    await running;
+
+    expect(started).toEqual(['RIYA', 'RIYA']);
+    expect(pending.map((item) => item.assignedActor)).toEqual(['ANISHA', 'AAROHI']);
+  });
 });
