@@ -39,7 +39,14 @@ check('Jarvis OS keeps origin login protections independent of Cloudflare', () =
 
 check('nonce CSP remains application-owned and HSTS stays post-TLS', () => {
   assert.equal(policy.publicOs.cspOwner, 'application-nonce');
-  assert.doesNotMatch(osIngress, /^\\s*traefik\\..*headers\\.contentSecurityPolicy:/m);
+  const hasTraefikCspLabel = osIngress
+    .split('\n')
+    .some(
+      (line) =>
+        line.trimStart().startsWith('traefik.') &&
+        line.includes('headers.contentSecurityPolicy:'),
+    );
+  assert.equal(hasTraefikCspLabel, false);
   assert.match(osIngress, /per-request nonce CSP/i);
   assert.match(osHsts, /stsSeconds:\s*'31536000'/);
   assert.match(osHsts, /only after trusted TLS[\s\S]*verified|applied only[\s\S]*trusted TLS/i);
@@ -64,8 +71,17 @@ check('machine gateway has general and handshake-specific ceilings', () => {
 
 check('portable policy refuses Cloudflare as business authority', () => {
   assert.equal(policy.portability.cloudflareIsBusinessAuthority, false);
-  for (const required of ['authentication', 'authorization', 'rate-limits', 'signatures', 'idempotency']) {
-    assert.ok(policy.portability.emergencyBypassMayNotDisable.includes(required), required + ' missing');
+  for (const required of [
+    'authentication',
+    'authorization',
+    'rate-limits',
+    'signatures',
+    'idempotency',
+  ]) {
+    assert.ok(
+      policy.portability.emergencyBypassMayNotDisable.includes(required),
+      required + ' missing',
+    );
   }
 });
 
