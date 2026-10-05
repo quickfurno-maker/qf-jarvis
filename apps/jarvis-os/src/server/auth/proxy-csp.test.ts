@@ -211,7 +211,7 @@ describe('secret containment in application source', () => {
     expect(loader).toContain("RUNTIME_ENV_VAR = 'QFJ_RUNTIME_ENV'");
     expect(loader).toContain("CONFIG_SCHEMA_VERSION_VAR = 'QFJ_CONFIG_SCHEMA_VERSION'");
     expect(loader).toContain("SERVICE_ID_VAR = 'QFJ_SERVICE_ID'");
-    const envReads = loader.match(/process\.env\[/gu) ?? [];
+    const envReads = loader.match(/process\.env(?:\[|\.)/gu) ?? [];
     expect(envReads).toHaveLength(12);
   });
 

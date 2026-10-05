@@ -93,7 +93,7 @@ export interface LoaderOptions {
 }
 
 function assertJarvisOsRuntimeIdentity(): boolean {
-  const production = process.env['NODE_ENV'] === 'production';
+  const production = process.env.NODE_ENV === 'production';
   if (!production) return false;
   if (
     process.env[RUNTIME_ENV_VAR] !== 'production' ||
