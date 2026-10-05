@@ -1,0 +1,41 @@
+{
+  "version": "phase10-v1",
+  "publicOs": {
+    "host": "jarvis.quickfurno.in",
+    "ingress": "cloudflare-proxied-public",
+    "applicationPortsPublished": false,
+    "cspOwner": "application-nonce",
+    "hstsOwner": "origin-traefik-after-tls-proof",
+    "requiredOriginControls": [
+      "authentication",
+      "authorization",
+      "login-rate-limit",
+      "login-body-limit"
+    ]
+  },
+  "machineGateway": {
+    "host": "gateway.jarvis.quickfurno.in",
+    "ingress": "approved-direct-machine-ingress",
+    "cloudflareProxy": false,
+    "applicationPortsPublished": false,
+    "requiredControls": [
+      "source-ip-allowlist",
+      "cryptographic-request-signing",
+      "general-rate-limit",
+      "handshake-rate-limit",
+      "request-body-limit",
+      "postgres-idempotency"
+    ]
+  },
+  "portability": {
+    "cloudflareIsBusinessAuthority": false,
+    "providerSpecificEdgeConfigOwner": "quickfurno-marketplace/ops/edge/cloudflare",
+    "emergencyBypassMayNotDisable": [
+      "authentication",
+      "authorization",
+      "rate-limits",
+      "signatures",
+      "idempotency"
+    ]
+  }
+}
