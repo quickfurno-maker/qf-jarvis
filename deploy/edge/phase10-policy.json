@@ -7,6 +7,7 @@
     "cspOwner": "application-nonce",
     "hstsOwner": "origin-traefik-after-tls-proof",
     "requiredOriginControls": [
+      "cloudflare-source-allowlist",
       "authentication",
       "authorization",
       "login-rate-limit",

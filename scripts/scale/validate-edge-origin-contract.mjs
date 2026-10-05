@@ -30,6 +30,22 @@ check('Jarvis OS is public-edge traffic but publishes no application port', () =
   assert.match(osIngress, /Host\(`jarvis\.quickfurno\.in`\)/);
 });
 
+check('Jarvis OS origin only accepts Cloudflare transport', () => {
+  assert.ok(policy.publicOs.requiredOriginControls.includes('cloudflare-source-allowlist'));
+  assert.match(osIngress, /qf-jarvis-os-cloudflare-ip\.ipallowlist\.sourcerange/);
+  assert.match(osIngress, /173\.245\.48\.0\/20/);
+  assert.match(osIngress, /2c0f:f248::\/32/);
+  assert.match(
+    osIngress,
+    /qf-jarvis-os\.middlewares:\s*'qf-jarvis-os-cloudflare-ip@docker,qf-jarvis-os-ratelimit@docker'/,
+  );
+  assert.match(
+    osIngress,
+    /qf-jarvis-os-login\.middlewares:\s*'qf-jarvis-os-cloudflare-ip@docker,qf-jarvis-os-login-ratelimit@docker,qf-jarvis-os-login-buffer@docker'/,
+  );
+  assert.doesNotMatch(gatewayIngress, /qf-jarvis-os-cloudflare-ip/);
+});
+
 check('Jarvis OS keeps origin login protections independent of Cloudflare', () => {
   assert.match(osIngress, /qf-jarvis-os-login-ratelimit/);
   assert.match(osIngress, /ratelimit\.average:\s*'5'/);
