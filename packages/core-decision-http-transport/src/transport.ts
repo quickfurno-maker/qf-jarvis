@@ -1,7 +1,10 @@
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 
 import type { CoreDecisionTransport } from '@qf-jarvis/core-decision-adapter';
-import { executeQfjScaleRequest } from '@qf-jarvis/cross-system-scale-contract';
+import {
+  boundedNodeHttpPost,
+  executeQfjScaleRequest,
+} from '@qf-jarvis/cross-system-scale-contract';
 
 export const QUICKFURNO_CORE_DECISION_METHOD = 'POST' as const;
 export const QUICKFURNO_CORE_DECISION_PATH = '/api/internal/jarvis/core-decision' as const;
@@ -168,16 +171,7 @@ function validateConfig(config: QuickFurnoCoreTransportConfig): Readonly<{
   if (privateKey.type !== 'private' || privateKey.asymmetricKeyType !== 'ed25519') {
     throw new QuickFurnoCoreTransportError('invalid-config');
   }
-  const httpPost: QuickFurnoCoreHttpPost =
-    config.httpPost ??
-    (async (url, init) =>
-      fetch(url, {
-        method: init.method,
-        headers: init.headers,
-        body: init.body,
-        signal: init.signal,
-        redirect: init.redirect,
-      }));
+  const httpPost: QuickFurnoCoreHttpPost = config.httpPost ?? boundedNodeHttpPost;
   return Object.freeze({
     endpoint: endpointFor(config.baseUrl),
     keyId: config.keyId,

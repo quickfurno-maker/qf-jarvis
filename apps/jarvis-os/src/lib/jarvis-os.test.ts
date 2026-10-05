@@ -567,6 +567,9 @@ describe('live operator capability remains contained behind reviewed seams', () 
       '@qf-jarvis/agent-flow-registry',
       '@qf-jarvis/agent-flow-trace-contract',
       '@qf-jarvis/control-plane-read-contract',
+      // SCALE-P11: authority-neutral signed metadata/bulkhead transport used only by the reviewed
+      // QuickFurno operator read/command seams. No provider, database or business authority.
+      '@qf-jarvis/cross-system-scale-contract',
       '@qf-jarvis/operator-api-contract',
       '@qf-jarvis/operator-client-core',
       '@qf-jarvis/proactive-intelligence',

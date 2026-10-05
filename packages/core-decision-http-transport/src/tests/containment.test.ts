@@ -23,9 +23,11 @@ describe('QuickFurno Core transport containment', () => {
     }
   });
 
-  it('has exactly one fetch call, one AbortController and no retry/fallback loop', () => {
-    expect(source.match(/\bfetch\s*\(/gu)).toHaveLength(1);
-    expect(source.match(/new AbortController\(\)/gu)).toHaveLength(1);
+  it('delegates network isolation to the shared Phase 11 transport with no local retry/fallback loop', () => {
+    expect(source).toContain('@qf-jarvis/cross-system-scale-contract');
+    expect(source).toContain('executeQfjScaleRequest');
+    expect(source).not.toMatch(/\bfetch\s*\(/u);
+    expect(source).not.toContain('new AbortController()');
     expect(source).not.toMatch(/\bretry\b|\bfallback\b|for\s*\([^)]*attempt|while\s*\(/u);
   });
 
