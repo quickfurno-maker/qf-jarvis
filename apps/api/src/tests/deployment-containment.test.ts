@@ -385,10 +385,10 @@ describe('the HSTS overlay', () => {
     // `middlewares` is one ordered label, so the overlay must restate each full chain. A chain
     // that quietly lost a rate limiter here would look like it had only added HSTS.
     expect(HSTS_CODE).toContain(
-      'routers.qf-jarvis-os.middlewares: "qf-jarvis-os-ratelimit@docker,qf-jarvis-os-hsts@docker"',
+      'routers.qf-jarvis-os.middlewares: "qf-jarvis-os-cloudflare-ip@docker,qf-jarvis-os-ratelimit@docker,qf-jarvis-os-hsts@docker"',
     );
     expect(HSTS_CODE).toContain(
-      'routers.qf-jarvis-os-login.middlewares: "qf-jarvis-os-login-ratelimit@docker,qf-jarvis-os-login-buffer@docker,qf-jarvis-os-hsts@docker"',
+      'routers.qf-jarvis-os-login.middlewares: "qf-jarvis-os-cloudflare-ip@docker,qf-jarvis-os-login-ratelimit@docker,qf-jarvis-os-login-buffer@docker,qf-jarvis-os-hsts@docker"',
     );
 
     // Every middleware the ingress overlay attaches must survive into the HSTS chains.
