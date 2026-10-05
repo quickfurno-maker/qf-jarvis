@@ -15,14 +15,20 @@ separate Jarvis VPS. It is intentionally not part of Jarvis OS.
 
 ## Runtime secret file
 
-The container receives exactly one read-only file:
+The machine-auth contract is supplied by the read-only file:
 
 `/srv/qf-jarvis/secrets/qf-jarvis-gateway.json`
+
+Database configuration and its CA are mounted separately. None of these files enters
+an OCI layer or an environment value.
 
 Example **shape only**:
 
 ```json
 {
+  "schemaVersion": 1,
+  "environment": "production",
+  "serviceId": "qf-jarvis.quickfurno-gateway",
   "quickfurnoVerificationKeys": [
     {
       "keyId": "quickfurno-prod-YYYY-MM",
@@ -39,8 +45,13 @@ Example **shape only**:
 }
 ```
 
-Never commit the real file. The QuickFurno private key remains on the QuickFurno VPS; the Jarvis
-private key remains on the Jarvis VPS.
+Never commit the real file. The QuickFurno private key remains on the QuickFurno deployment
+boundary; the Jarvis private key remains on the Jarvis deployment boundary.
+
+For zero-downtime rotation, add the next public key beside the current one, switch
+the sender to the new key only after receivers accept both, then remove the old
+public key after the overlap window. The gateway accepts up to four unique
+verification keys, so rotation does not require rebuilding the image.
 
 ## Activation gates
 

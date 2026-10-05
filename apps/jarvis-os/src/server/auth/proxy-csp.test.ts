@@ -197,7 +197,7 @@ describe('secret containment in application source', () => {
     expect(offenders).toEqual([]);
 
     const loader = readFileSync(join(authDir, 'config/loader.ts'), 'utf8');
-    // Every environment value is a path or the public immutable release SHA, never secret material.
+    // Every environment value is a path, public release SHA, or non-secret deployment identity.
     expect(loader).toContain("AUTH_CONFIG_PATH_VAR = 'QFJ_JOS_AUTH_CONFIG_FILE'");
     expect(loader).toContain("WORKER_OBSERVATION_PATH_VAR = 'QFJ_WORKER_OBSERVATION_FILE'");
     expect(loader).toContain("AGENT_FLOW_TRACE_PATH_VAR = 'QFJ_AGENT_FLOW_TRACE_FILE'");
@@ -208,8 +208,11 @@ describe('secret containment in application source', () => {
     );
     expect(loader).toContain("LIVEKIT_CONFIG_PATH_VAR = 'QFJ_JOS_LIVEKIT_CONFIG_FILE'");
     expect(loader).toContain("RELEASE_SHA_VAR = 'QFJ_JOS_RELEASE_SHA'");
-    const envReads = loader.match(/process\.env\[/gu) ?? [];
-    expect(envReads).toHaveLength(8);
+    expect(loader).toContain("RUNTIME_ENV_VAR = 'QFJ_RUNTIME_ENV'");
+    expect(loader).toContain("CONFIG_SCHEMA_VERSION_VAR = 'QFJ_CONFIG_SCHEMA_VERSION'");
+    expect(loader).toContain("SERVICE_ID_VAR = 'QFJ_SERVICE_ID'");
+    const envReads = loader.match(/process\.env(?:\[|\.)/gu) ?? [];
+    expect(envReads).toHaveLength(12);
   });
 
   it('imports node:fs only in the auth config loader', () => {

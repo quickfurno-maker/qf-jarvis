@@ -23,6 +23,11 @@ const SHA40 = /^[0-9a-f]{40}$/u;
 const REF = /^[A-Za-z0-9._:-]{1,128}$/u;
 const KEY_ID = /^[A-Za-z0-9._:-]{1,64}$/u;
 const MODEL_REF = /^[A-Za-z0-9._:/-]{1,256}$/u;
+const IPV4_HOST = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/u;
+
+function isLiteralIpHost(hostname: string): boolean {
+  return IPV4_HOST.test(hostname) || hostname.includes(':');
+}
 
 const absolutePath = z.string().min(1).max(4096).refine(isAbsolute);
 const searchPolicySchema = z
@@ -186,6 +191,9 @@ const knowledgeSchema = z.union([
 
 const schema = z
   .object({
+    schemaVersion: z.literal(1),
+    environment: z.enum(['local', 'staging', 'production']),
+    serviceId: z.literal('qf-jarvis.whatsapp-worker'),
     revision: z.string().regex(SHA40),
     deploymentMode: z.enum(['SINGLE_OWNER', 'MULTI_REPLICA']),
     agentLanes: agentLanesSchema,
@@ -226,6 +234,36 @@ const schema = z
   })
   .strict()
   .superRefine((value, ctx) => {
+    try {
+      const url = new URL(value.quickfurno.baseUrl);
+      const loopback = ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(url.hostname);
+      const protocolAllowed =
+        value.environment === 'local'
+          ? url.protocol === 'https:' || (loopback && url.protocol === 'http:')
+          : url.protocol === 'https:';
+      if (
+        !protocolAllowed ||
+        url.username !== '' ||
+        url.password !== '' ||
+        url.search !== '' ||
+        url.hash !== '' ||
+        url.pathname !== '/' ||
+        (!loopback && isLiteralIpHost(url.hostname))
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['quickfurno', 'baseUrl'],
+          message: 'QuickFurno service discovery requires a root HTTPS DNS name',
+        });
+      }
+    } catch {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['quickfurno', 'baseUrl'],
+        message: 'QuickFurno service URL is invalid',
+      });
+    }
+
     const legacyGroq = [
       value.sealFile,
       value.groqCredentialReference,
@@ -306,6 +344,9 @@ const schema = z
   });
 
 export interface QuickFurnoWhatsAppProductionWorkerConfig {
+  readonly schemaVersion: 1;
+  readonly environment: 'local' | 'staging' | 'production';
+  readonly serviceId: 'qf-jarvis.whatsapp-worker';
   readonly revision: string;
   readonly deploymentMode: 'SINGLE_OWNER' | 'MULTI_REPLICA';
   readonly agentLanes: readonly ('RIYA' | 'ANISHA' | 'AAROHI')[];
@@ -545,6 +586,9 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
   }
 
   return Object.freeze({
+    schemaVersion: input.schemaVersion,
+    environment: input.environment,
+    serviceId: input.serviceId,
     revision: input.revision,
     deploymentMode: input.deploymentMode,
     agentLanes: Object.freeze([...input.agentLanes]),

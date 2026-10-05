@@ -17,6 +17,9 @@ services:
     user: '10002:10002'
     environment:
       NODE_ENV: production
+      QFJ_RUNTIME_ENV: production
+      QFJ_CONFIG_SCHEMA_VERSION: '1'
+      QFJ_SERVICE_ID: qf-jarvis.quickfurno-gateway
       QFJ_GATEWAY_CONFIG_FILE: /run/secrets/qf-jarvis-gateway.json
       QFJ_GATEWAY_TURN_STORE: POSTGRES
       QFJ_GATEWAY_DATABASE_CONFIG_FILE: /run/secrets/qf-jarvis-gateway-database.json

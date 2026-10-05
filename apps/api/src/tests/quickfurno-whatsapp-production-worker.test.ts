@@ -61,6 +61,9 @@ function validConfig(root: string) {
   writeFileSync(signingFile, 'synthetic-signing-key-not-used-by-loader-test');
   writeFileSync(embeddingFile, 'synthetic-embedding-token-not-used-by-loader-test');
   return {
+    schemaVersion: 1,
+    environment: 'production',
+    serviceId: 'qf-jarvis.whatsapp-worker',
     revision: 'a'.repeat(40),
     deploymentMode: 'SINGLE_OWNER',
     sealFile,
@@ -135,6 +138,61 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
       seal: {},
       credentialReference: 'groq.qfj.production.v1',
     });
+  });
+
+  it('uses versioned environment identity and DNS service discovery that can relocate by config', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const base = validConfig(root);
+
+    for (const baseUrl of ['https://quickfurno-a.internal/', 'https://quickfurno-b.internal/']) {
+      writeFileSync(path, JSON.stringify({ ...base, quickfurno: { ...base.quickfurno, baseUrl } }));
+      const loaded = loadQuickFurnoWhatsAppProductionWorkerConfig(path);
+      expect(loaded.schemaVersion).toBe(1);
+      expect(loaded.environment).toBe('production');
+      expect(loaded.serviceId).toBe('qf-jarvis.whatsapp-worker');
+      expect(loaded.quickfurno.baseUrl).toBe(baseUrl);
+    }
+
+    for (const invalid of [
+      { schemaVersion: 2 },
+      { environment: 'unknown' },
+      { serviceId: 'qf-jarvis.other-worker' },
+    ]) {
+      writeFileSync(path, JSON.stringify({ ...base, ...invalid }));
+      expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+        'production-worker-config-invalid',
+      );
+    }
+
+    for (const baseUrl of [
+      'https://203.0.113.10/',
+      'http://quickfurno-a.internal/',
+      'https://user:pass@quickfurno-a.internal/',
+      'https://quickfurno-a.internal/path',
+    ]) {
+      writeFileSync(path, JSON.stringify({ ...base, quickfurno: { ...base.quickfurno, baseUrl } }));
+      expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+        'production-worker-config-invalid',
+      );
+    }
+  });
+
+  it('allows loopback HTTP only for explicitly local configuration', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const base = validConfig(root);
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...base,
+        environment: 'local',
+        quickfurno: { ...base.quickfurno, baseUrl: 'http://127.0.0.1:3000/' },
+      }),
+    );
+    expect(loadQuickFurnoWhatsAppProductionWorkerConfig(path).quickfurno.baseUrl).toBe(
+      'http://127.0.0.1:3000/',
+    );
   });
 
   it('loads an OpenAI Luna/Sol provider config without any Groq credential fields', () => {

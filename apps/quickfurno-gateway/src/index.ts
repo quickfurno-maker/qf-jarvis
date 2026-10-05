@@ -16,8 +16,21 @@ const CONFIG_ENV = 'QFJ_GATEWAY_CONFIG_FILE';
 const TURN_STORE_ENV = 'QFJ_GATEWAY_TURN_STORE';
 const TURN_SPOOL_ENV = 'QFJ_GATEWAY_TURN_SPOOL_DIR';
 const DATABASE_CONFIG_ENV = 'QFJ_GATEWAY_DATABASE_CONFIG_FILE';
+const RUNTIME_ENV_ENV = 'QFJ_RUNTIME_ENV';
+const CONFIG_SCHEMA_ENV = 'QFJ_CONFIG_SCHEMA_VERSION';
+const SERVICE_ID_ENV = 'QFJ_SERVICE_ID';
 const HOST = '0.0.0.0';
 const PORT = 3100;
+
+if (process.env['NODE_ENV'] === 'production') {
+  if (
+    process.env[RUNTIME_ENV_ENV] !== 'production' ||
+    process.env[CONFIG_SCHEMA_ENV] !== '1' ||
+    process.env[SERVICE_ID_ENV] !== 'qf-jarvis.quickfurno-gateway'
+  ) {
+    throw new Error('gateway_runtime_identity_invalid');
+  }
+}
 
 const configPath = process.env[CONFIG_ENV];
 if (configPath === undefined || !isAbsolute(configPath)) {
@@ -47,6 +60,9 @@ if (turnStoreMode === 'POSTGRES') {
 }
 
 const config = loadGatewayConfig(configPath);
+if (process.env['NODE_ENV'] === 'production' && config.environment !== 'production') {
+  throw new Error('gateway_environment_mismatch');
+}
 const server = createGatewayServer({ config, turnSpool });
 
 server.listen(PORT, HOST, () => {

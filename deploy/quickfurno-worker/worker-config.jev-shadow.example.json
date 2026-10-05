@@ -1,4 +1,7 @@
 {
+  "schemaVersion": 1,
+  "environment": "production",
+  "serviceId": "qf-jarvis.whatsapp-worker",
   "decisionIntelligence": {
     "mode": "SHADOW",
     "model": "jev-latest",
