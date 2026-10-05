@@ -133,6 +133,7 @@ describe('db:migrate runs the preflight automatically', () => {
       '0016_client_lifetime_projection.sql',
       '0017_quickfurno_durable_turn_spool.sql',
       '0018_scale_phase09_data_lifecycle.sql',
+      '0019_scale_phase12_horizontal_worker_ordering.sql',
     ]);
     expect(await tableExists(MIGRATION_SCHEMA, 'event')).toBe(true);
   });
@@ -162,6 +163,8 @@ describe('db:migrate runs the preflight automatically', () => {
       17,
       // SCALE-P09: reviewed data-lifecycle migration. LOCAL/CI certification only.
       18,
+      // SCALE-P12: shared per-conversation horizontal-worker ordering fence. LOCAL/CI certification only.
+      19,
     ]);
   });
 

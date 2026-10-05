@@ -86,6 +86,9 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
 
   '0018_scale_phase09_data_lifecycle.sql':
     '1170c1b6b126871108b6a5a7326dcf2619fe3eadd2400c85a8580966a555dc74',
+
+  '0019_scale_phase12_horizontal_worker_ordering.sql':
+    '89354da09dc79313556b4b673f97444bac86b248184b045bb9b36cec9d60a6ad',
 };
 
 describe('containment', () => {
@@ -179,7 +182,7 @@ describe('containment', () => {
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
+    expect(sql.at(-1)).toBe('0019_scale_phase12_horizontal_worker_ordering.sql');
   });
 
   it('(event-backbone) the public-api lock remains 39', () => {

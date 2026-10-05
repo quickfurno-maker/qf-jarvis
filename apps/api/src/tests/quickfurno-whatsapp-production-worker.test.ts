@@ -593,11 +593,70 @@ describe('QuickFurno WhatsApp production worker containment', () => {
 });
 
 describe('production worker deployment shape', () => {
-  it('refuses any deployment mode other than the governed single-owner topology', () => {
+  it('allows MULTI_REPLICA only with the PostgreSQL durable turn store', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const config = validConfig(root);
+    const { spoolDirectory: _spoolDirectory, ...withoutFileSpool } = config;
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...withoutFileSpool,
+        deploymentMode: 'MULTI_REPLICA',
+        turnStore: { mode: 'POSTGRES' },
+      }),
+    );
+    const loaded = loadQuickFurnoWhatsAppProductionWorkerConfig(path);
+    expect(loaded.deploymentMode).toBe('MULTI_REPLICA');
+    expect(loaded.turnStore).toEqual({ mode: 'POSTGRES' });
+  });
+
+  it('refuses MULTI_REPLICA with the legacy file spool', () => {
     const root = tempRoot();
     const path = join(root, 'worker.json');
     const config = validConfig(root);
     writeFileSync(path, JSON.stringify({ ...config, deploymentMode: 'MULTI_REPLICA' }));
+    expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+      'production-worker-config-invalid',
+    );
+  });
+
+  it('supports dedicated agent lanes and rejects duplicate or under-capacity lanes', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    const config = validConfig(root);
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...config,
+        agentLanes: ['RIYA'],
+        concurrency: {
+          ...config.concurrency,
+          globalMaxConcurrentTurns: 200,
+        },
+      }),
+    );
+    const loaded = loadQuickFurnoWhatsAppProductionWorkerConfig(path);
+    expect(loaded.agentLanes).toEqual(['RIYA']);
+
+    writeFileSync(path, JSON.stringify({ ...config, agentLanes: ['RIYA', 'RIYA'] }));
+    expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
+      'production-worker-config-invalid',
+    );
+
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...config,
+        agentLanes: ['RIYA'],
+        concurrency: {
+          ...config.concurrency,
+          globalMaxConcurrentTurns: 201,
+          maxConcurrentByAgent: { RIYA: 200, ANISHA: 200, AAROHI: 200 },
+          modelGateway: { maxConcurrent: 100, maxQueue: 101 },
+        },
+      }),
+    );
     expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(path)).toThrow(
       'production-worker-config-invalid',
     );

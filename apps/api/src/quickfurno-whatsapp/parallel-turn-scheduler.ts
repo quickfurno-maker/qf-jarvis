@@ -15,6 +15,7 @@ export interface QuickFurnoWhatsAppParallelism {
 export interface QuickFurnoWhatsAppParallelSchedulerConfig {
   readonly queue: Pick<QuickFurnoWhatsAppTurnQueue, 'claimNext'>;
   readonly processor: Pick<QuickFurnoWhatsAppTurnProcessor, 'processClaimed'>;
+  readonly agents?: readonly QuickFurnoWhatsAppAgent[];
   readonly parallelism: QuickFurnoWhatsAppParallelism;
   readonly idlePollMs: number;
   readonly canClaim: () => boolean;
@@ -63,6 +64,13 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
 export function createQuickFurnoWhatsAppParallelScheduler(
   config: QuickFurnoWhatsAppParallelSchedulerConfig,
 ) {
+  const agents = Object.freeze([...(config.agents ?? AGENTS)]);
+  if (agents.length < 1 || new Set(agents).size !== agents.length) {
+    throw new Error('parallel-scheduler-agent-lanes-invalid');
+  }
+  for (const agent of agents) {
+    if (!AGENTS.includes(agent)) throw new Error('parallel-scheduler-agent-lanes-invalid');
+  }
   const activeConversations = new Set<string>();
   const activeByAgent: Record<QuickFurnoWhatsAppAgent, number> = {
     RIYA: 0,
@@ -87,9 +95,9 @@ export function createQuickFurnoWhatsAppParallelScheduler(
       return false;
     }
 
-    for (let offset = 0; offset < AGENTS.length; offset += 1) {
-      const index = (cursor + offset) % AGENTS.length;
-      const agent = AGENTS[index];
+    for (let offset = 0; offset < agents.length; offset += 1) {
+      const index = (cursor + offset) % agents.length;
+      const agent = agents[index];
       if (agent === undefined || !capacityAvailable(agent)) continue;
 
       const ref = await config.queue.claimNext({
@@ -98,7 +106,7 @@ export function createQuickFurnoWhatsAppParallelScheduler(
       });
       if (ref === null) continue;
 
-      cursor = (index + 1) % AGENTS.length;
+      cursor = (index + 1) % agents.length;
       activeConversations.add(ref.conversationId);
       activeByAgent[ref.assignedActor] += 1;
 

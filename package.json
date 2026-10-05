@@ -27,7 +27,7 @@
     "db:preflight": "pnpm --filter @qf-jarvis/event-backbone db:preflight",
     "inspect:failures": "pnpm --filter @qf-jarvis/event-backbone inspect:failures --",
     "check:dist-containment": "node scripts/check-dist-containment.mjs",
-    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:dist-containment && pnpm run check:scale:containers && pnpm run check:scale:coordination && pnpm run check:scale:durable-jobs && pnpm run check:scale:db-lifecycle && pnpm run check:scale:edge-origin && pnpm run check:scale:phase11",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:dist-containment && pnpm run check:scale:containers && pnpm run check:scale:coordination && pnpm run check:scale:durable-jobs && pnpm run check:scale:db-lifecycle && pnpm run check:scale:edge-origin && pnpm run check:scale:phase11 && pnpm run check:scale:phase12",
     "riya:as3:pilot": "node packages/riya-ai-synthetic-provider-adapters/dist/cli/bin.js",
     "check:scale:containers": "node scripts/scale/validate-container-contract.mjs",
     "test:scale:artifact": "node scripts/scale/validate-artifact-contract.mjs",
@@ -39,7 +39,9 @@
     "test:scale:phase09": "pnpm run check:scale:db-lifecycle && pnpm run test:scale:db-connection-budget && pnpm run test:scale:data-lifecycle-postgres",
     "check:scale:edge-origin": "node scripts/scale/validate-edge-origin-contract.mjs",
     "check:scale:phase11": "node scripts/scale/validate-phase11-contract.mjs",
-    "test:scale:phase11": "pnpm run check:scale:phase11 && vitest run packages/cross-system-scale-contract/src/tests/contract.test.ts packages/cross-system-scale-contract/src/tests/isolation.test.ts packages/core-decision-http-transport/src/tests/transport.test.ts apps/quickfurno-gateway/src/tests/server.test.ts apps/api/src/tests/private-riya-web-ingress.test.ts apps/api/src/tests/private-riya-qualification-ingress.test.ts apps/api/src/tests/private-riya-web-ingress-containment.test.ts apps/api/src/tests/quickfurno-whatsapp-http.test.ts apps/jarvis-os/src/server/control-plane/sources/quickfurno-operator-source.test.ts"
+    "test:scale:phase11": "pnpm run check:scale:phase11 && vitest run packages/cross-system-scale-contract/src/tests/contract.test.ts packages/cross-system-scale-contract/src/tests/isolation.test.ts packages/core-decision-http-transport/src/tests/transport.test.ts apps/quickfurno-gateway/src/tests/server.test.ts apps/api/src/tests/private-riya-web-ingress.test.ts apps/api/src/tests/private-riya-qualification-ingress.test.ts apps/api/src/tests/private-riya-web-ingress-containment.test.ts apps/api/src/tests/quickfurno-whatsapp-http.test.ts apps/jarvis-os/src/server/control-plane/sources/quickfurno-operator-source.test.ts",
+    "check:scale:phase12": "node scripts/scale/validate-phase12-horizontal-workers.mjs",
+    "test:scale:phase12": "pnpm run check:scale:phase12 && vitest run apps/api/src/tests/quickfurno-whatsapp-parallel-turn-scheduler.test.ts apps/api/src/tests/quickfurno-whatsapp-production-worker.test.ts && vitest run --config vitest.integration.config.mjs apps/quickfurno-gateway/src/tests/postgres-durable-turn-spool.integration.test.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

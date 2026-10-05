@@ -172,13 +172,35 @@ export function createPostgresDurableTurnSpool(pool: DatabasePool): DurableTurnS
       const excludedConversations = [...(selection.excludedConversationIds ?? [])];
       const claimed = await pool.query<TurnRow>(
         `WITH candidate AS (
-           SELECT inbound_message_id
-             FROM ${TABLE}
-            WHERE state = 'PENDING'
-              AND ($1::text[] IS NULL OR assigned_actor = ANY($1::text[]))
-              AND NOT (conversation_id = ANY($2::uuid[]))
-            ORDER BY accepted_at, received_at, conversation_revision, inbound_message_id
-            FOR UPDATE SKIP LOCKED
+           SELECT turn.inbound_message_id
+             FROM ${TABLE} AS turn
+            WHERE turn.state = 'PENDING'
+              AND ($1::text[] IS NULL OR turn.assigned_actor = ANY($1::text[]))
+              AND NOT (turn.conversation_id = ANY($2::uuid[]))
+              AND NOT EXISTS (
+                SELECT 1
+                  FROM ${TABLE} AS prior
+                 WHERE prior.conversation_id = turn.conversation_id
+                   AND (
+                     prior.state = 'PROCESSING'
+                     OR (
+                       prior.state = 'PENDING'
+                       AND ROW(
+                         prior.accepted_at,
+                         prior.received_at,
+                         prior.conversation_revision,
+                         prior.inbound_message_id
+                       ) < ROW(
+                         turn.accepted_at,
+                         turn.received_at,
+                         turn.conversation_revision,
+                         turn.inbound_message_id
+                       )
+                     )
+                   )
+              )
+            ORDER BY turn.accepted_at, turn.received_at, turn.conversation_revision, turn.inbound_message_id
+            FOR UPDATE OF turn SKIP LOCKED
             LIMIT 1
          )
          UPDATE ${TABLE} AS turn

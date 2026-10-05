@@ -63,7 +63,10 @@ check(
     /COMPLETED/i.test(turnMigration) &&
     /FAILED/i.test(turnMigration),
 );
-check('turn claim uses FOR UPDATE SKIP LOCKED', /FOR UPDATE SKIP LOCKED/i.test(turnAdapter));
+check(
+  'turn claim uses row-scoped FOR UPDATE SKIP LOCKED',
+  /FOR UPDATE(?: OF turn)? SKIP LOCKED/i.test(turnAdapter),
+);
 check(
   'same durable turn has exactly one concurrent claimant in integration',
   /exactly one concurrent worker claim one durable turn/i.test(turnTests) &&

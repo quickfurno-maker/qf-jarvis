@@ -169,10 +169,10 @@ describe('JF-3 containment', () => {
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(18);
+    expect(sql).toHaveLength(19);
     expect(sql[0]).toBe('0001_event_log.sql');
     expect(sql[12]).toBe('0013_communication_state_projection.sql');
-    expect(sql.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
+    expect(sql.at(-1)).toBe('0019_scale_phase12_horizontal_worker_ordering.sql');
     // And this package still owns no schema of its own, in any form.
     for (const file of productionFiles()) {
       expect(readFileSync(file, 'utf8')).not.toMatch(/CREATE\s+(TABLE|INDEX|SCHEMA)/i);

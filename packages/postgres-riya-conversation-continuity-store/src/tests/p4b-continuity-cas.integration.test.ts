@@ -517,11 +517,11 @@ describe('this slice needed no schema', () => {
       .filter((name) => name.endsWith('.sql'))
       .sort();
     // RWC-P8 (ADR-0104): 0012 is the ONE owner-authorized addition, repository and LOCAL/CI only.
-    expect(files).toHaveLength(18);
+    expect(files).toHaveLength(19);
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(files.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
+    expect(files.at(-1)).toBe('0019_scale_phase12_horizontal_worker_ordering.sql');
     expect(
       createHash('sha256')
         .update(readFileSync(join(MIGRATIONS_DIR, '0011_riya_conversation_continuity.sql')))

@@ -1151,6 +1151,8 @@ describe('(78, 79, 80, 81) repository invariants', () => {
       // the maintenance-only prune path is limited to terminal opaque turn-spool rows.
       '0018_scale_phase09_data_lifecycle.sql':
         '1170c1b6b126871108b6a5a7326dcf2619fe3eadd2400c85a8580966a555dc74',
+      '0019_scale_phase12_horizontal_worker_ordering.sql':
+        '89354da09dc79313556b4b673f97444bac86b248184b045bb9b36cec9d60a6ad',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -1166,7 +1168,7 @@ describe('(78, 79, 80, 81) repository invariants', () => {
     }
     // SCALE-P09 explicitly authorizes 0018 and pins its exact bytes above. The exact-set
     // equality remains fail-closed: any 0019 or unreviewed migration still fails this test.
-    expect(sql.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
+    expect(sql.at(-1)).toBe('0019_scale_phase12_horizontal_worker_ordering.sql');
   });
 
   it('(80) no source references the protected reconciliation directory', () => {

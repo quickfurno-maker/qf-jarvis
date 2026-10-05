@@ -149,17 +149,18 @@ describe('migrations are bounded at 0001–0012 with no 0014', () => {
       '0016_client_lifetime_projection.sql',
       '0017_quickfurno_durable_turn_spool.sql',
       '0018_scale_phase09_data_lifecycle.sql',
+      '0019_scale_phase12_horizontal_worker_ordering.sql',
     ]);
   });
 
-  it('no migration numbered 0019 or higher exists', () => {
+  it('no migration numbered 0020 or higher exists', () => {
     // Compared NUMERICALLY rather than by prefix. The previous form was `/^0010|^0[1-9]\d\d/`,
     // which named 0010 and 0100–0999 but silently missed everything from 0011 to 0099 — the exact
     // range the very next migration would land in. Moving the bound is the moment to close that.
     const files = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql'));
     // RWC-P8 (ADR-0104): the bound moves to 0012, the ONE owner-authorized addition. The lock
     // still says exactly what it said -- no unauthorized migration exists.
-    const beyond = files.filter((name) => Number.parseInt(name.slice(0, 4), 10) > 18);
+    const beyond = files.filter((name) => Number.parseInt(name.slice(0, 4), 10) > 19);
     expect(beyond).toEqual([]);
   });
 });

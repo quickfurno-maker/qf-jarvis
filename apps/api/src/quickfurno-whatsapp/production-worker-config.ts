@@ -82,6 +82,18 @@ const turnStoreSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('POSTGRES') }).strict(),
 ]);
 
+const agentLaneSchema = z.enum(['RIYA', 'ANISHA', 'AAROHI']);
+const agentLanesSchema = z
+  .array(agentLaneSchema)
+  .min(1)
+  .max(3)
+  .default(['RIYA', 'ANISHA', 'AAROHI'])
+  .superRefine((value, ctx) => {
+    if (new Set(value).size !== value.length) {
+      ctx.addIssue({ code: 'custom', message: 'agent lanes must be unique' });
+    }
+  });
+
 const concurrencySchema = z
   .object({
     globalMaxConcurrentTurns: z.number().int().min(1).max(200),
@@ -175,7 +187,8 @@ const knowledgeSchema = z.union([
 const schema = z
   .object({
     revision: z.string().regex(SHA40),
-    deploymentMode: z.literal('SINGLE_OWNER'),
+    deploymentMode: z.enum(['SINGLE_OWNER', 'MULTI_REPLICA']),
+    agentLanes: agentLanesSchema,
     sealFile: absolutePath.optional(),
     groqCredentialReference: z.string().regex(REF).optional(),
     groqCredentialFile: absolutePath.optional(),
@@ -257,6 +270,24 @@ const schema = z
         message: 'legacy spoolDirectory and turnStore cannot be mixed',
       });
     }
+    if (value.deploymentMode === 'MULTI_REPLICA' && value.turnStore?.mode !== 'POSTGRES') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['deploymentMode'],
+        message: 'multi-replica workers require the PostgreSQL durable turn store',
+      });
+    }
+    const enabledLaneCapacity = value.agentLanes.reduce(
+      (sum, lane) => sum + value.concurrency.maxConcurrentByAgent[lane],
+      0,
+    );
+    if (value.concurrency.globalMaxConcurrentTurns > enabledLaneCapacity) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['concurrency', 'globalMaxConcurrentTurns'],
+        message: 'global concurrency exceeds enabled agent-lane capacity',
+      });
+    }
     const needsDatabase = value.knowledge.mode === 'HYBRID' || value.turnStore?.mode === 'POSTGRES';
     if (needsDatabase && value.database === undefined) {
       ctx.addIssue({
@@ -276,7 +307,8 @@ const schema = z
 
 export interface QuickFurnoWhatsAppProductionWorkerConfig {
   readonly revision: string;
-  readonly deploymentMode: 'SINGLE_OWNER';
+  readonly deploymentMode: 'SINGLE_OWNER' | 'MULTI_REPLICA';
+  readonly agentLanes: readonly ('RIYA' | 'ANISHA' | 'AAROHI')[];
   readonly modelProvider:
     | Readonly<{
         mode: 'GROQ_ONLY';
@@ -515,6 +547,7 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
   return Object.freeze({
     revision: input.revision,
     deploymentMode: input.deploymentMode,
+    agentLanes: Object.freeze([...input.agentLanes]),
     modelProvider,
     ...(database === undefined ? {} : { database }),
     quickfurno: Object.freeze({

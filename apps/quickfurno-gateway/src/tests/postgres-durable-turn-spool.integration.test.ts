@@ -224,6 +224,94 @@ describe('Postgres durable turn spool', () => {
     }
   });
 
+  it('serializes one conversation across separate worker pools while unrelated replicas remain free', async () => {
+    const producer = createPostgresDurableTurnSpool(runtime());
+    const poolA = createDatabasePool(
+      createDatabaseConfig({
+        connectionString: runtimeConnectionString(),
+        maxConnections: 2,
+        applicationName: 'qf-turn-spool-order-worker-a',
+      }),
+    );
+    const poolB = createDatabasePool(
+      createDatabaseConfig({
+        connectionString: runtimeConnectionString(),
+        maxConnections: 2,
+        applicationName: 'qf-turn-spool-order-worker-b',
+      }),
+    );
+    const spoolA = createPostgresDurableTurnSpool(poolA);
+    const spoolB = createPostgresDurableTurnSpool(poolB);
+    const conversationId = randomUUID();
+    try {
+      const first = turn({
+        requestId: randomUUID(),
+        inboundMessageId: randomUUID(),
+        conversationId,
+        conversationRevision: 10,
+        assignedActor: 'RIYA',
+        subjectType: 'client',
+      });
+      const second = turn({
+        requestId: randomUUID(),
+        inboundMessageId: randomUUID(),
+        conversationId,
+        conversationRevision: 11,
+        assignedActor: 'RIYA',
+        subjectType: 'client',
+      });
+      await producer.accept(first, '2026-09-18T12:01:10.000Z');
+      await producer.accept(second, '2026-09-18T12:01:11.000Z');
+
+      const claims = await Promise.all([spoolA.claimNext(), spoolB.claimNext()]);
+      const winners = claims.filter((claim): claim is NonNullable<typeof claim> => claim !== null);
+      expect(winners).toHaveLength(1);
+      expect(winners[0]?.inboundMessageId).toBe(first.inboundMessageId);
+
+      const winningSpool = claims[0] !== null ? spoolA : spoolB;
+      const losingSpool = claims[0] === null ? spoolA : spoolB;
+      await winningSpool.complete(first.inboundMessageId);
+      expect((await losingSpool.claimNext())?.inboundMessageId).toBe(second.inboundMessageId);
+      await losingSpool.complete(second.inboundMessageId);
+    } finally {
+      await closeDatabasePool(poolA);
+      await closeDatabasePool(poolB);
+    }
+  });
+
+  it('does not let a dedicated agent lane overtake an earlier turn for the same conversation', async () => {
+    const spool = createPostgresDurableTurnSpool(runtime());
+    const conversationId = randomUUID();
+    const earlier = turn({
+      requestId: randomUUID(),
+      inboundMessageId: randomUUID(),
+      conversationId,
+      conversationRevision: 20,
+      assignedActor: 'AAROHI',
+      subjectType: 'prospect',
+    });
+    const later = turn({
+      requestId: randomUUID(),
+      inboundMessageId: randomUUID(),
+      conversationId,
+      conversationRevision: 21,
+      assignedActor: 'RIYA',
+      subjectType: 'client',
+    });
+    await spool.accept(earlier, '2026-09-18T12:01:20.000Z');
+    await spool.accept(later, '2026-09-18T12:01:21.000Z');
+
+    expect(await spool.claimNext({ allowedActors: ['RIYA'] })).toBeNull();
+    expect((await spool.claimNext({ allowedActors: ['AAROHI'] }))?.inboundMessageId).toBe(
+      earlier.inboundMessageId,
+    );
+    await spool.complete(earlier.inboundMessageId);
+    expect((await spool.claimNext({ allowedActors: ['RIYA'] }))?.inboundMessageId).toBe(
+      later.inboundMessageId,
+    );
+    await spool.complete(later.inboundMessageId);
+  });
+
   it('keeps accepted work after the runtime pool is destroyed and recreated', async () => {
     const firstPool = createDatabasePool(
       createDatabaseConfig({

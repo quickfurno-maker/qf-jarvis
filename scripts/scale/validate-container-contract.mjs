@@ -140,9 +140,11 @@ for (const [name, example] of [
 }
 
 add(
-  'SINGLE_OWNER safety lock preserved',
-  workerConfig.includes("deploymentMode: z.literal('SINGLE_OWNER')") &&
-    workerConfig.includes("readonly deploymentMode: 'SINGLE_OWNER'"),
+  'deployment topology is explicit and MULTI_REPLICA is Postgres-only',
+  workerConfig.includes("deploymentMode: z.enum(['SINGLE_OWNER', 'MULTI_REPLICA'])") &&
+    workerConfig.includes("readonly deploymentMode: 'SINGLE_OWNER' | 'MULTI_REPLICA'") &&
+    workerConfig.includes("value.deploymentMode === 'MULTI_REPLICA'") &&
+    workerConfig.includes("value.turnStore?.mode !== 'POSTGRES'"),
 );
 add(
   'filesystem spool remains explicitly classified',

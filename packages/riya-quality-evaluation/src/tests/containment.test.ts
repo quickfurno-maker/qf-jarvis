@@ -367,7 +367,7 @@ describe('no runtime, service or application reaches this package', () => {
     const migrations = readdirSync(
       join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations'),
     ).filter((name) => name.endsWith('.sql'));
-    expect(migrations).toHaveLength(18);
-    expect(migrations.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
+    expect(migrations).toHaveLength(19);
+    expect(migrations.at(-1)).toBe('0019_scale_phase12_horizontal_worker_ordering.sql');
   });
 });
