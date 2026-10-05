@@ -43,8 +43,7 @@ check('nonce CSP remains application-owned and HSTS stays post-TLS', () => {
     .split('\n')
     .some(
       (line) =>
-        line.trimStart().startsWith('traefik.') &&
-        line.includes('headers.contentSecurityPolicy:'),
+        line.trimStart().startsWith('traefik.') && line.includes('headers.contentSecurityPolicy:'),
     );
   assert.equal(hasTraefikCspLabel, false);
   assert.match(osIngress, /per-request nonce CSP/i);
