@@ -569,9 +569,15 @@ describe('QuickFurno WhatsApp production worker containment', () => {
     expect(worker).not.toContain("taskClass: 'RIYA_CONVERSATION_EVOLUTION'");
   });
 
-  it('confines direct QuickFurno HTTP to one no-retry network adapter', () => {
+  it('confines QuickFurno HTTP to the shared bounded Phase 11 transport', () => {
     expect(worker).not.toMatch(/\bfetch\s*\(/);
-    expect(network.match(/\bfetch\s*\(/g)).toHaveLength(2);
+    expect(network).not.toMatch(/\bfetch\s*\(/);
+    expect(network).toContain('@qf-jarvis/cross-system-scale-contract');
+    expect(network).toContain('boundedNodeHttpPost');
+    expect(network).toContain(
+      'quickFurnoWorkerHttpPost: QuickFurnoWhatsAppHttpPost = boundedNodeHttpPost',
+    );
+    expect(network).toContain('quickFurnoWorkerAvailabilityHttpPost');
     expect(network).not.toMatch(/setTimeout|setInterval|\bretry\s*\(/);
   });
 
