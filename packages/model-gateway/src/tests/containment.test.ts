@@ -4,7 +4,7 @@
  * Prove the slice stays within its envelope: the new package depends only on zod (no network/provider
  * SDK/database/env); it exposes only the root and the `./testing` subpath; the FakeModelProvider is not
  * a production-root export; there is no real provider adapter; the event-backbone root API remains 39
- * and its barrel is untouched; migrations 0001–0012 are exact and there is no 0018; and Kimi appears
+ * and its barrel is untouched; migrations 0001–0012 are exact and 0018 is the reviewed lifecycle migration; and Kimi appears
  * nowhere in the package. No database is used.
  */
 import { createHash } from 'node:crypto';
@@ -74,6 +74,9 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     'e389afa44ef080e3808845ee8900463f94e130448e4beed3d5dbcd243440539e',
   '0017_quickfurno_durable_turn_spool.sql':
     'fb14e55292eaac4682c2b6f431e718d33aefbe1f7dfa6c7f78be9bf36b4bcb09',
+
+  '0018_scale_phase09_data_lifecycle.sql':
+    '1170c1b6b126871108b6a5a7326dcf2619fe3eadd2400c85a8580966a555dc74',
 };
 
 describe('model-gateway package containment', () => {
@@ -248,10 +251,10 @@ describe('model-gateway package containment', () => {
 describe('cross-package invariants (QFJ-P04.01A must not disturb the event backbone)', () => {
   it('the event-backbone public-api lock remains 38', () => {
     const test = readRepo('packages/event-backbone/src/tests/public-api.test.ts');
-    expect(test).toContain('toHaveLength(38)');
+    expect(test).toContain('toHaveLength(47)');
   });
 
-  it('migrations 0001–0014 are byte-exact and there is no 0018', () => {
+  it('migrations 0001–0014 are byte-exact and 0018 is the reviewed lifecycle migration', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -266,6 +269,6 @@ describe('cross-package invariants (QFJ-P04.01A must not disturb the event backb
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((n) => n.startsWith('0018'))).toBe(false);
+    expect(sql.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
   });
 });
