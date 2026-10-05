@@ -160,6 +160,8 @@ describe('db:migrate runs the preflight automatically', () => {
       16,
       // Phase 05: PostgreSQL-backed QuickFurno durable turn spool. LOCAL/CI only.
       17,
+      // SCALE-P09: reviewed data-lifecycle migration. LOCAL/CI certification only.
+      18,
     ]);
   });
 
