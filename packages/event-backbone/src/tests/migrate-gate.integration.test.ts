@@ -163,6 +163,8 @@ describe('db:migrate runs the preflight automatically', () => {
       17,
       // SCALE-P09: reviewed data-lifecycle migration. LOCAL/CI certification only.
       18,
+      // SCALE-P12: shared per-conversation horizontal-worker ordering fence. LOCAL/CI certification only.
+      19,
     ]);
   });
 
