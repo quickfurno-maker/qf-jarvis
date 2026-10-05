@@ -150,7 +150,7 @@ describe('one delegation, and nothing deeper', () => {
     expect(code).toContain('service.handleTurn');
   });
 
-  it('imports exactly the two workspace packages it needs, and no deep path', () => {
+  it('imports only its conversation/runtime contracts plus the cross-system scale guard', () => {
     const imported = new Set<string>();
     for (const file of ingressFiles()) {
       for (const match of readFileSync(file, 'utf8').matchAll(/from '(@qf-jarvis\/[^']+)'/gu)) {
@@ -160,6 +160,7 @@ describe('one delegation, and nothing deeper', () => {
     }
     expect([...imported].sort()).toEqual([
       '@qf-jarvis/agent-runtime',
+      '@qf-jarvis/cross-system-scale-contract',
       '@qf-jarvis/riya-web-conversation-service',
     ]);
     expect(ingressCode()).not.toMatch(

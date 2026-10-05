@@ -82,6 +82,9 @@ importers:
       '@qf-jarvis/core-service-availability-read':
         specifier: workspace:*
         version: link:../../packages/core-service-availability-read
+      '@qf-jarvis/cross-system-scale-contract':
+        specifier: workspace:*
+        version: link:../../packages/cross-system-scale-contract
       '@qf-jarvis/durable-orchestration-contracts':
         specifier: workspace:*
         version: link:../../packages/durable-orchestration-contracts
@@ -221,6 +224,9 @@ importers:
       '@qf-jarvis/control-plane-read-contract':
         specifier: workspace:*
         version: link:../../packages/control-plane-read-contract
+      '@qf-jarvis/cross-system-scale-contract':
+        specifier: workspace:*
+        version: link:../../packages/cross-system-scale-contract
       '@qf-jarvis/operator-api-contract':
         specifier: workspace:*
         version: link:../../packages/operator-api-contract
@@ -309,6 +315,9 @@ importers:
 
   apps/quickfurno-gateway:
     dependencies:
+      '@qf-jarvis/cross-system-scale-contract':
+        specifier: workspace:*
+        version: link:../../packages/cross-system-scale-contract
       '@qf-jarvis/event-backbone':
         specifier: workspace:*
         version: link:../../packages/event-backbone
@@ -564,6 +573,9 @@ importers:
       '@qf-jarvis/core-decision-adapter':
         specifier: workspace:*
         version: link:../core-decision-adapter
+      '@qf-jarvis/cross-system-scale-contract':
+        specifier: workspace:*
+        version: link:../cross-system-scale-contract
 
   packages/core-riya-intake:
     dependencies:
@@ -585,6 +597,8 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/cross-system-scale-contract: {}
 
   packages/decision-intelligence: {}
 

@@ -7,13 +7,5 @@
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/tests/**"],
-  "references": [
-    {
-      "path": "../../packages/cross-system-scale-contract/tsconfig.build.json"
-    },
-    {
-      "path": "../../packages/event-backbone"
-    }
-  ]
+  "exclude": ["src/tests/**"]
 }

@@ -17,6 +17,7 @@
     "typecheck:tests": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@qf-jarvis/core-decision-adapter": "workspace:*"
+    "@qf-jarvis/core-decision-adapter": "workspace:*",
+    "@qf-jarvis/cross-system-scale-contract": "workspace:*"
   }
 }

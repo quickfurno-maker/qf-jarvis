@@ -29,6 +29,7 @@
     { "path": "./packages/agent-runtime/tsconfig.build.json" },
     { "path": "./packages/action-kernel/tsconfig.build.json" },
     { "path": "./packages/durable-orchestration-contracts/tsconfig.build.json" },
+    { "path": "./packages/cross-system-scale-contract/tsconfig.build.json" },
     { "path": "./packages/core-decision-adapter/tsconfig.build.json" },
     { "path": "./packages/core-decision-http-transport/tsconfig.build.json" },
     { "path": "./packages/model-gateway" },

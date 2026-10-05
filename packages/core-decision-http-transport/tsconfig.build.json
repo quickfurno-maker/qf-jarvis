@@ -6,7 +6,10 @@
     "outDir": "./dist",
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
   },
-  "references": [{ "path": "../core-decision-adapter/tsconfig.build.json" }],
+  "references": [
+    { "path": "../core-decision-adapter/tsconfig.build.json" },
+    { "path": "../cross-system-scale-contract/tsconfig.build.json" }
+  ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]
 }

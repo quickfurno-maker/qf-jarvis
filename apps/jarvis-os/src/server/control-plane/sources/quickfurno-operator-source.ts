@@ -1,4 +1,5 @@
 import { createHash, createPrivateKey, randomUUID, sign } from 'node:crypto';
+import { executeQfjScaleRequest } from '@qf-jarvis/cross-system-scale-contract';
 import { isAbsolute } from 'node:path';
 
 import {
@@ -149,7 +150,7 @@ export function createQuickFurnoOperatorReadSource(
     label: 'QuickFurno operator observation',
     observedReason: 'Read from QuickFurno through a dedicated signed, read-only operator snapshot.',
     owns: Object.freeze(OWNED_SECTIONS),
-    timeoutMs: 3_500,
+    timeoutMs: 2_500,
     async acquire(signal: AbortSignal) {
       try {
         const config = loadCoreReadConfig({ path: configPath });
@@ -182,25 +183,55 @@ export function createQuickFurnoOperatorReadSource(
           privateKey,
         ).toString('base64url');
 
-        const response = await request(new URL(QUICKFURNO_OPERATOR_PATH, config.baseUrl), {
-          method: 'POST',
-          signal,
+        const scaleResult = await executeQfjScaleRequest({
+          url: new URL(QUICKFURNO_OPERATOR_PATH, config.baseUrl).toString(),
+          path: QUICKFURNO_OPERATOR_PATH,
+          body,
+          keyId: config.keyId,
+          privateKeyPem: config.privateKeyPem,
+          actor: 'qf-jarvis-os',
+          requestId,
+          idempotencyKey: requestId,
+          correlationId: requestId,
+          timeoutMs: 2_500,
           headers: {
             'content-type': 'application/json',
             'x-qfj-key-id': config.keyId,
             'x-qfj-signature': signature,
           },
-          body,
-          cache: 'no-store',
+          httpPost: async (url, init) => {
+            const response = await request(new URL(url), {
+              method: 'POST',
+              signal: AbortSignal.any([signal, init.signal]),
+              headers: init.headers,
+              body: init.body,
+              cache: 'no-store',
+            });
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            const text = new TextDecoder().decode(bytes);
+            return Object.freeze({
+              status: response.status,
+              text() {
+                return Promise.resolve(text);
+              },
+            });
+          },
         });
-        if (!response.ok) {
+        if (
+          !scaleResult.ok ||
+          scaleResult.response.status < 200 ||
+          scaleResult.response.status >= 300
+        ) {
           return Object.freeze({
             status: 'UNAVAILABLE' as const,
             reason: 'SOURCE_REJECTED_REQUEST' as const,
           });
         }
-        const bytes = new Uint8Array(await response.arrayBuffer());
-        if (bytes.byteLength < 2 || bytes.byteLength > MAX_RESPONSE_BYTES) {
+        const responseText = await scaleResult.response.text();
+        if (
+          Buffer.byteLength(responseText, 'utf8') < 2 ||
+          Buffer.byteLength(responseText, 'utf8') > MAX_RESPONSE_BYTES
+        ) {
           return Object.freeze({
             status: 'UNAVAILABLE' as const,
             reason: 'SOURCE_RETURNED_UNUSABLE_DATA' as const,
@@ -208,7 +239,7 @@ export function createQuickFurnoOperatorReadSource(
         }
         let json: unknown;
         try {
-          json = JSON.parse(new TextDecoder().decode(bytes));
+          json = JSON.parse(responseText);
         } catch {
           return Object.freeze({
             status: 'UNAVAILABLE' as const,
