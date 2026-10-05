@@ -19,8 +19,11 @@ import { QuickFurnoWhatsAppHttpError } from './quickfurno-http.js';
 import type { QuickFurnoWhatsAppSpecialistRuntime } from './specialist-runtime.js';
 import { shouldRequestCoreMatch } from './client-intelligence-adapter.js';
 import { feedbackForMaterial } from './client-vendor-feedback-adapter.js';
+import { extractRemoteContext, SpanKind, withSpan } from '@qf-jarvis/observability';
 
 export interface QuickFurnoWhatsAppTurnReference {
+  readonly traceparent?: string;
+  readonly tracestate?: string;
   readonly conversationId: string;
   readonly conversationRevision: number;
   readonly inboundMessageId: string;
@@ -105,7 +108,7 @@ export function createQuickFurnoWhatsAppTurnProcessor(
 ): QuickFurnoWhatsAppTurnProcessor {
   const traceClock = config.traceClock ?? (() => new Date().toISOString());
 
-  const processClaimed = async (
+  const processClaimedInner = async (
     ref: QuickFurnoWhatsAppTurnReference,
   ): Promise<QuickFurnoWhatsAppProcessorOutcome> => {
     let traceSequence = 0;
@@ -490,6 +493,22 @@ export function createQuickFurnoWhatsAppTurnProcessor(
       await config.queue.fail(ref.inboundMessageId);
       return finish('failed-indeterminate');
     }
+  };
+
+  const processClaimed = async (
+    ref: QuickFurnoWhatsAppTurnReference,
+  ): Promise<QuickFurnoWhatsAppProcessorOutcome> => {
+    const parent = extractRemoteContext({
+      ...(ref.traceparent === undefined ? {} : { traceparent: ref.traceparent }),
+      ...(ref.tracestate === undefined ? {} : { tracestate: ref.tracestate }),
+    });
+    return withSpan(
+      'jarvis.whatsapp.turn',
+      SpanKind.CONSUMER,
+      { stage: 'jarvis.provider', worker_role: 'whatsapp-worker' },
+      () => processClaimedInner(ref),
+      parent,
+    );
   };
 
   return Object.freeze({

@@ -1160,6 +1160,7 @@ describe('the runner is idempotent with 0001 through 0005 applied', () => {
       '0017_quickfurno_durable_turn_spool.sql',
       '0018_scale_phase09_data_lifecycle.sql',
       '0019_scale_phase12_horizontal_worker_ordering.sql',
+      '0020_scale_phase14_trace_context.sql',
     ]);
   });
 });
@@ -1298,6 +1299,7 @@ describe('migration 0002 — comprehensive stale-grant remediation', () => {
         '0017_quickfurno_durable_turn_spool.sql',
         '0018_scale_phase09_data_lifecycle.sql',
         '0019_scale_phase12_horizontal_worker_ordering.sql',
+        '0020_scale_phase14_trace_context.sql',
       ]);
 
       // 5. Every stale direct privilege is gone. ALL schema_migration privileges, not only SELECT.

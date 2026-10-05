@@ -254,6 +254,11 @@ export const ownershipRowSchema = z
 export const approvalRowSchema = z
   .object({
     id: identifierSchema,
+    kind: z.enum(['AUTOMATION', 'AGNI']).optional(),
+    actionFingerprint: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
     requestedAction: labelSchema,
     risk: z.enum([
       'informational',

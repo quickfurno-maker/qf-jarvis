@@ -37,6 +37,7 @@ import {
   qfjScaleResponseHeaders,
   verifyQfjScaleRequest,
 } from '@qf-jarvis/cross-system-scale-contract';
+import { addMetric } from '@qf-jarvis/observability';
 
 import type {
   RiyaWebConversationResultV2,
@@ -495,6 +496,14 @@ export function createPrivateRiyaWebIngressHandler(
           (request.caller as string) !== PRIVATE_RIYA_WEB_INGRESS_CALLER ||
           (request.audience as string) !== PRIVATE_RIYA_WEB_INGRESS_AUDIENCE
         ) {
+          try {
+            addMetric('qf.security.auth.failures', 1, {
+              operation: 'riya_private_ingress',
+              result: 'caller',
+            });
+          } catch {
+            // Telemetry is powerless.
+          }
           throw new PrivateRiyaWebIngressError('authentication-failed');
         }
 
@@ -508,6 +517,28 @@ export function createPrivateRiyaWebIngressHandler(
           allowLegacy: true,
         });
         if (!scaleContract.ok) {
+          if (
+            scaleContract.errorClass === 'QFJ_AUTHENTICATION_FAILED' ||
+            scaleContract.errorClass === 'QFJ_CONTRACT_INVALID'
+          ) {
+            try {
+              addMetric('qf.security.auth.failures', 1, {
+                operation: 'riya_private_ingress',
+                result:
+                  scaleContract.errorClass === 'QFJ_AUTHENTICATION_FAILED'
+                    ? 'authentication'
+                    : 'contract',
+              });
+              if (scaleContract.errorClass === 'QFJ_AUTHENTICATION_FAILED') {
+                addMetric('qf.security.signature.failures', 1, {
+                  operation: 'riya_private_ingress',
+                  result: 'invalid',
+                });
+              }
+            } catch {
+              // Telemetry is powerless.
+            }
+          }
           throw new PrivateRiyaWebIngressError(
             scaleContract.errorClass === 'QFJ_DEADLINE_EXCEEDED'
               ? 'service-unavailable'

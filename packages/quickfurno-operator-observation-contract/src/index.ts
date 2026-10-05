@@ -28,6 +28,11 @@ export const quickFurnoOperatorRequestSchema = z
 const approval = z
   .object({
     id: z.uuid(),
+    kind: z.enum(['AUTOMATION', 'AGNI']).optional(),
+    actionFingerprint: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
     requestedAction: label,
     risk: z.enum([
       'informational',

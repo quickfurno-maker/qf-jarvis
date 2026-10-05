@@ -300,6 +300,9 @@ describe('(46, 47) migrations are undisturbed', () => {
 
       '0019_scale_phase12_horizontal_worker_ordering.sql':
         '89354da09dc79313556b4b673f97444bac86b248184b045bb9b36cec9d60a6ad',
+
+      '0020_scale_phase14_trace_context.sql':
+        'ea34c690b4298b82348a722f4f250bd723b76ccd0133252fa88af0fa417b52ab',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -316,7 +319,7 @@ describe('(46, 47) migrations are undisturbed', () => {
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.at(-1)).toBe('0019_scale_phase12_horizontal_worker_ordering.sql');
+    expect(sql.at(-1)).toBe('0020_scale_phase14_trace_context.sql');
   });
 });
 

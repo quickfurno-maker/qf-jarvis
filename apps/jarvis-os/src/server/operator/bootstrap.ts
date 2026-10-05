@@ -35,6 +35,7 @@ function capabilities(): readonly OperatorCapability[] {
   const connected = coreCommandConnected();
   return Object.freeze([
     quickFurnoCapability('APPROVAL_DECIDE', connected, 'Approval decision'),
+    quickFurnoCapability('AGNI_APPROVAL_DECIDE', connected, 'AGNI operational approval'),
     quickFurnoCapability('CONVERSATION_TAKEOVER', connected, 'Conversation takeover'),
     quickFurnoCapability('CONVERSATION_RESUME_AI', connected, 'Resume AI'),
     quickFurnoCapability('CONVERSATION_PAUSE_AI', connected, 'Pause AI'),

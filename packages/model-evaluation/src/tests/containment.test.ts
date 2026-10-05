@@ -100,6 +100,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     '1170c1b6b126871108b6a5a7326dcf2619fe3eadd2400c85a8580966a555dc74',
   '0019_scale_phase12_horizontal_worker_ordering.sql':
     '89354da09dc79313556b4b673f97444bac86b248184b045bb9b36cec9d60a6ad',
+  '0020_scale_phase14_trace_context.sql':
+    'ea34c690b4298b82348a722f4f250bd723b76ccd0133252fa88af0fa417b52ab',
 };
 
 function recorder(): { hook: EvaluationObservabilityHook; events: EvaluationEvent[] } {
@@ -388,7 +390,7 @@ describe('containment', () => {
     }
     // SCALE-P09 authorizes exactly 0018; exact-set equality and byte hashes above continue
     // to reject every unreviewed migration after it.
-    expect(sql.at(-1)).toBe('0019_scale_phase12_horizontal_worker_ordering.sql');
+    expect(sql.at(-1)).toBe('0020_scale_phase14_trace_context.sql');
   });
 
   it('(60) the event-backbone public-api lock includes the reviewed SCALE-P09 surface', () => {

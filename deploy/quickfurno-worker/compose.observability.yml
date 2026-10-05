@@ -1,0 +1,13 @@
+services:
+  quickfurno-worker:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://qf-jarvis-otel-agent:4318
+      OTEL_SDK_DISABLED: 'false'
+    networks:
+      - worker
+      - observability
+
+networks:
+  observability:
+    external: true
+    name: qf-jarvis-observability

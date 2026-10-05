@@ -121,6 +121,27 @@ describe('durable WhatsApp turn spool', () => {
     ).toBe('duplicate');
   });
 
+  it('persists bounded W3C trace context across a durable file claim', async () => {
+    const root = await spoolRoot();
+    const spool = await createFileDurableTurnSpool(root);
+    const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+    const tracestate = 'qf=s:1';
+    await spool.accept(turn(), '2026-09-18T12:00:01.000Z', { traceparent, tracestate });
+    const claimed = await spool.claimNext();
+    expect(claimed?.traceparent).toBe(traceparent);
+    expect(claimed?.tracestate).toBe(tracestate);
+    await expect(
+      spool.accept(
+        turn({
+          requestId: '44444444-4444-4444-8444-444444444444',
+          inboundMessageId: '55555555-5555-4555-8555-555555555555',
+        }),
+        '2026-09-18T12:00:02.000Z',
+        { traceparent: '00-00000000000000000000000000000000-0123456789abcdef-01' },
+      ),
+    ).rejects.toThrow('turn_spool_trace_context_invalid');
+  });
+
   it('atomically claims, releases, completes, and retains completion identity', async () => {
     const root = await spoolRoot();
     const spool = await createFileDurableTurnSpool(root);

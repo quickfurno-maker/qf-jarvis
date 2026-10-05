@@ -973,6 +973,16 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
       providerId: capabilities.providerId,
       attempts,
       latencyMs: accepted.latencyMs,
+      ...(accepted.usage.cost === undefined ? {} : { cost: accepted.usage.cost }),
+      ...(accepted.usage.inputTokens === undefined
+        ? {}
+        : { inputTokens: accepted.usage.inputTokens }),
+      ...(accepted.usage.outputTokens === undefined
+        ? {}
+        : { outputTokens: accepted.usage.outputTokens }),
+      ...(accepted.usage.totalTokens === undefined
+        ? {}
+        : { totalTokens: accepted.usage.totalTokens }),
     });
     const base = {
       runId: request.runId,

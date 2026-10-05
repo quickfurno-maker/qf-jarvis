@@ -4,6 +4,7 @@ import { Panel } from '@/components/primitives/Panel';
 
 const LABEL: Readonly<Record<OperatorCapability['action'], string>> = Object.freeze({
   APPROVAL_DECIDE: 'Approval decisions',
+  AGNI_APPROVAL_DECIDE: 'AGNI operations',
   CONVERSATION_TAKEOVER: 'Human takeover',
   CONVERSATION_RESUME_AI: 'Resume AI',
   CONVERSATION_PAUSE_AI: 'Pause AI',

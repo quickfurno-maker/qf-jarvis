@@ -1,0 +1,36 @@
+name: qf-jarvis-observability
+
+services:
+  otel-agent:
+    image: otel/opentelemetry-collector-contrib:0.136.0
+    container_name: qf-jarvis-otel-agent
+    command: ['--config=/etc/otelcol/config.yaml']
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    environment:
+      AGNI_OTLP_GATEWAY_ENDPOINT: ${AGNI_OTLP_GATEWAY_ENDPOINT:?AGNI_OTLP_GATEWAY_ENDPOINT required}
+    volumes:
+      - ../../ops/observability/otel-agent.yaml:/etc/otelcol/config.yaml:ro
+      - ${QFJ_OTEL_SECRET_DIR:?QFJ_OTEL_SECRET_DIR required}:/run/secrets:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: 384m
+          pids: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    networks: [observability]
+
+networks:
+  observability:
+    name: qf-jarvis-observability
+    driver: bridge

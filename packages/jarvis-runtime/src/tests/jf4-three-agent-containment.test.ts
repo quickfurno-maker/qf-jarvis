@@ -274,8 +274,8 @@ describe('JF-4B/C/D repository boundaries', () => {
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(19);
-    expect(sql.at(-1)).toBe('0019_scale_phase12_horizontal_worker_ordering.sql');
+    expect(sql).toHaveLength(20);
+    expect(sql.at(-1)).toBe('0020_scale_phase14_trace_context.sql');
   });
 
   it('(J91,J92) D5 is neither activated nor granted new permissions by this lane', () => {
@@ -478,7 +478,7 @@ describe('JF-4 correction: there is ONE governed RAG, not three', () => {
     }
   });
 
-  it('(§17) the migration ledger is exactly 0001-0019, in order, with no gap', () => {
+  it('(§17) the migration ledger is exactly 0001-0020, in order, with no gap', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((name) => name.endsWith('.sql'))
@@ -503,6 +503,7 @@ describe('JF-4 correction: there is ONE governed RAG, not three', () => {
       '0017',
       '0018',
       '0019',
+      '0020',
     ]);
     expect(sql[13]).toBe('0014_conversation_prospect_party_type.sql');
     expect(sql[14]).toBe('0015_correlation_timeline_projection.sql');

@@ -38,6 +38,7 @@ export const WORKER_OBSERVATION_PATH_VAR = 'QFJ_WORKER_OBSERVATION_FILE';
 export const AGENT_FLOW_TRACE_PATH_VAR = 'QFJ_AGENT_FLOW_TRACE_FILE';
 export const CORE_READ_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_READ_CONFIG_FILE';
 export const CORE_COMMAND_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_COMMAND_CONFIG_FILE';
+export const AGNI_CONFIG_PATH_VAR = 'QFJ_JOS_AGNI_CONFIG_FILE';
 export const RELEASE_ASSURANCE_OBSERVATION_PATH_VAR = 'QFJ_RELEASE_ASSURANCE_OBSERVATION_FILE';
 export const LIVEKIT_CONFIG_PATH_VAR = 'QFJ_JOS_LIVEKIT_CONFIG_FILE';
 export const RELEASE_SHA_VAR = 'QFJ_JOS_RELEASE_SHA';
@@ -67,6 +68,11 @@ export function readCoreReadConfigPathFromEnvironment(): string | undefined {
 
 export function readCoreCommandConfigPathFromEnvironment(): string | undefined {
   const value = process.env[CORE_COMMAND_CONFIG_PATH_VAR];
+  return value === undefined || value.trim() === '' ? undefined : value;
+}
+
+export function readAgniConfigPathFromEnvironment(): string | undefined {
+  const value = process.env[AGNI_CONFIG_PATH_VAR];
   return value === undefined || value.trim() === '' ? undefined : value;
 }
 
@@ -115,6 +121,11 @@ export function loadCoreCommandConfig(options: LoaderOptions = {}): CoreReadConf
   return loadCoreTransportConfig(path, options.platform, 'core-command');
 }
 
+export function loadAgniConfig(options: LoaderOptions = {}): CoreReadConfigV1 {
+  const path = options.path ?? readAgniConfigPathFromEnvironment();
+  return loadCoreTransportConfig(path, options.platform, 'agni');
+}
+
 export function loadLiveKitOperatorConfig(options: LoaderOptions = {}): LiveKitOperatorConfigV1 {
   const path = options.path ?? readLiveKitConfigPathFromEnvironment();
   if (path === undefined || path.trim() === '') {
@@ -135,7 +146,7 @@ export function loadLiveKitOperatorConfig(options: LoaderOptions = {}): LiveKitO
 function loadCoreTransportConfig(
   path: string | undefined,
   platform: NodeJS.Platform | undefined,
-  kind: 'core-read' | 'core-command',
+  kind: 'core-read' | 'core-command' | 'agni',
 ): CoreReadConfigV1 {
   if (path === undefined || path.trim() === '') {
     throw new TypeError(kind + '-config-path-unset');

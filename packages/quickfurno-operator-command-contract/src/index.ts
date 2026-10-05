@@ -14,6 +14,7 @@ export const QUICKFURNO_OPERATOR_ID_HEADER = 'x-qfj-operator-id' as const;
 
 const QUICKFURNO_ACTIONS = new Set([
   'APPROVAL_DECIDE',
+  'AGNI_APPROVAL_DECIDE',
   'CONVERSATION_TAKEOVER',
   'CONVERSATION_RESUME_AI',
   'CONVERSATION_PAUSE_AI',
@@ -29,6 +30,7 @@ export const quickFurnoOperatorCommandResultSchema = operatorCommandResultSchema
 export type QuickFurnoOperatorCommand = OperatorCommand & {
   readonly action:
     | 'APPROVAL_DECIDE'
+    | 'AGNI_APPROVAL_DECIDE'
     | 'CONVERSATION_TAKEOVER'
     | 'CONVERSATION_RESUME_AI'
     | 'CONVERSATION_PAUSE_AI';
