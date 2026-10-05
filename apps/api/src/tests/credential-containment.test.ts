@@ -833,6 +833,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       // controls. The package holds no provider credential, network client, database or execution port.
       '@qf-jarvis/model-intelligence-control',
       '@qf-jarvis/model-reply-adapter',
+      // Phase 14: vendor-neutral telemetry runtime only. It adds no business authority and the
+      // serving bin still reads no environment directly; the package is pinned as an exact edge.
+      '@qf-jarvis/observability',
       '@qf-jarvis/openai-compatible-embedding-adapter',
       '@qf-jarvis/postgres-approval-queue',
       '@qf-jarvis/postgres-conversation-state',

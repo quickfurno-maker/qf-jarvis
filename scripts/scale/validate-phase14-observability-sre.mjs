@@ -54,6 +54,12 @@ if (
   !gatewayBuildTsconfig.includes('../../packages/observability/tsconfig.build.json')
 )
   fail('observability clean-build project references missing');
+const productionWorkerBin = read('apps/api/src/bin/run-quickfurno-whatsapp-production-worker.ts');
+if (
+  productionWorkerBin.includes('process.env') ||
+  !productionWorkerBin.includes("const PHASE14_MIGRATION_HEAD = '0020_scale_phase14_trace_context'")
+)
+  fail('production worker observability identity containment drifted');
 const runtime = read('packages/observability/src/index.ts');
 if (
   !runtime.includes('qf.telemetry.heartbeat.unixtime') ||

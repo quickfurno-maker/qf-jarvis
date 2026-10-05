@@ -6,6 +6,8 @@ import { startObservability, type ObservabilityRuntime } from '@qf-jarvis/observ
 import { loadQuickFurnoWhatsAppProductionWorkerConfig } from '../quickfurno-whatsapp/production-worker-config.js';
 import { createQuickFurnoWhatsAppProductionWorker } from '../quickfurno-whatsapp/production-worker.js';
 
+const PHASE14_MIGRATION_HEAD = '0020_scale_phase14_trace_context';
+
 function configPathOf(argv: readonly string[]): string {
   if (argv.length !== 2 || argv[0] !== '--config') {
     throw new Error('invalid-usage');
@@ -22,25 +24,13 @@ async function main(): Promise<void> {
     const config = loadQuickFurnoWhatsAppProductionWorkerConfig(
       configPathOf(process.argv.slice(2)),
     );
-    const configuredInstanceId = process.env['QFJ_SERVICE_INSTANCE_ID']?.trim();
-    const configuredImageSha = process.env['QFJ_IMAGE_SHA']?.trim();
-    const configuredMigrationHead = process.env['QFJ_MIGRATION_HEAD']?.trim();
     observability = startObservability({
       serviceName: config.serviceId,
       serviceVersion: config.revision,
-      serviceInstanceId:
-        configuredInstanceId === undefined || configuredInstanceId === ''
-          ? config.runtimeId
-          : configuredInstanceId,
+      serviceInstanceId: config.runtimeId,
       environment: config.environment,
-      imageSha:
-        configuredImageSha === undefined || configuredImageSha === ''
-          ? config.revision
-          : configuredImageSha,
-      migrationHead:
-        configuredMigrationHead === undefined || configuredMigrationHead === ''
-          ? 'unknown'
-          : configuredMigrationHead,
+      imageSha: config.revision,
+      migrationHead: PHASE14_MIGRATION_HEAD,
       configSchemaVersion: String(config.schemaVersion),
     });
     worker = await createQuickFurnoWhatsAppProductionWorker(config);

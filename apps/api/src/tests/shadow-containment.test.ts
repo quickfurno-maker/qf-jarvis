@@ -710,6 +710,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // ADR-0162: safe WhatsApp multimodal planning over already-minimized metadata/captions.
       // It never downloads media and never claims to understand unseen provider content.
       'multimodal-turn-planning',
+      // Phase 14: vendor-neutral telemetry only. This exact package-set repin records the reviewed
+      // observability surface without adding provider, Core, database or action authority.
+      'observability',
       // ADR-0158: bounded OpenAI-compatible embedding transport. Policy remains in knowledge-index.
       'openai-compatible-embedding-adapter',
       // JOS-01G: versioned operator contracts and framework-neutral client core. These packages
