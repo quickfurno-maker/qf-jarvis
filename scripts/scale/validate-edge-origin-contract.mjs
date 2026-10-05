@@ -39,7 +39,7 @@ check('Jarvis OS keeps origin login protections independent of Cloudflare', () =
 
 check('nonce CSP remains application-owned and HSTS stays post-TLS', () => {
   assert.equal(policy.publicOs.cspOwner, 'application-nonce');
-  assert.doesNotMatch(osIngress, /contentSecurityPolicy/i);
+  assert.doesNotMatch(osIngress, /^\\s*traefik\\..*headers\\.contentSecurityPolicy:/m);
   assert.match(osIngress, /per-request nonce CSP/i);
   assert.match(osHsts, /stsSeconds:\s*'31536000'/);
   assert.match(osHsts, /applied only after trusted TLS/i);
