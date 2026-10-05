@@ -62,6 +62,9 @@ services:
 
     environment:
       NODE_ENV: production
+      QFJ_RUNTIME_ENV: production
+      QFJ_CONFIG_SCHEMA_VERSION: '1'
+      QFJ_SERVICE_ID: qf-jarvis.jarvis-os
       HOSTNAME: 0.0.0.0
       PORT: '3000'
       # Paths plus the public immutable release SHA only. Secret material never enters environment variables.

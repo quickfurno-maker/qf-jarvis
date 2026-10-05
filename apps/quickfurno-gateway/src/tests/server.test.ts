@@ -37,6 +37,9 @@ const jarvisSigning = parseSigningKey(
 if (qfVerification === null || jarvisSigning === null) throw new Error('test key setup failed');
 
 const config: GatewayConfig = {
+  schemaVersion: 1,
+  environment: 'local',
+  serviceId: 'qf-jarvis.quickfurno-gateway',
   verificationKeys: [qfVerification],
   signingKey: jarvisSigning,
   maxClockSkewMs: 60_000,

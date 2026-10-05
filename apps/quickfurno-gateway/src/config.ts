@@ -11,6 +11,9 @@ import {
 const MAX_CONFIG_BYTES = 64 * 1024;
 
 export interface GatewayConfig {
+  readonly schemaVersion: 1;
+  readonly environment: 'local' | 'staging' | 'production';
+  readonly serviceId: 'qf-jarvis.quickfurno-gateway';
   readonly verificationKeys: readonly VerificationKey[];
   readonly signingKey: SigningKey;
   readonly maxClockSkewMs: number;
@@ -40,14 +43,28 @@ export function loadGatewayConfig(configPath: string): GatewayConfig {
     root === null ||
     Object.keys(root).sort().join(',') !==
       [
+        'environment',
         'jarvisSigningKey',
         'maxClockSkewMs',
         'quickfurnoVerificationKeys',
         'replayMaxEntries',
         'replayTtlMs',
+        'schemaVersion',
+        'serviceId',
       ]
         .sort()
         .join(',')
+  ) {
+    throw new Error('gateway_config_invalid');
+  }
+
+  const schemaVersion = root['schemaVersion'];
+  const environment = root['environment'];
+  const serviceId = root['serviceId'];
+  if (
+    schemaVersion !== 1 ||
+    (environment !== 'local' && environment !== 'staging' && environment !== 'production') ||
+    serviceId !== 'qf-jarvis.quickfurno-gateway'
   ) {
     throw new Error('gateway_config_invalid');
   }
@@ -108,6 +125,9 @@ export function loadGatewayConfig(configPath: string): GatewayConfig {
   }
 
   return Object.freeze({
+    schemaVersion: 1 as const,
+    environment,
+    serviceId,
     verificationKeys: Object.freeze(verificationKeys),
     signingKey,
     maxClockSkewMs,

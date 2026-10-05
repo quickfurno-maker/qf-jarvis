@@ -41,6 +41,9 @@ export const CORE_COMMAND_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_COMMAND_CONFIG_FILE';
 export const RELEASE_ASSURANCE_OBSERVATION_PATH_VAR = 'QFJ_RELEASE_ASSURANCE_OBSERVATION_FILE';
 export const LIVEKIT_CONFIG_PATH_VAR = 'QFJ_JOS_LIVEKIT_CONFIG_FILE';
 export const RELEASE_SHA_VAR = 'QFJ_JOS_RELEASE_SHA';
+export const RUNTIME_ENV_VAR = 'QFJ_RUNTIME_ENV';
+export const CONFIG_SCHEMA_VERSION_VAR = 'QFJ_CONFIG_SCHEMA_VERSION';
+export const SERVICE_ID_VAR = 'QFJ_SERVICE_ID';
 
 /**
  * Read the optional content-free worker observation path through the same reviewed environment
@@ -87,6 +90,19 @@ export interface LoaderOptions {
   readonly path?: string | undefined;
   /** Injected for tests: the platform to apply POSIX permission rules for. */
   readonly platform?: NodeJS.Platform | undefined;
+}
+
+function assertJarvisOsRuntimeIdentity(): boolean {
+  const production = process.env['NODE_ENV'] === 'production';
+  if (!production) return false;
+  if (
+    process.env[RUNTIME_ENV_VAR] !== 'production' ||
+    process.env[CONFIG_SCHEMA_VERSION_VAR] !== '1' ||
+    process.env[SERVICE_ID_VAR] !== 'qf-jarvis.jarvis-os'
+  ) {
+    throw new AuthFailure('config-invalid');
+  }
+  return true;
 }
 
 export function loadCoreReadConfig(options: LoaderOptions = {}): CoreReadConfigV1 {
@@ -147,6 +163,7 @@ function loadCoreTransportConfig(
  * locked door, which is the correct outcome.
  */
 export function loadAuthConfig(options: LoaderOptions = {}): AuthConfigV1 {
+  const productionRuntime = assertJarvisOsRuntimeIdentity();
   const path = options.path ?? readConfigPathFromEnvironment();
   if (path === undefined || path.trim() === '') {
     throw new AuthFailure('config-path-unset');
@@ -167,6 +184,9 @@ export function loadAuthConfig(options: LoaderOptions = {}): AuthConfigV1 {
   if (!result.success) {
     // Zod's issues would name paths like `session.keys.0.key` and, for some checks, the received
     // value. Discarded entirely: the operator debugs against the schema, not against an echo.
+    throw new AuthFailure('config-invalid');
+  }
+  if (productionRuntime && result.data.mode !== 'PRODUCTION') {
     throw new AuthFailure('config-invalid');
   }
 
