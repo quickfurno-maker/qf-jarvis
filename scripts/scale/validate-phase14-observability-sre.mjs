@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 
 function fail(message) {
@@ -95,9 +96,14 @@ for (const forbidden of [
   if (existsSync('ops/observability/' + forbidden))
     fail('central observability ownership leaked into Jarvis: ' + forbidden);
 }
-const traceMigration = read(
-  'packages/event-backbone/src/persistence/migrations/0020_scale_phase14_trace_context.sql',
-);
+const traceMigrationPath =
+  'packages/event-backbone/src/persistence/migrations/0020_scale_phase14_trace_context.sql';
+const traceMigration = read(traceMigrationPath);
+const traceMigrationSha = createHash('sha256')
+  .update(readFileSync(traceMigrationPath))
+  .digest('hex');
+if (traceMigrationSha !== 'ea34c690b4298b82348a722f4f250bd723b76ccd0133252fa88af0fa417b52ab')
+  fail('Phase 14 trace-context migration checksum drifted');
 const fileSpool = read('apps/quickfurno-gateway/src/durable-turn-spool.ts');
 const pgSpool = read('apps/quickfurno-gateway/src/postgres-durable-turn-spool.ts');
 const processor = read('apps/api/src/quickfurno-whatsapp/turn-processor.ts');

@@ -166,6 +166,8 @@ describe('db:migrate runs the preflight automatically', () => {
       18,
       // SCALE-P12: shared per-conversation horizontal-worker ordering fence. LOCAL/CI certification only.
       19,
+      // Phase 14: durable W3C trace context on the QuickFurno turn spool. LOCAL/CI certification only.
+      20,
     ]);
   });
 

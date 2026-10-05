@@ -74,6 +74,9 @@ const KNOWN_CHECKSUMS: Readonly<Record<string, string>> = {
     '148b31ea95f3ae90274cdc74381b8d1fb3be9caa0dfe7ff96771240a7c29cc30',
   '0005_projection_event_positions.sql':
     '96d641ad0c3ea47843ab9de00cf4ab9847fad6a0164bbacadf5c7ed439ccccae',
+  // Phase 14: exact reviewed durable W3C trace-context migration.
+  '0020_scale_phase14_trace_context.sql':
+    'ea34c690b4298b82348a722f4f250bd723b76ccd0133252fa88af0fa417b52ab',
 };
 
 async function tablePrivilege(role: string, table: string, priv: string): Promise<boolean> {
@@ -136,7 +139,7 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe('migrations apply in order, idempotently, with 0001–0007 unchanged', () => {
-  it('records exactly 0001..0017 in order with the immutable checksums intact', async () => {
+  it('records exactly 0001..0020 in order with the immutable checksums intact', async () => {
     const rows = await withClient(admin, async (client) => {
       const r = await client.query<{ version: number; filename: string; checksum: Buffer }>(
         `SELECT version, filename, checksum FROM qf_jarvis.schema_migration ORDER BY version ASC`,
@@ -169,7 +172,7 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
     // RWC-P8 (ADR-0104) added 0012; QFJ-P09 D5 (ADR-0142) added 0013; the JF-4B/C/D owner correction
     // (ADR-0150 §34) adds 0014, the party CHECK widened to hold PROSPECT. One authorized addition each.
     expect(rows.map((row) => row.version)).toStrictEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
     ]);
     for (const row of rows) {
       const hex = row.checksum.toString('hex');
@@ -179,7 +182,7 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
     }
   });
 
-  it('re-migrating is idempotent — still exactly nineteen applied migrations', async () => {
+  it('re-migrating is idempotent — still exactly twenty applied migrations', async () => {
     await runMigrations(admin, defaultMigrationsDirectory());
     const count = await withClient(admin, async (client) => {
       const r = await client.query<{ n: string }>(
@@ -190,8 +193,9 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
     // Each slice added exactly one: 0012 (RWC-P8, ADR-0104), 0013 (QFJ-P09 D5, ADR-0142),
     // 0014 (JF-4B/C/D owner correction, ADR-0150 §34), 0015 (ADR-0167 correlation timeline),
     // 0016 (Client-OS v2 bounded client lifetime projection), 0017 (Phase 05 QuickFurno durable turn spool),
-    // 0018 (SCALE-P09 reviewed data lifecycle), and 0019 (SCALE-P12 shared ordering fence). Repository and LOCAL/CI only.
-    expect(count).toBe(19);
+    // 0018 (SCALE-P09 reviewed data lifecycle), 0019 (SCALE-P12 shared ordering fence), and
+    // 0020 (Phase 14 durable W3C trace context). Repository and LOCAL/CI only.
+    expect(count).toBe(20);
   });
 
   it('records the EXACT reviewed 0004 and 0005 checksums in the migration history', async () => {
