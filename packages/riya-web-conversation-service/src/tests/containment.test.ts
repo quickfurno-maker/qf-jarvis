@@ -662,7 +662,7 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
       ).toBe(hash);
     }
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition.
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 17)).toBe(false);
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 18)).toBe(false);
   });
 
   it('(54, 55) the two channel vocabularies are exactly as JRW-0B left them', () => {

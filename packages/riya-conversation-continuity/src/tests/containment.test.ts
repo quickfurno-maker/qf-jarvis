@@ -542,7 +542,7 @@ describe('(55-57) the migration set is untouched', () => {
       ).toBe(hash);
     }
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition.
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 17)).toBe(false);
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 18)).toBe(false);
   });
 
   it('migration 0008 is not extended with continuity columns', () => {

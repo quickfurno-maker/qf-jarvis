@@ -165,6 +165,7 @@ describe('migration 0006 applies with 0001–0005 unchanged', () => {
       '0015_correlation_timeline_projection.sql',
       '0016_client_lifetime_projection.sql',
       '0017_quickfurno_durable_turn_spool.sql',
+      '0018_scale_phase09_data_lifecycle.sql',
     ]);
     for (const row of rows) {
       const known = IMMUTABLE_CHECKSUMS[row.filename];
