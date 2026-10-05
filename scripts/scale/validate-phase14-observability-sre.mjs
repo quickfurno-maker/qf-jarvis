@@ -45,6 +45,15 @@ if (
   !gateway.includes('qf.security.signature.failures')
 )
   fail('gateway security counters missing');
+const rootTsconfig = read('tsconfig.json');
+const apiBuildTsconfig = read('apps/api/tsconfig.build.json');
+const gatewayBuildTsconfig = read('apps/quickfurno-gateway/tsconfig.build.json');
+if (
+  !rootTsconfig.includes('./packages/observability/tsconfig.build.json') ||
+  !apiBuildTsconfig.includes('../../packages/observability/tsconfig.build.json') ||
+  !gatewayBuildTsconfig.includes('../../packages/observability/tsconfig.build.json')
+)
+  fail('observability clean-build project references missing');
 const runtime = read('packages/observability/src/index.ts');
 if (
   !runtime.includes('qf.telemetry.heartbeat.unixtime') ||

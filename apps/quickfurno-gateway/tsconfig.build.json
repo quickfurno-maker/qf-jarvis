@@ -13,6 +13,9 @@
       "path": "../../packages/cross-system-scale-contract/tsconfig.build.json"
     },
     {
+      "path": "../../packages/observability/tsconfig.build.json"
+    },
+    {
       "path": "../../packages/event-backbone"
     }
   ]
