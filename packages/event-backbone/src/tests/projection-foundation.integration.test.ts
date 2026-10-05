@@ -163,11 +163,12 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
       '0016_client_lifetime_projection.sql',
       '0017_quickfurno_durable_turn_spool.sql',
       '0018_scale_phase09_data_lifecycle.sql',
+      '0019_scale_phase12_horizontal_worker_ordering.sql',
     ]);
     // RWC-P8 (ADR-0104) added 0012; QFJ-P09 D5 (ADR-0142) added 0013; the JF-4B/C/D owner correction
     // (ADR-0150 §34) adds 0014, the party CHECK widened to hold PROSPECT. One authorized addition each.
     expect(rows.map((row) => row.version)).toStrictEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
     ]);
     for (const row of rows) {
       const hex = row.checksum.toString('hex');
@@ -177,7 +178,7 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
     }
   });
 
-  it('re-migrating is idempotent — still exactly eighteen applied migrations', async () => {
+  it('re-migrating is idempotent — still exactly nineteen applied migrations', async () => {
     await runMigrations(admin, defaultMigrationsDirectory());
     const count = await withClient(admin, async (client) => {
       const r = await client.query<{ n: string }>(
@@ -188,8 +189,8 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
     // Each slice added exactly one: 0012 (RWC-P8, ADR-0104), 0013 (QFJ-P09 D5, ADR-0142),
     // 0014 (JF-4B/C/D owner correction, ADR-0150 §34), 0015 (ADR-0167 correlation timeline),
     // 0016 (Client-OS v2 bounded client lifetime projection), 0017 (Phase 05 QuickFurno durable turn spool),
-    // and 0018 (SCALE-P09 reviewed data lifecycle). Repository and LOCAL/CI only.
-    expect(count).toBe(18);
+    // 0018 (SCALE-P09 reviewed data lifecycle), and 0019 (SCALE-P12 shared ordering fence). Repository and LOCAL/CI only.
+    expect(count).toBe(19);
   });
 
   it('records the EXACT reviewed 0004 and 0005 checksums in the migration history', async () => {

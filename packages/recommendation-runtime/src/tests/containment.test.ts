@@ -249,6 +249,7 @@ describe('side-effect containment', () => {
       '0016_client_lifetime_projection.sql',
       '0017_quickfurno_durable_turn_spool.sql',
       '0018_scale_phase09_data_lifecycle.sql',
+      '0019_scale_phase12_horizontal_worker_ordering.sql',
     ]);
   });
 });

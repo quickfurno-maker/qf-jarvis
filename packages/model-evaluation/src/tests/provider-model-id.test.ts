@@ -419,6 +419,8 @@ describe('public API and repository invariants', () => {
     // only bounded maintenance pruning of terminal opaque turn-spool rows is introduced.
     '0018_scale_phase09_data_lifecycle.sql':
       '1170c1b6b126871108b6a5a7326dcf2619fe3eadd2400c85a8580966a555dc74',
+    '0019_scale_phase12_horizontal_worker_ordering.sql':
+      '89354da09dc79313556b4b673f97444bac86b248184b045bb9b36cec9d60a6ad',
   };
 
   it('(11, 12) migrations 0001-0012 are byte-identical and 0013 is absent', () => {
@@ -437,7 +439,7 @@ describe('public API and repository invariants', () => {
       ).toBe(hash);
     }
     // SCALE-P09 authorizes exactly 0018; exact-set equality and byte hashes remain the lock.
-    expect(sql.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
+    expect(sql.at(-1)).toBe('0019_scale_phase12_horizontal_worker_ordering.sql');
   });
 
   it('(13) the event-backbone root API lock remains 39', () => {

@@ -405,6 +405,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build workspace packages
+        run: pnpm run build
+
       - name: Validate Phase 12 contract
         run: pnpm run check:scale:phase12
 

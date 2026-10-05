@@ -636,10 +636,11 @@ describe('the migration set is exactly 0001-0011', () => {
       '0016_client_lifetime_projection.sql',
       '0017_quickfurno_durable_turn_spool.sql',
       '0018_scale_phase09_data_lifecycle.sql',
+      '0019_scale_phase12_horizontal_worker_ordering.sql',
     ]);
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(files.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
+    expect(files.at(-1)).toBe('0019_scale_phase12_horizontal_worker_ordering.sql');
   });
 });
