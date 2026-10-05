@@ -457,6 +457,8 @@ describe('(10) no application consumes the web channel', () => {
       'api/control-plane/v2/snapshot/route.ts',
       // Agent Flow Phase 2: authenticated GET-only, content-free trace observation.
       'api/operator/v1/agent-flow-trace/route.ts',
+      // Phase 14: authenticated operator-only AGNI observation/approval bridge.
+      'api/operator/v1/agni/route.ts',
       'api/operator/v1/bootstrap/route.ts',
       'api/operator/v1/commands/route.ts',
       'api/operator/v1/intelligence/route.ts',

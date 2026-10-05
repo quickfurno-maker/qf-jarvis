@@ -480,6 +480,8 @@ describe('live operator capability remains contained behind reviewed seams', () 
       const networkAllowed = new Set([
         'src/server/control-plane/sources/quickfurno-operator-source.ts',
         'src/server/operator/quickfurno-command.ts',
+        // Phase 14: one reviewed outbound-only AGNI client. It carries no Core/business authority.
+        'src/server/agni/client.ts',
         'src/components/operator/OperatorCommandProvider.tsx',
         'src/components/voice/VoiceSessionProvider.tsx',
       ]).has(label);

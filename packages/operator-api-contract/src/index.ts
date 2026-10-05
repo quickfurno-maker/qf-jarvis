@@ -27,6 +27,7 @@ export const operatorModuleSchema = z
       'anisha',
       'agent-flows',
       'operations',
+      'agni',
       'approvals',
       'conversations',
       'execution',

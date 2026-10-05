@@ -112,6 +112,16 @@ if (
 )
   fail('Jarvis durable W3C trace continuity missing');
 
+const operatorContract = read('packages/operator-api-contract/src/index.ts');
+const jarvisOsContainment = read('apps/jarvis-os/src/lib/jarvis-os.test.ts');
+const snapshotContainment = read('apps/jarvis-os/src/server/control-plane/snapshot-api.test.ts');
+if (
+  !operatorContract.includes("'agni'") ||
+  !existsSync('apps/jarvis-os/src/app/api/operator/v1/agni/route.ts') ||
+  !jarvisOsContainment.includes("'src/server/agni/client.ts'") ||
+  !snapshotContainment.includes("'src/server/agni/client.ts'")
+)
+  fail('AGNI operator module/route/network seam containment missing');
 const approvals = read('apps/jarvis-os/src/app/(protected)/approvals/page.tsx');
 const controls = read('apps/jarvis-os/src/components/operator/OperatorControls.tsx');
 if (
