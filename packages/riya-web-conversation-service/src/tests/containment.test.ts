@@ -249,11 +249,11 @@ describe('RWC-P2D containment', () => {
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(17);
+    expect(sql).toHaveLength(18);
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((n) => n.startsWith('0018'))).toBe(false);
+    expect(sql.at(-1)).toBe('0018_scale_phase09_data_lifecycle.sql');
     // The RWC-P2B hash, unchanged: P2D needs no schema at all.
     expect(
       createHash('sha256')
@@ -644,6 +644,9 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
         'e389afa44ef080e3808845ee8900463f94e130448e4beed3d5dbcd243440539e',
       '0017_quickfurno_durable_turn_spool.sql':
         'fb14e55292eaac4682c2b6f431e718d33aefbe1f7dfa6c7f78be9bf36b4bcb09',
+
+      '0018_scale_phase09_data_lifecycle.sql':
+        '1170c1b6b126871108b6a5a7326dcf2619fe3eadd2400c85a8580966a555dc74',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
