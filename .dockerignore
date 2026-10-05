@@ -9,10 +9,10 @@ coverage
 .env.*
 **/.env
 **/.env.*
-**/secrets/**
-**/*.key
-**/*.p12
-**/*.pfx
+*.key
+*.p12
+*.pfx
+*.credentials
 .DS_Store
 .vscode
 .idea

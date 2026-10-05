@@ -43,7 +43,7 @@
     "check:scale:phase12": "node scripts/scale/validate-phase12-horizontal-workers.mjs",
     "test:scale:phase12": "pnpm run check:scale:phase12 && vitest run apps/api/src/tests/quickfurno-whatsapp-parallel-turn-scheduler.test.ts apps/api/src/tests/quickfurno-whatsapp-production-worker.test.ts && vitest run --config vitest.integration.config.mjs apps/quickfurno-gateway/src/tests/postgres-durable-turn-spool.integration.test.ts",
     "check:scale:phase13": "node scripts/scale/validate-phase13-config-contract.mjs",
-    "test:scale:phase13": "pnpm run check:scale:phase13 && vitest run apps/quickfurno-gateway/src/tests/config.test.ts apps/api/src/tests/quickfurno-whatsapp-production-worker.test.ts"
+    "test:scale:phase13": "pnpm run check:scale:phase13 && vitest run apps/quickfurno-gateway/src/tests/config.test.ts apps/api/src/tests/quickfurno-whatsapp-production-worker.test.ts apps/jarvis-os/src/server/auth/proxy-csp.test.ts apps/jarvis-os/src/server/auth/auth-http.test.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

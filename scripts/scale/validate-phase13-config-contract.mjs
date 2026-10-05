@@ -80,7 +80,10 @@ check(
 check('Docker contexts and Dockerfiles do not bake dotenv or private credential files', () => {
   assert.match(dockerignore, /^\.env$/m);
   assert.match(dockerignore, /^\.env\.\*$/m);
-  assert.match(dockerignore, /^\*\*\/secrets\/\*\*$/m);
+  assert.match(dockerignore, /^\*\.key$/m);
+  assert.match(dockerignore, /^\*\.p12$/m);
+  assert.match(dockerignore, /^\*\.pfx$/m);
+  assert.doesNotMatch(dockerignore, /^\*\*\/secrets\/\*\*$/m);
   for (const dockerfile of [gatewayDockerfile, workerDockerfile, osDockerfile]) {
     assert.doesNotMatch(dockerfile, /COPY\s+[^\n]*\.env/i);
     assert.doesNotMatch(dockerfile, /ARG\s+[^\n]*(SECRET|PRIVATE_KEY|ACCESS_TOKEN|API_KEY)/i);
