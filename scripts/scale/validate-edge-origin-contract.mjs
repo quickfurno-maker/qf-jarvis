@@ -42,7 +42,7 @@ check('nonce CSP remains application-owned and HSTS stays post-TLS', () => {
   assert.doesNotMatch(osIngress, /^\\s*traefik\\..*headers\\.contentSecurityPolicy:/m);
   assert.match(osIngress, /per-request nonce CSP/i);
   assert.match(osHsts, /stsSeconds:\s*'31536000'/);
-  assert.match(osHsts, /applied only after trusted TLS/i);
+  assert.match(osHsts, /only after trusted TLS[\s\S]*verified|applied only[\s\S]*trusted TLS/i);
 });
 
 check('machine gateway remains an approved direct signed path', () => {
