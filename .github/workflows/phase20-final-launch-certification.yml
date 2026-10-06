@@ -10,6 +10,7 @@ on:
       - 'scripts/scale/certify-phase20-expand-contract-postgres.mjs'
       - 'package.json'
       - '.github/workflows/phase20-final-launch-certification.yml'
+      - '.github/workflows/phase20-final-launch.yml'
   push:
     branches: [main]
     paths:
@@ -19,6 +20,7 @@ on:
       - 'scripts/scale/certify-phase20-expand-contract-postgres.mjs'
       - 'package.json'
       - '.github/workflows/phase20-final-launch-certification.yml'
+      - '.github/workflows/phase20-final-launch.yml'
 
 permissions:
   contents: read
