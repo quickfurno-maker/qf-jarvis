@@ -27,7 +27,7 @@
     "db:preflight": "pnpm --filter @qf-jarvis/event-backbone db:preflight",
     "inspect:failures": "pnpm --filter @qf-jarvis/event-backbone inspect:failures --",
     "check:dist-containment": "node scripts/check-dist-containment.mjs",
-    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:dist-containment && pnpm run check:scale:containers && pnpm run check:scale:coordination && pnpm run check:scale:durable-jobs && pnpm run check:scale:db-lifecycle && pnpm run check:scale:edge-origin && pnpm run check:scale:phase11 && pnpm run check:scale:phase12 && pnpm run check:scale:phase13 && pnpm run check:scale:phase14 && pnpm run check:scale:phase15 && pnpm run check:scale:phase16",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:dist-containment && pnpm run check:scale:containers && pnpm run check:scale:coordination && pnpm run check:scale:durable-jobs && pnpm run check:scale:db-lifecycle && pnpm run check:scale:edge-origin && pnpm run check:scale:phase11 && pnpm run check:scale:phase12 && pnpm run check:scale:phase13 && pnpm run check:scale:phase14 && pnpm run check:scale:phase15 && pnpm run check:scale:phase16 && pnpm run check:scale:phase17",
     "riya:as3:pilot": "node packages/riya-ai-synthetic-provider-adapters/dist/cli/bin.js",
     "check:scale:containers": "node scripts/scale/validate-container-contract.mjs",
     "test:scale:artifact": "node scripts/scale/validate-artifact-contract.mjs",
@@ -49,7 +49,9 @@
     "check:scale:phase15": "node scripts/scale/validate-phase15-cicd.mjs",
     "test:scale:phase15": "pnpm run check:scale:phase15",
     "check:scale:phase16": "node scripts/scale/validate-phase16-topology.mjs",
-    "test:scale:phase16": "pnpm run check:scale:phase16 && pnpm run check:scale:phase15"
+    "test:scale:phase16": "pnpm run check:scale:phase16 && pnpm run check:scale:phase15",
+    "check:scale:phase17": "node scripts/scale/validate-phase17-dr.mjs",
+    "test:scale:phase17": "pnpm run check:scale:phase17 && pnpm run check:scale:phase16 && pnpm run check:scale:phase15"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
