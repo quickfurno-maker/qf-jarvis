@@ -37,13 +37,7 @@
         "required": ["role", "ref", "sourceSha"],
         "properties": {
           "role": {
-            "enum": [
-              "quickfurno-runtime",
-              "jarvis-os",
-              "jarvis-gateway",
-              "jarvis-worker",
-              "agni"
-            ]
+            "enum": ["quickfurno-runtime", "jarvis-os", "jarvis-gateway", "jarvis-worker", "agni"]
           },
           "ref": {
             "type": "string",
@@ -62,12 +56,7 @@
       "required": ["productionMigration", "rollbackSafe", "migrationId"],
       "properties": {
         "productionMigration": {
-          "enum": [
-            "NONE",
-            "SOURCE_ONLY",
-            "EXPAND_COMPATIBLE",
-            "CONTRACT_REQUIRES_MAINTENANCE"
-          ]
+          "enum": ["NONE", "SOURCE_ONLY", "EXPAND_COMPATIBLE", "CONTRACT_REQUIRES_MAINTENANCE"]
         },
         "rollbackSafe": { "type": "boolean" },
         "migrationId": {

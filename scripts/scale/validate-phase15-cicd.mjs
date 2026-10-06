@@ -4,22 +4,36 @@ import { readFile, readdir } from 'node:fs/promises';
 const root = new URL('../../', import.meta.url);
 const read = (path) => readFile(new URL(path, root), 'utf8');
 
-const [supply, promote, rollback, controller, slot, wrapper, schema, docs, workerDisable, workerActivate] =
-  await Promise.all([
-    read('.github/workflows/scale-container-supply-chain.yml'),
-    read('.github/workflows/phase15-promote.yml'),
-    read('.github/workflows/phase15-rollback.yml'),
-    read('deploy/phase15/release.sh'),
-    read('deploy/phase15/compose.jarvis-os-slot.yml'),
-    read('deploy/phase15/qfj-phase15-release.wrapper'),
-    read('contracts/qf-release-phase15-v1.schema.json'),
-    read('docs/operations/phase15-immutable-cicd-bluegreen.md'),
-    read('deploy/quickfurno-worker/disable.sh'),
-    read('deploy/quickfurno-worker/activate.sh'),
-  ]);
+const [
+  supply,
+  promote,
+  rollback,
+  controller,
+  slot,
+  wrapper,
+  schema,
+  docs,
+  workerDisable,
+  workerActivate,
+] = await Promise.all([
+  read('.github/workflows/scale-container-supply-chain.yml'),
+  read('.github/workflows/phase15-promote.yml'),
+  read('.github/workflows/phase15-rollback.yml'),
+  read('deploy/phase15/release.sh'),
+  read('deploy/phase15/compose.jarvis-os-slot.yml'),
+  read('deploy/phase15/qfj-phase15-release.wrapper'),
+  read('contracts/qf-release-phase15-v1.schema.json'),
+  read('docs/operations/phase15-immutable-cicd-bluegreen.md'),
+  read('deploy/quickfurno-worker/disable.sh'),
+  read('deploy/quickfurno-worker/activate.sh'),
+]);
 
-const workflowNames = (await readdir(new URL('.github/workflows/', root))).filter((x) => /\.ya?ml$/u.test(x));
-const workflowTexts = await Promise.all(workflowNames.map(async (x) => [x, await read('.github/workflows/' + x)]));
+const workflowNames = (await readdir(new URL('.github/workflows/', root))).filter((x) =>
+  /\.ya?ml$/u.test(x),
+);
+const workflowTexts = await Promise.all(
+  workflowNames.map(async (x) => [x, await read('.github/workflows/' + x)]),
+);
 const mutableActions = [];
 for (const [name, text] of workflowTexts) {
   for (const line of text.split(/\r?\n/u)) {
@@ -36,7 +50,9 @@ const add = (name, ok) => checks.push([name, Boolean(ok)]);
 add('all GitHub Actions are commit-SHA pinned', mutableActions.length === 0);
 add(
   'manual publication is restricted to main',
-  supply.includes("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish == true"),
+  supply.includes(
+    "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish == true",
+  ),
 );
 add(
   'all three exact digests share one signed Phase 15 release manifest',
@@ -55,7 +71,12 @@ add(
 add(
   'promotion verifies all three refs and one manifest binds the digest set',
   promote.includes('for REF in "$OS_REF" "$GATEWAY_REF" "$WORKER_REF"') &&
-    promote.includes('release_manifest_digest_set_mismatch') &&
+    promote.includes('--arg os "$OS_REF"') &&
+    promote.includes('--arg gateway "$GATEWAY_REF"') &&
+    promote.includes('--arg worker "$WORKER_REF"') &&
+    promote.includes('.role == "jarvis-os"') &&
+    promote.includes('.role == "jarvis-gateway"') &&
+    promote.includes('.role == "jarvis-worker"') &&
     promote.includes('--system JARVIS --promotable'),
 );
 add(
@@ -72,7 +93,9 @@ add(
 );
 add(
   'durable consumers are rolling, not dual-active blue/green',
-  controller.includes('Stateful/durable consumers deliberately do NOT run blue/green concurrently') &&
+  controller.includes(
+    'Stateful/durable consumers deliberately do NOT run blue/green concurrently',
+  ) &&
     controller.includes('roll_gateway "$STAGED_MANIFEST"') &&
     controller.includes('roll_worker_disabled "$STAGED_MANIFEST"'),
 );
@@ -119,7 +142,9 @@ add(
 );
 add(
   'AGNI/OpenAI have no deployment-host authority',
-  docs.includes('AGNI and OpenAI receive no deployment-host credential or arbitrary shell authority'),
+  docs.includes(
+    'AGNI and OpenAI receive no deployment-host credential or arbitrary shell authority',
+  ),
 );
 
 if (mutableActions.length) {

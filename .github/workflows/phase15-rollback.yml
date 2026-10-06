@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: "Type ROLLBACK_TO_PREVIOUS_SIGNED_JARVIS_RELEASE"
+        description: 'Type ROLLBACK_TO_PREVIOUS_SIGNED_JARVIS_RELEASE'
         required: true
         type: string
 

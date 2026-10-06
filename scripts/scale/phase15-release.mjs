@@ -118,7 +118,8 @@ function validateManifest(input, expectedSystem, promotable = false) {
     }
     if (seenRefs.has(image.ref)) die('manifest_image_ref_duplicate');
     seenRefs.add(image.ref);
-    if (image.sourceSha !== manifest.sourceSha) die('manifest_image_source_sha_mismatch:' + image.role);
+    if (image.sourceSha !== manifest.sourceSha)
+      die('manifest_image_source_sha_mismatch:' + image.role);
   }
   for (const role of expectedRoles) {
     if (!seenRoles.has(role)) die('manifest_image_role_missing:' + role);
@@ -315,7 +316,11 @@ async function main() {
     const path = option(args, '--manifest');
     const statePath = option(args, '--state', false);
     const manifestText = await readFile(path, 'utf8');
-    const manifest = validateManifest(JSON.parse(manifestText), option(args, '--system', false), true);
+    const manifest = validateManifest(
+      JSON.parse(manifestText),
+      option(args, '--system', false),
+      true,
+    );
     let prior = null;
     if (statePath) {
       try {
@@ -346,6 +351,8 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('PHASE15_RELEASE_REFUSED ' + (error instanceof Error ? error.message : String(error)));
+  console.error(
+    'PHASE15_RELEASE_REFUSED ' + (error instanceof Error ? error.message : String(error)),
+  );
   process.exit(1);
 });

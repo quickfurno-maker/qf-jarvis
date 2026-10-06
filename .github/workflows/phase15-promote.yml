@@ -4,30 +4,30 @@ on:
   workflow_dispatch:
     inputs:
       source_sha:
-        description: "Exact merged Jarvis source SHA"
+        description: 'Exact merged Jarvis source SHA'
         required: true
         type: string
       os_image_ref:
-        description: "Exact Jarvis OS OCI digest reference"
+        description: 'Exact Jarvis OS OCI digest reference'
         required: true
         type: string
       gateway_image_ref:
-        description: "Exact gateway OCI digest reference"
+        description: 'Exact gateway OCI digest reference'
         required: true
         type: string
       worker_image_ref:
-        description: "Exact worker OCI digest reference"
+        description: 'Exact worker OCI digest reference'
         required: true
         type: string
       apply:
-        description: "Request production apply after verification and approval"
+        description: 'Request production apply after verification and approval'
         required: true
         default: false
         type: boolean
       confirmation:
-        description: "For apply, type PROMOTE_EXACT_JARVIS_DIGESTS"
+        description: 'For apply, type PROMOTE_EXACT_JARVIS_DIGESTS'
         required: false
-        default: ""
+        default: ''
         type: string
 
 permissions:
@@ -110,16 +110,10 @@ jobs:
           set -euo pipefail
           jq -r '.payload' phase15-attestation.json | head -n 1 | base64 -d | jq -e '.predicate' > phase15-release.json
           node scripts/scale/phase15-release.mjs validate --manifest phase15-release.json --system JARVIS --promotable
-          node - "$SOURCE_SHA" "$OS_REF" "$GATEWAY_REF" "$WORKER_REF" <<'NODE'
-const fs=require('node:fs');
-const [sha,os,gateway,worker]=process.argv.slice(2);
-const m=JSON.parse(fs.readFileSync('phase15-release.json','utf8'));
-if(m.sourceSha!==sha) throw new Error('source_sha_mismatch');
-const refs=Object.fromEntries(m.images.map((x)=>[x.role,x.ref]));
-if(refs['jarvis-os']!==os||refs['jarvis-gateway']!==gateway||refs['jarvis-worker']!==worker){
-  throw new Error('release_manifest_digest_set_mismatch');
-}
-NODE
+          jq -e             --arg sha "$SOURCE_SHA"             --arg os "$OS_REF"             --arg gateway "$GATEWAY_REF"             --arg worker "$WORKER_REF"             '.sourceSha == $sha and
+             any(.images[]; .role == "jarvis-os" and .ref == $os) and
+             any(.images[]; .role == "jarvis-gateway" and .ref == $gateway) and
+             any(.images[]; .role == "jarvis-worker" and .ref == $worker)'             phase15-release.json >/dev/null
           sha256sum phase15-release.json > phase15-release.sha256
 
       - name: Upload verified promotion packet
