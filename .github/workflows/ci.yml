@@ -544,7 +544,6 @@ jobs:
       - name: Certify Jarvis disaster-recovery contract
         run: pnpm run test:scale:phase17
 
-
   phase18-load-soak-chaos-certification:
     name: Phase 18 load soak chaos certification
     runs-on: ubuntu-latest
@@ -592,6 +591,9 @@ jobs:
       - name: Re-certify DB pool pressure
         run: pnpm run test:scale:db-connection-budget
 
+      - name: Build workspace packages for focused failure tests
+        run: pnpm build
+
       - name: Exercise provider, queue and worker failures
         run: >-
           pnpm exec vitest run
@@ -601,7 +603,7 @@ jobs:
 
       - name: Run sustained bounded soak
         env:
-          PHASE18_SOAK_SECONDS: "60"
-          PHASE18_CONCURRENCY: "32"
-          PHASE18_POOL_MAX: "8"
+          PHASE18_SOAK_SECONDS: '60'
+          PHASE18_CONCURRENCY: '32'
+          PHASE18_POOL_MAX: '8'
         run: pnpm run test:scale:phase18:soak
