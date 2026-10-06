@@ -1,0 +1,463 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: qf-jarvis
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jarvis-os
+  labels:
+    app.kubernetes.io/name: qf-jarvis
+    app.kubernetes.io/component: jarvis-os
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: qf-jarvis
+      app.kubernetes.io/component: jarvis-os
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: qf-jarvis
+        app.kubernetes.io/component: jarvis-os
+    spec:
+      serviceAccountName: qf-jarvis
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: qf-jarvis
+              app.kubernetes.io/component: jarvis-os
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: qf-jarvis
+                    app.kubernetes.io/component: jarvis-os
+      initContainers:
+        - name: prepare-owner-only-config
+          image: ghcr.io/quickfurno-maker/qf-jarvis-os@sha256:4f717aeb8bb1d78c903ebad72fe3bcd256a4c318d1a4afd5b809687718c31568
+          command: ["/bin/sh", "-ec"]
+          args:
+            - >-
+              cp /source/qf-jarvis-os-auth.json /prepared/qf-jarvis-os-auth.json &&
+              chmod 0600 /prepared/qf-jarvis-os-auth.json &&
+              chown 10001:10001 /prepared/qf-jarvis-os-auth.json
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN"]
+          volumeMounts:
+            - {name: source-config, mountPath: /source, readOnly: true}
+            - {name: prepared-config, mountPath: /prepared}
+      containers:
+        - name: jarvis-os
+          image: ghcr.io/quickfurno-maker/qf-jarvis-os@sha256:4f717aeb8bb1d78c903ebad72fe3bcd256a4c318d1a4afd5b809687718c31568
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: NODE_ENV, value: production}
+            - {name: QFJ_RUNTIME_ENV, value: production}
+            - {name: QFJ_CONFIG_SCHEMA_VERSION, value: "1"}
+            - {name: QFJ_SERVICE_ID, value: qf-jarvis.jarvis-os}
+            - {name: QFJ_JOS_AUTH_CONFIG_FILE, value: /run/secrets/qf-jarvis-os-auth.json}
+            - {name: QFJ_JOS_RELEASE_SHA, value: db4575ace7f1b00251d35fea59c9cf3739e9a85d}
+          ports:
+            - {name: http, containerPort: 3000}
+          startupProbe:
+            httpGet: {path: /login, port: http}
+            periodSeconds: 2
+            failureThreshold: 45
+          readinessProbe:
+            httpGet: {path: /login, port: http}
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: prepared-config, mountPath: /run/secrets, readOnly: true}
+      volumes:
+        - {name: tmp, emptyDir: {medium: Memory, sizeLimit: 64Mi}}
+        - name: source-config
+          secret:
+            secretName: jarvis-os-config
+            defaultMode: 256
+            items:
+              - {key: auth.json, path: qf-jarvis-os-auth.json}
+        - {name: prepared-config, emptyDir: {medium: Memory, sizeLimit: 1Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jarvis-os
+spec:
+  selector:
+    app.kubernetes.io/name: qf-jarvis
+    app.kubernetes.io/component: jarvis-os
+  ports:
+    - {name: http, port: 80, targetPort: http}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: jarvis-os
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: qf-jarvis
+      app.kubernetes.io/component: jarvis-os
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: jarvis-os
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: jarvis-os}
+  minReplicas: 2
+  maxReplicas: 4
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - {type: Pods, value: 1, periodSeconds: 60}
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - {type: Percent, value: 25, periodSeconds: 60}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 60}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jarvis-gateway
+  labels:
+    app.kubernetes.io/name: qf-jarvis
+    app.kubernetes.io/component: gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: qf-jarvis
+      app.kubernetes.io/component: gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: qf-jarvis
+        app.kubernetes.io/component: gateway
+    spec:
+      serviceAccountName: qf-jarvis
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 15
+      imagePullSecrets:
+        - name: ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10002
+        runAsGroup: 10002
+        seccompProfile: {type: RuntimeDefault}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: qf-jarvis
+              app.kubernetes.io/component: gateway
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: qf-jarvis
+                    app.kubernetes.io/component: gateway
+      containers:
+        - name: gateway
+          image: ghcr.io/quickfurno-maker/qf-jarvis-gateway@sha256:6a82cefebab776609f54f2476b7c6dc3a6e0c54ec88b176c131735b9aea43f5d
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: NODE_ENV, value: production}
+            - {name: QFJ_RUNTIME_ENV, value: production}
+            - {name: QFJ_CONFIG_SCHEMA_VERSION, value: "1"}
+            - {name: QFJ_SERVICE_ID, value: qf-jarvis.quickfurno-gateway}
+            - {name: QFJ_GATEWAY_CONFIG_FILE, value: /run/secrets/gateway.json}
+            - {name: QFJ_GATEWAY_DATABASE_CONFIG_FILE, value: /run/secrets/gateway-database.json}
+          ports:
+            - {name: http, containerPort: 3100}
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: gateway-config, mountPath: /run/secrets, readOnly: true}
+      volumes:
+        - {name: tmp, emptyDir: {medium: Memory, sizeLimit: 16Mi}}
+        - name: gateway-config
+          secret:
+            secretName: jarvis-gateway-config
+            defaultMode: 288
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jarvis-gateway
+spec:
+  selector:
+    app.kubernetes.io/name: qf-jarvis
+    app.kubernetes.io/component: gateway
+  ports:
+    - {name: http, port: 3100, targetPort: http}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: jarvis-gateway
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: qf-jarvis
+      app.kubernetes.io/component: gateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jarvis-worker
+  labels:
+    app.kubernetes.io/name: qf-jarvis
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: qf-jarvis
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: qf-jarvis
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: qf-jarvis
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      imagePullSecrets:
+        - name: ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10003
+        runAsGroup: 10002
+        seccompProfile: {type: RuntimeDefault}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: qf-jarvis
+              app.kubernetes.io/component: worker
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: qf-jarvis
+                    app.kubernetes.io/component: worker
+      containers:
+        - name: worker
+          image: ghcr.io/quickfurno-maker/qf-jarvis-worker@sha256:6f9e2c11575620a3fbd191402f4e417e469d2b707406faa042abc609d1e17e63
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: NODE_ENV, value: production}
+            - {name: QFJ_RUNTIME_ENV, value: production}
+            - {name: QFJ_CONFIG_SCHEMA_VERSION, value: "1"}
+            - {name: QFJ_SERVICE_ID, value: qf-jarvis.whatsapp-worker}
+          args: ["node", "apps/api/dist/bin/run-quickfurno-whatsapp-production-worker.js", "--config", "/run/secrets/worker.json"]
+          startupProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "test -s /run/secrets/worker.json && kill -0 1"]
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "test -s /run/secrets/worker.json && kill -0 1"]
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "kill -0 1"]
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: 1500m, memory: 2Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: worker-config, mountPath: /run/secrets, readOnly: true}
+      volumes:
+        - {name: tmp, emptyDir: {medium: Memory, sizeLimit: 32Mi}}
+        - name: worker-config
+          secret:
+            secretName: jarvis-worker-config
+            defaultMode: 288
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: jarvis-worker
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: qf-jarvis
+      app.kubernetes.io/component: worker
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jarvis-os
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [jarvis.quickfurno.in]
+      secretName: jarvis-tls
+  rules:
+    - host: jarvis.quickfurno.in
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jarvis-os
+                port: {number: 80}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-provider-db-egress
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock: {cidr: 0.0.0.0/0}
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 5432}
+        - {protocol: TCP, port: 6379}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-controller-to-jarvis-os
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: qf-jarvis
+      app.kubernetes.io/component: jarvis-os
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - {protocol: TCP, port: 3000}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-namespace-to-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: qf-jarvis
+      app.kubernetes.io/component: gateway
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - {protocol: TCP, port: 3100}

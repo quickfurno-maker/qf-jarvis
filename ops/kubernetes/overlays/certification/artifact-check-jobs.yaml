@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jarvis-gateway-artifact-check
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: qf-jarvis, app.kubernetes.io/component: gateway-artifact-check}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: qf-jarvis
+      automountServiceAccountToken: false
+      imagePullSecrets: [{name: ghcr-pull}]
+      securityContext: {runAsNonRoot: true, runAsUser: 10002, runAsGroup: 10002, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: check
+          image: ghcr.io/quickfurno-maker/qf-jarvis-gateway@sha256:6a82cefebab776609f54f2476b7c6dc3a6e0c54ec88b176c131735b9aea43f5d
+          command: ["/bin/sh", "-ec"]
+          args: ["test -f /app/apps/quickfurno-gateway/dist/index.js && node --version"]
+          resources: {requests: {cpu: 25m, memory: 32Mi}, limits: {cpu: 100m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jarvis-worker-artifact-check
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: qf-jarvis, app.kubernetes.io/component: worker-artifact-check}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: qf-jarvis
+      automountServiceAccountToken: false
+      imagePullSecrets: [{name: ghcr-pull}]
+      securityContext: {runAsNonRoot: true, runAsUser: 10003, runAsGroup: 10002, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: check
+          image: ghcr.io/quickfurno-maker/qf-jarvis-worker@sha256:6f9e2c11575620a3fbd191402f4e417e469d2b707406faa042abc609d1e17e63
+          command: ["/bin/sh", "-ec"]
+          args: ["test -f /app/apps/api/dist/bin/run-quickfurno-whatsapp-production-worker.js && node --version"]
+          resources: {requests: {cpu: 25m, memory: 32Mi}, limits: {cpu: 100m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
