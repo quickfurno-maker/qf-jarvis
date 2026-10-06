@@ -3,7 +3,7 @@ name: Phase 20 Final Scale Launch Certification
 on:
   pull_request:
     paths:
-      - 'contracts/qfj-phase20-final-launch-v1.json'
+      - 'contracts/qfj-phase20-launch-cert-v1.json'
       - 'docs/scale/phase-20-final-launch-certification.md'
       - 'scripts/scale/validate-phase20-final-launch.mjs'
       - 'scripts/scale/certify-phase20-expand-contract-postgres.mjs'
@@ -12,7 +12,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'contracts/qfj-phase20-final-launch-v1.json'
+      - 'contracts/qfj-phase20-launch-cert-v1.json'
       - 'docs/scale/phase-20-final-launch-certification.md'
       - 'scripts/scale/validate-phase20-final-launch.mjs'
       - 'scripts/scale/certify-phase20-expand-contract-postgres.mjs'
