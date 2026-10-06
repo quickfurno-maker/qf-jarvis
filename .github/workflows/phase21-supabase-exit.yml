@@ -32,18 +32,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      DATABASE_URL: postgresql://qf_jarvis_phase21:qf_jarvis_phase21_ci_only@127.0.0.1:5432/qf_jarvis_phase21
+      DATABASE_URL: postgresql://qf_jarvis_phase21:qf_jarvis_phase21_ci_only@127.0.0.1:5432/qf_jarvis_phase21_test
     services:
       postgres:
         image: pgvector/pgvector:0.8.6-pg17-trixie@sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6
         env:
-          POSTGRES_DB: qf_jarvis_phase21
+          POSTGRES_DB: qf_jarvis_phase21_test
           POSTGRES_USER: qf_jarvis_phase21
           POSTGRES_PASSWORD: qf_jarvis_phase21_ci_only
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U qf_jarvis_phase21 -d qf_jarvis_phase21"
+          --health-cmd "pg_isready -U qf_jarvis_phase21 -d qf_jarvis_phase21_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
