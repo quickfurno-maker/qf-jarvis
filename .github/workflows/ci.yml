@@ -543,3 +543,67 @@ jobs:
 
       - name: Certify Jarvis disaster-recovery contract
         run: pnpm run test:scale:phase17
+
+  phase18-load-soak-chaos-certification:
+    name: Phase 18 load soak chaos certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    needs:
+      - phase17-backup-pitr-dr-certification
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg17-trixie@sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6
+        env:
+          POSTGRES_DB: qf_jarvis_phase18
+          POSTGRES_USER: qf_jarvis_phase18
+          POSTGRES_PASSWORD: qf_jarvis_phase18_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qf_jarvis_phase18 -d qf_jarvis_phase18"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://qf_jarvis_phase18:qf_jarvis_phase18_ci_only@127.0.0.1:5432/qf_jarvis_phase18
+    steps:
+      - name: Checkout exact reviewed head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate canonical Phase 18 contract
+        run: pnpm run check:scale:phase18
+
+      - name: Re-certify DB pool pressure
+        run: pnpm run test:scale:db-connection-budget
+
+      - name: Build workspace packages for focused failure tests
+        run: pnpm build
+
+      - name: Exercise provider, queue and worker failures
+        run: >-
+          pnpm exec vitest run
+          packages/model-gateway/src/tests/gateway.test.ts
+          apps/quickfurno-gateway/src/tests/durable-turn-spool.test.ts
+          apps/api/src/tests/quickfurno-whatsapp-production-worker.test.ts
+
+      - name: Run sustained bounded soak
+        env:
+          PHASE18_SOAK_SECONDS: '60'
+          PHASE18_CONCURRENCY: '32'
+          PHASE18_POOL_MAX: '8'
+        run: pnpm run test:scale:phase18:soak
