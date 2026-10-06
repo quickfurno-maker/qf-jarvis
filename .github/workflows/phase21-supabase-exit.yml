@@ -1,0 +1,80 @@
+name: Phase 21 Supabase Exit Certification
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'contracts/qfj-phase21-supabase-exit-v1.json'
+      - 'docs/scale/phase-21-supabase-exit-data-portability.md'
+      - 'docs/scale/phase21-live-supabase-snapshot.json'
+      - 'scripts/scale/validate-phase21-supabase-exit.mjs'
+      - 'package.json'
+      - '.github/workflows/phase21-supabase-exit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'contracts/qfj-phase21-supabase-exit-v1.json'
+      - 'docs/scale/phase-21-supabase-exit-data-portability.md'
+      - 'docs/scale/phase21-live-supabase-snapshot.json'
+      - 'scripts/scale/validate-phase21-supabase-exit.mjs'
+      - 'package.json'
+      - '.github/workflows/phase21-supabase-exit.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase21-supabase-exit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portability-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgresql://qf_jarvis_phase21:qf_jarvis_phase21_ci_only@127.0.0.1:5432/qf_jarvis_phase21_test
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg17-trixie@sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6
+        env:
+          POSTGRES_DB: qf_jarvis_phase21_test
+          POSTGRES_USER: qf_jarvis_phase21
+          POSTGRES_PASSWORD: qf_jarvis_phase21_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qf_jarvis_phase21 -d qf_jarvis_phase21_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout exact reviewed head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build migration runtime
+        run: pnpm run build
+      - name: Validate Phase 21 contract
+        run: pnpm run check:scale:phase21
+      - name: Migrate a virgin plain PostgreSQL 17 database
+        run: pnpm run db:migrate
+      - name: Read-only preflight the migrated database
+        run: pnpm run db:preflight
+      - name: Re-run migration to prove no-op/idempotent history
+        run: pnpm run db:migrate
+      - name: Run event-backbone PostgreSQL integration proof
+        run: pnpm exec vitest run --config vitest.integration.config.mjs packages/event-backbone/src/tests/preflight.integration.test.ts
+      - name: Revalidate Phase 20 launch gate
+        run: pnpm run check:scale:phase20
+      - name: Verify working tree clean
+        run: test -z "$(git status --porcelain)"

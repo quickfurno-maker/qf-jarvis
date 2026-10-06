@@ -39,3 +39,4 @@ docs/decisions/ADR-000[1-8]-*.md
 # Canonical cross-repo contracts are byte-identity artifacts; preserve exact bytes.
 contracts/qfj-phase18-load-chaos-v1.json
 contracts/qfj-phase19-kubernetes-v1.json
+contracts/qfj-phase21-supabase-exit-v1.json

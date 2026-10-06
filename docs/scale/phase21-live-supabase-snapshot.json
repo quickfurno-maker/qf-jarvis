@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-06T10:27:08Z",
+  "provider": "supabase",
+  "projectRef": "coilipywdvxklewquqvv",
+  "projectName": "QF-Jarvis",
+  "postgres": {
+    "major": 17,
+    "observedVersion": "17.6"
+  },
+  "catalog": {
+    "schema": "qf_jarvis",
+    "tables": 2,
+    "views": 0,
+    "functions": 2,
+    "policies": 0,
+    "eventRows": 0,
+    "schemaMigrationRows": 1,
+    "fingerprints": {
+      "columnsSha256": "a9f66decb65682349733fcfa7c74bce1c75bfcaf6fb0827ed668ab227ca222b3",
+      "constraintsSha256": "b9a1b03df54df377b54d9f1ef391e6355037f70cfe5c3f4419a99f34a4b5e8bf",
+      "indexesSha256": "d99126481713a0db0fe75f1a45c06e6acf3a0f70ee0a5143261844f567af1a00",
+      "policiesSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "functionsSha256": "ed66fc83c6a31fc5493aa1f16cd4a7940d800ee28a662de4c0fa5f8c5a40b4a6",
+      "viewsSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "triggersSha256": "2b71b5f3bdcc9d5599b99a99ca0afbd57dcdb0c89b769ff7f31f8e0b639c7a78"
+    }
+  },
+  "migrationLedger": [
+    {
+      "version": 1,
+      "filename": "0001_event_log.sql",
+      "checksumSha256": "dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a"
+    }
+  ],
+  "authUsers": 0,
+  "storageBuckets": 0,
+  "storageObjects": 0,
+  "edgeFunctions": 0,
+  "realtimeTables": [],
+  "extensions": ["pg_stat_statements", "pgcrypto", "plpgsql", "supabase_vault", "uuid-ossp"],
+  "vaultPublicRuntimeReferences": 0,
+  "containsSecrets": false,
+  "containsUserRows": false
+}
