@@ -1,9 +1,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
 import {
+  QFJ_SCALE_HEADERS,
+  qfjCompatibilityResponseHeaders,
   qfjScaleResponseHeaders,
   verifyQfjScaleRequest,
   type QfjScaleErrorClass,
+  type QfjScaleVerificationResult,
 } from '@qf-jarvis/cross-system-scale-contract';
 import {
   addMetric,
@@ -51,6 +54,28 @@ function recordSecurityFailure(kind: 'authentication' | 'contract' | 'signature'
   } catch {
     // Security telemetry is powerless; request validation remains authoritative.
   }
+}
+
+function recordCompatibility(request: IncomingMessage, result: QfjScaleVerificationResult): void {
+  const receivedVersion = singleHeader(request, QFJ_SCALE_HEADERS.version) ?? '0';
+  try {
+    addMetric('qf.compatibility.requests', 1, {
+      boundary: 'qfj.scale.http',
+      received_version: receivedVersion,
+      mode: result.ok ? (result.mode === 'legacy' ? 'legacy' : 'current') : 'unsupported',
+      result: result.ok ? 'accepted' : result.errorClass,
+    });
+  } catch {
+    // Compatibility telemetry is powerless; request validation remains authoritative.
+  }
+}
+
+function compatibilityHeaders(result: QfjScaleVerificationResult): Record<string, string> {
+  if (!result.ok) return {};
+  return {
+    ...qfjCompatibilityResponseHeaders(result.mode === 'legacy' ? 'legacy' : 'current'),
+    ...(result.mode === 'v1' ? qfjScaleResponseHeaders(result.metadata) : {}),
+  };
 }
 
 function writeJson(
@@ -216,6 +241,7 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
               nowMs: current.getTime(),
               allowLegacy: true,
             });
+            recordCompatibility(request, scaleContract);
             if (!scaleContract.ok) {
               recordSecurityFailure(
                 scaleContract.errorClass === 'QFJ_AUTHENTICATION_FAILED' ? 'signature' : 'contract',
@@ -226,8 +252,7 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
               });
               return;
             }
-            const scaleResponseHeaders =
-              scaleContract.mode === 'v1' ? qfjScaleResponseHeaders(scaleContract.metadata) : {};
+            const scaleResponseHeaders = compatibilityHeaders(scaleContract);
             const authenticated = verifyWhatsAppTurnSignature({
               rawBody,
               turn,
@@ -321,6 +346,7 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
             nowMs: current.getTime(),
             allowLegacy: true,
           });
+          recordCompatibility(request, scaleContract);
           if (!scaleContract.ok) {
             recordSecurityFailure(
               scaleContract.errorClass === 'QFJ_AUTHENTICATION_FAILED' ? 'signature' : 'contract',
@@ -331,8 +357,7 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
             });
             return;
           }
-          const scaleResponseHeaders =
-            scaleContract.mode === 'v1' ? qfjScaleResponseHeaders(scaleContract.metadata) : {};
+          const scaleResponseHeaders = compatibilityHeaders(scaleContract);
           const authenticated = verifyHandshakeSignature({
             rawBody,
             challenge,
