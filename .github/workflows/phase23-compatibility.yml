@@ -1,0 +1,82 @@
+name: Phase 23 API Event Client Compatibility
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'contracts/qfj-phase23-compat-v1.json'
+      - 'contracts/qfj-phase23-consumer-fixture-v1.json'
+      - 'docs/scale/phase-23-api-event-client-compatibility.md'
+      - 'packages/cross-system-scale-contract/**'
+      - 'packages/contracts/**'
+      - 'apps/quickfurno-gateway/src/server.ts'
+      - 'scripts/scale/*phase23*'
+      - 'package.json'
+      - '.github/workflows/phase23-compatibility.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'contracts/qfj-phase23-compat-v1.json'
+      - 'contracts/qfj-phase23-consumer-fixture-v1.json'
+      - 'docs/scale/phase-23-api-event-client-compatibility.md'
+      - 'packages/cross-system-scale-contract/**'
+      - 'packages/contracts/**'
+      - 'apps/quickfurno-gateway/src/server.ts'
+      - 'scripts/scale/*phase23*'
+      - 'package.json'
+      - '.github/workflows/phase23-compatibility.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase23-compatibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rolling-compatibility-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgresql://qfj_phase23:qfj_phase23_ci_only@127.0.0.1:5432/qfj_phase23_test
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg17-trixie@sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6
+        env:
+          POSTGRES_DB: qfj_phase23_test
+          POSTGRES_USER: qfj_phase23
+          POSTGRES_PASSWORD: qfj_phase23_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qfj_phase23 -d qfj_phase23_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout exact reviewed head
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build typed contracts and applications
+        run: pnpm run build
+      - name: Certify Phase 23 contracts, event versions and N/N-1 PostgreSQL overlap
+        run: pnpm run test:scale:phase23
+      - name: Revalidate Phase 22 boundary
+        run: pnpm run check:scale:phase22
+      - name: Revalidate Phase 21 boundary
+        run: pnpm run check:scale:phase21
+      - name: Revalidate Phase 20 boundary
+        run: pnpm run check:scale:phase20
+      - name: Verify working tree clean
+        run: test -z "$(git status --porcelain)"

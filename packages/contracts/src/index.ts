@@ -212,6 +212,16 @@ export { defineCanonicalEvent } from './events/canonical-event.js';
 export { eventVersionSchema, type EventVersion } from './events/event-version.js';
 
 export {
+  CONTRACT_CHANGE_KINDS,
+  PHASE23_EVENT_VERSION_POLICY,
+  acceptedEventVersions,
+  classifyContractChange,
+  requiredEventVersion,
+  type CompatibilityClassification,
+  type ContractChangeKind,
+} from './compatibility/versioning.js';
+
+export {
   approvalDecisionRecordedEventV1Schema,
   CANONICAL_EVENT_TYPES,
   communicationStateRecordedEventV1Schema,

@@ -41,3 +41,5 @@ contracts/qfj-phase18-load-chaos-v1.json
 contracts/qfj-phase19-kubernetes-v1.json
 contracts/qfj-phase21-supabase-exit-v1.json
 contracts/qfj-phase22-identity-auth-v1.json
+contracts/qfj-phase23-compat-v1.json
+contracts/qfj-phase23-consumer-fixture-v1.json
