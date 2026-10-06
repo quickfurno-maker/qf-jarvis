@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import pg from 'pg';
-const { Pool } = pg;
+import { createRequire } from 'node:module';
+
+const requireFromEventBackbone = createRequire(
+  new URL('../../packages/event-backbone/package.json', import.meta.url),
+);
+const { Pool } = requireFromEventBackbone('pg');
 
 const connectionString =
   process.env.DATABASE_URL ||
