@@ -40,3 +40,4 @@ docs/decisions/ADR-000[1-8]-*.md
 contracts/qfj-phase18-load-chaos-v1.json
 contracts/qfj-phase19-kubernetes-v1.json
 contracts/qfj-phase21-supabase-exit-v1.json
+contracts/qfj-phase22-identity-auth-v1.json
