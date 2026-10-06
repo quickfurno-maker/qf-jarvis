@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL('../../' + path, import.meta.url), 'utf8');
