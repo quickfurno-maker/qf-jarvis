@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# EXAMPLE CONTRACT ONLY. Do not install as-is.
+# Install a separately reviewed root-owned adapter at /usr/local/sbin/qfj-phase15-switch
+# during production cutover. It must atomically route jarvis.quickfurno.in to the
+# supplied healthy container, validate Traefik configuration, reload without restarting
+# shared ingress, and restore the previous route if reload fails.
+set -Eeuo pipefail
+echo "QFJ_PHASE15_SWITCH_NOT_CONFIGURED" >&2
+exit 78

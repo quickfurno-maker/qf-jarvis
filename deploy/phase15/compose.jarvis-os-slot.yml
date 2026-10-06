@@ -1,0 +1,5 @@
+services:
+  jarvis-os:
+    container_name: 'qf-jarvis-os-${QFJ_PHASE15_SLOT:?QFJ_PHASE15_SLOT must be blue or green}'
+    labels:
+      traefik.enable: 'false'

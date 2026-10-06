@@ -164,11 +164,11 @@ jobs:
             worker-image-id.txt
             candidate.sha256
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
 
   publish:
     name: Publish and sign exact Jarvis digests
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish == true)
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish == true)
     needs: certify
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -178,6 +178,12 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - name: Checkout exact published source contract
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.certify.outputs.source_sha }}
+          fetch-depth: 1
+
       - name: Download exact certified release candidate
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -245,7 +251,37 @@ jobs:
         with:
           cosign-release: v3.0.6
 
-      - name: Sign all three digests and attach SBOM attestations
+      - name: Create immutable Phase 15 release manifest
+        env:
+          SOURCE_SHA: ${{ needs.certify.outputs.source_sha }}
+          OS_IMAGE: ${{ steps.publish.outputs.os_image }}
+          OS_DIGEST: ${{ steps.publish.outputs.os_digest }}
+          GATEWAY_IMAGE: ${{ steps.publish.outputs.gateway_image }}
+          GATEWAY_DIGEST: ${{ steps.publish.outputs.gateway_digest }}
+          WORKER_IMAGE: ${{ steps.publish.outputs.worker_image }}
+          WORKER_DIGEST: ${{ steps.publish.outputs.worker_digest }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/scale/phase15-release.mjs create \
+            --system JARVIS \
+            --sha "$SOURCE_SHA" \
+            --release-id "jarvis-$SOURCE_SHA-$RUN_ID-$RUN_ATTEMPT" \
+            --image "jarvis-os=$OS_IMAGE@$OS_DIGEST" \
+            --image "jarvis-gateway=$GATEWAY_IMAGE@$GATEWAY_DIGEST" \
+            --image "jarvis-worker=$WORKER_IMAGE@$WORKER_DIGEST" \
+            --db-policy SOURCE_ONLY \
+            --retain-minutes 60 \
+            --out phase15-release.json
+          node scripts/scale/phase15-release.mjs validate \
+            --manifest phase15-release.json \
+            --system JARVIS \
+            --promotable
+          sha256sum phase15-release.json > phase15-release.sha256
+
+      - name: Sign all three digests and attach SBOM + release attestations
         env:
           OS_IMAGE: ${{ steps.publish.outputs.os_image }}
           OS_DIGEST: ${{ steps.publish.outputs.os_digest }}
@@ -262,6 +298,10 @@ jobs:
           cosign attest --yes --type spdxjson --predicate jarvis-os-sbom.spdx.json "$OS_IMAGE@$OS_DIGEST"
           cosign attest --yes --type spdxjson --predicate jarvis-gateway-sbom.spdx.json "$GATEWAY_IMAGE@$GATEWAY_DIGEST"
           cosign attest --yes --type spdxjson --predicate jarvis-worker-sbom.spdx.json "$WORKER_IMAGE@$WORKER_DIGEST"
+          RELEASE_TYPE="https://quickfurno.in/attestations/qf.release.phase15.v1"
+          cosign attest --yes --type "$RELEASE_TYPE" --predicate phase15-release.json "$OS_IMAGE@$OS_DIGEST"
+          cosign attest --yes --type "$RELEASE_TYPE" --predicate phase15-release.json "$GATEWAY_IMAGE@$GATEWAY_DIGEST"
+          cosign attest --yes --type "$RELEASE_TYPE" --predicate phase15-release.json "$WORKER_IMAGE@$WORKER_DIGEST"
 
       - name: Attest Jarvis OS build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -298,6 +338,16 @@ jobs:
           docker pull "$OS_IMAGE@$OS_DIGEST"
           docker pull "$GATEWAY_IMAGE@$GATEWAY_DIGEST"
           docker pull "$WORKER_IMAGE@$WORKER_DIGEST"
+          IDENTITY="https://github.com/${{ github.repository }}/.github/workflows/scale-container-supply-chain.yml@refs/heads/main"
+          ISSUER="https://token.actions.githubusercontent.com"
+          RELEASE_TYPE="https://quickfurno.in/attestations/qf.release.phase15.v1"
+          for REF in "$OS_IMAGE@$OS_DIGEST" "$GATEWAY_IMAGE@$GATEWAY_DIGEST" "$WORKER_IMAGE@$WORKER_DIGEST"; do
+            cosign verify --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" "$REF" >/dev/null
+            cosign verify-attestation --type "$RELEASE_TYPE" --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" "$REF" >/dev/null
+          done
+          cosign verify-attestation --type spdxjson --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" "$OS_IMAGE@$OS_DIGEST" >/dev/null
+          cosign verify-attestation --type spdxjson --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" "$GATEWAY_IMAGE@$GATEWAY_DIGEST" >/dev/null
+          cosign verify-attestation --type spdxjson --certificate-identity "$IDENTITY" --certificate-oidc-issuer "$ISSUER" "$WORKER_IMAGE@$WORKER_DIGEST" >/dev/null
 
       - name: Upload publication receipt
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -309,5 +359,7 @@ jobs:
             jarvis-gateway-sbom.spdx.json
             jarvis-worker-sbom.spdx.json
             candidate.sha256
+            phase15-release.json
+            phase15-release.sha256
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90

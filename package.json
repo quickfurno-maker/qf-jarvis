@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.11.0",
-  "description": "QF Jarvis — the intelligence, recommendation, coordination, and founder decision-support layer for the QuickFurno ecosystem.",
+  "description": "QF Jarvis â€” the intelligence, recommendation, coordination, and founder decision-support layer for the QuickFurno ecosystem.",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=24.18.0 <25.0.0"
@@ -27,7 +27,7 @@
     "db:preflight": "pnpm --filter @qf-jarvis/event-backbone db:preflight",
     "inspect:failures": "pnpm --filter @qf-jarvis/event-backbone inspect:failures --",
     "check:dist-containment": "node scripts/check-dist-containment.mjs",
-    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:dist-containment && pnpm run check:scale:containers && pnpm run check:scale:coordination && pnpm run check:scale:durable-jobs && pnpm run check:scale:db-lifecycle && pnpm run check:scale:edge-origin && pnpm run check:scale:phase11 && pnpm run check:scale:phase12 && pnpm run check:scale:phase13 && pnpm run check:scale:phase14",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:dist-containment && pnpm run check:scale:containers && pnpm run check:scale:coordination && pnpm run check:scale:durable-jobs && pnpm run check:scale:db-lifecycle && pnpm run check:scale:edge-origin && pnpm run check:scale:phase11 && pnpm run check:scale:phase12 && pnpm run check:scale:phase13 && pnpm run check:scale:phase14 && pnpm run check:scale:phase15",
     "riya:as3:pilot": "node packages/riya-ai-synthetic-provider-adapters/dist/cli/bin.js",
     "check:scale:containers": "node scripts/scale/validate-container-contract.mjs",
     "test:scale:artifact": "node scripts/scale/validate-artifact-contract.mjs",
@@ -45,7 +45,9 @@
     "check:scale:phase13": "node scripts/scale/validate-phase13-config-contract.mjs",
     "test:scale:phase13": "pnpm run check:scale:phase13 && vitest run apps/quickfurno-gateway/src/tests/config.test.ts apps/api/src/tests/quickfurno-whatsapp-production-worker.test.ts apps/jarvis-os/src/server/auth/proxy-csp.test.ts apps/jarvis-os/src/server/auth/auth-http.test.ts",
     "check:scale:phase14": "node scripts/scale/validate-phase14-observability-sre.mjs",
-    "test:scale:phase14": "pnpm run check:scale:phase14"
+    "test:scale:phase14": "pnpm run check:scale:phase14",
+    "check:scale:phase15": "node scripts/scale/validate-phase15-cicd.mjs",
+    "test:scale:phase15": "pnpm run check:scale:phase15"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
