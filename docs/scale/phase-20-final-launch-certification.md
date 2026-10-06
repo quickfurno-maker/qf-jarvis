@@ -1,20 +1,28 @@
 # Phase 20 — Final Scale Launch Certification
 
-Status: final evidence gate for Jarvis. The canonical contract is `contracts/qfj-phase20-final-launch-v1.json`.
+Status: implementation and reproducible certification evidence.
 
-## Role in the final gate
+Jarvis remains a separate reasoning/orchestration plane. QuickFurno Core validates and executes business effects. Phase 20 grants no new Jarvis authority.
 
-- Jarvis remains reasoning/orchestration, never QuickFurno business authority.
-- PostgreSQL application connection budget remains 16: two gateway replicas x3 + two worker replicas x5.
-- Phase 20 reruns the real PostgreSQL connection-budget certificate under excess concurrency.
-- Phase 18 bounded-soak/provider-failure evidence remains required through normal CI.
-- Phase 19 Kubernetes portability remains evidence only; launch continues on Docker/VPS.
-- Live managed-project migration head observed during Phase 20 is internal ledger version 1 / `0001_event_log.sql`; later repository migrations are not falsely claimed as production-applied.
-- Supabase-specific infrastructure is inventoried for Phase 21; Jarvis event-backbone semantics remain portable PostgreSQL/session semantics.
-- No production DB mutation, AWS dependency, Kubernetes production cluster, or authority expansion is introduced.
+## Final gates
 
-## Phase 20 focused proof
+- Revalidate the byte-identical `qfj.phase20.launch-cert.v1` contract.
+- Re-run the Phase 09 database connection-budget proof: **2 gateways x 3 + 2 workers x 5 = 16** application backends maximum under excess concurrency.
+- Revalidate Phase 12 horizontal-worker/agent boundaries and distributed ownership.
+- Rehearse expand/backfill/coexist/contract on disposable PostgreSQL.
+- Revalidate hardened container contract and immutable artifact identity through normal CI/supply-chain gates.
+- Preserve no-AWS/no-Kubernetes launch dependency.
+- Preserve PostgreSQL durable truth, Redis/Valkey coordination-only semantics and bounded QuickFurno↔Jarvis transport.
+- Preserve Riya/Anisha/Aarohi proposal/orchestration role; Core remains effect authority.
 
-The dedicated workflow validates the canonical contract, re-runs the 16-connection budget, and executes an isolated expand/backfill/compatibility/contract migration rehearsal on disposable PostgreSQL.
+## Database migration rule
 
-Normal CI and supply-chain workflows remain the authoritative full-regression and signed-image gates.
+The Phase 20 expand/contract drill is synthetic. It demonstrates deployment compatibility mechanics without changing the Jarvis production schema or migration history.
+
+## Provider independence
+
+Jarvis must consume identity/actor context through stable signed Core contracts. It must not deepen dependence on Supabase Auth identifiers. QuickFurno Phase 22 owns the internal principal/provider mapping.
+
+## Exit gate
+
+Phase 20 is complete only after exact-head CI, final-certification workflow and signed supply-chain publication are green on the merged main SHA.

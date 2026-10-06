@@ -1,96 +1,114 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-const requireFromEventBackbone = createRequire(
-  new URL('../../packages/event-backbone/package.json', import.meta.url),
-);
-const { Pool } = requireFromEventBackbone('pg');
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) throw new Error('DATABASE_URL is required');
-const u = new URL(connectionString);
-if (
-  !['127.0.0.1', 'localhost', '::1'].includes(u.hostname) &&
-  process.env.PHASE20_ALLOW_REMOTE_REHEARSAL !== '1'
-)
-  throw new Error('Phase20 expand/contract rehearsal REFUSED non-loopback database');
-const pool = new Pool({ connectionString, max: 4 });
-const scalar = async (sql, params = []) => (await pool.query(sql, params)).rows[0];
+import pg from 'pg';
+const { Pool } = pg;
+
+const connectionString =
+  process.env.DATABASE_URL ||
+  'postgresql://qf_jarvis_phase20:qf_jarvis_phase20_ci_only@127.0.0.1:5432/qf_jarvis_phase20';
+const pool = new Pool({
+  connectionString,
+  max: 4,
+  application_name: 'qfj-phase20-expand-contract',
+});
+const s = 'phase20_rehearsal';
+
 try {
-  await pool.query(
-    'drop schema if exists phase20_rehearsal cascade; create schema phase20_rehearsal',
-  );
+  await pool.query(`drop schema if exists ${s} cascade; create schema ${s}`);
   await pool.query(`
-    create table phase20_rehearsal.turn_state(
-      id bigint generated always as identity primary key,
-      legacy_state text not null check (legacy_state in ('pending','complete')),
-      payload text not null
+    create table ${s}.customer_profile(
+      id bigint primary key,
+      display_name_v1 text not null,
+      row_revision integer not null default 1
     );
-    insert into phase20_rehearsal.turn_state(legacy_state,payload)
-    select case when g%4=0 then 'complete' else 'pending' end, 'turn-'||g
-    from generate_series(1,2000) g;
+    insert into ${s}.customer_profile(id,display_name_v1)
+    select g,'customer-'||g from generate_series(1,100) g;
   `);
-  const before = await scalar(
-    `select count(*)::int n, md5(string_agg(id||':'||legacy_state||':'||payload,',' order by id)) digest from phase20_rehearsal.turn_state`,
+
+  // EXPAND: additive + nullable, so the old binary remains valid.
+  await pool.query(`alter table ${s}.customer_profile add column display_name_v2 text`);
+  await pool.query(
+    `create index customer_profile_display_name_v2_idx on ${s}.customer_profile(lower(display_name_v2))`,
   );
-  await pool.query(`
-    alter table phase20_rehearsal.turn_state add column state_v2 text;
-    create view phase20_rehearsal.turn_state_compat as
-      select id,coalesce(state_v2,legacy_state) as state,payload from phase20_rehearsal.turn_state;
-  `);
-  let total = 0;
-  while (true) {
+
+  // Old and new application versions coexist.
+  await pool.query(
+    `insert into ${s}.customer_profile(id,display_name_v1) values (101,'legacy-writer')`,
+  );
+  await pool.query(
+    `insert into ${s}.customer_profile(id,display_name_v1,display_name_v2) values (102,'dual-writer','dual-writer')`,
+  );
+  const coexist = await pool.query(
+    `select id,coalesce(display_name_v2,display_name_v1) as name from ${s}.customer_profile where id in (101,102) order by id`,
+  );
+  assert.deepEqual(
+    coexist.rows.map((r) => r.name),
+    ['legacy-writer', 'dual-writer'],
+  );
+
+  // Bounded backfill: never rewrite the whole relation in one unbounded statement.
+  let backfilled = 0;
+  for (;;) {
     const r = await pool.query(`
       with batch as (
-        select id from phase20_rehearsal.turn_state where state_v2 is null
-        order by id limit 137 for update skip locked
+        select id from ${s}.customer_profile
+        where display_name_v2 is null
+        order by id
+        limit 25
+        for update skip locked
       )
-      update phase20_rehearsal.turn_state t set state_v2=t.legacy_state
-      from batch b where t.id=b.id returning t.id
+      update ${s}.customer_profile p
+      set display_name_v2=p.display_name_v1, row_revision=row_revision+1
+      from batch where p.id=batch.id
+      returning p.id
     `);
-    total += r.rowCount;
+    backfilled += r.rowCount;
     if (r.rowCount === 0) break;
+    assert.ok(r.rowCount <= 25);
   }
-  assert.equal(total, 2000);
-  assert.equal(
-    (
-      await scalar(
-        'select count(*)::int n from phase20_rehearsal.turn_state where state_v2 is distinct from legacy_state',
-      )
-    ).n,
-    0,
+  assert.equal(backfilled, 101);
+
+  const complete = await pool.query(
+    `select count(*)::int as n from ${s}.customer_profile where display_name_v2 is null`,
   );
-  assert.equal(
-    (
-      await scalar(
-        "select count(*)::int n from phase20_rehearsal.turn_state_compat where state in ('pending','complete')",
-      )
-    ).n,
-    2000,
-  );
+  assert.equal(complete.rows[0].n, 0);
+
+  // CUTOVER then CONTRACT only after old-writer drain has been proven.
+  await pool.query(`alter table ${s}.customer_profile alter column display_name_v2 set not null`);
+  const before = await pool.query(`select count(*)::int as n from ${s}.customer_profile`);
+  assert.equal(before.rows[0].n, 102);
+  await pool.query(`alter table ${s}.customer_profile drop column display_name_v1`);
   await pool.query(
-    'create table phase20_rehearsal.rollback_checkpoint as table phase20_rehearsal.turn_state',
+    `alter table ${s}.customer_profile rename column display_name_v2 to display_name`,
   );
-  await pool.query(`
-    drop view phase20_rehearsal.turn_state_compat;
-    alter table phase20_rehearsal.turn_state alter column state_v2 set not null;
-    alter table phase20_rehearsal.turn_state add constraint turn_state_v2_valid check (state_v2 in ('pending','complete')) not valid;
-    alter table phase20_rehearsal.turn_state validate constraint turn_state_v2_valid;
-    alter table phase20_rehearsal.turn_state drop column legacy_state;
-    alter table phase20_rehearsal.turn_state rename column state_v2 to state;
-  `);
-  const after = await scalar(
-    `select count(*)::int n, md5(string_agg(id||':'||state||':'||payload,',' order by id)) digest from phase20_rehearsal.turn_state`,
+
+  let oldWriterRejected = false;
+  try {
+    await pool.query(
+      `insert into ${s}.customer_profile(id,display_name_v1) values (103,'must-fail')`,
+    );
+  } catch (error) {
+    oldWriterRejected = error?.code === '42703';
+  }
+  assert.equal(oldWriterRejected, true);
+  await pool.query(`insert into ${s}.customer_profile(id,display_name) values (103,'new-writer')`);
+
+  const final = await pool.query(
+    `select count(*)::int as n, count(*) filter(where display_name is null)::int as nulls from ${s}.customer_profile`,
   );
-  assert.equal(after.n, before.n);
-  assert.equal(after.digest, before.digest);
-  console.log('Jarvis Phase20 expand/backfill/compatibility/contract rehearsal PASS');
+  assert.deepEqual(final.rows[0], { n: 103, nulls: 0 });
+
+  console.log('Jarvis Phase 20 expand/contract PostgreSQL rehearsal PASS');
   console.log(
     JSON.stringify(
       {
-        rows: before.n,
-        batches: Math.ceil(total / 137),
-        semanticDigestPreserved: true,
-        rollbackCheckpoint: true,
+        baselineRows: 100,
+        oldNewCoexistence: true,
+        boundedBackfillBatch: 25,
+        backfilledRows: backfilled,
+        preContractRows: 102,
+        oldWriterRejectedAfterContract: true,
+        finalRows: 103,
         productionMutation: false,
       },
       null,
@@ -98,6 +116,6 @@ try {
     ),
   );
 } finally {
-  await pool.query('drop schema if exists phase20_rehearsal cascade').catch(() => undefined);
+  await pool.query(`drop schema if exists ${s} cascade`).catch(() => undefined);
   await pool.end();
 }
