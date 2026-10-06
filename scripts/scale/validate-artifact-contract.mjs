@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL('../../' + path, import.meta.url), 'utf8');
@@ -36,7 +36,7 @@ add(
   workflow.includes('workflow_dispatch:') &&
     workflow.includes('publish:') &&
     workflow.includes("github.event_name == 'push' && github.ref == 'refs/heads/main'") &&
-    workflow.includes("github.event_name == 'workflow_dispatch' && inputs.publish == true"),
+    workflow.includes("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish == true"),
 );
 add(
   'no mutable latest image tag is published',

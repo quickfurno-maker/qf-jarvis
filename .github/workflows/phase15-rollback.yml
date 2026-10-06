@@ -1,0 +1,40 @@
+name: Phase 15 Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type ROLLBACK_TO_PREVIOUS_SIGNED_JARVIS_RELEASE"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qf-jarvis-phase15-production
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Human-approved deterministic Jarvis rollback
+    if: vars.PHASE15_PRODUCTION_CUTOVER_ENABLED == 'true'
+    environment: production
+    runs-on: [self-hosted, Linux, X64, qfj-phase15-deployer]
+    timeout-minutes: 20
+    steps:
+      - name: Enforce typed rollback phrase
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "ROLLBACK_TO_PREVIOUS_SIGNED_JARVIS_RELEASE"
+
+      - name: Invoke constrained host rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x /usr/local/sbin/qfj-phase15-release
+          sudo -n /usr/local/sbin/qfj-phase15-release rollback
+          sudo -n /usr/local/sbin/qfj-phase15-release status
