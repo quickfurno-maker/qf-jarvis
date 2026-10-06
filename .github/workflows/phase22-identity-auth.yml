@@ -4,19 +4,19 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "contracts/qfj-phase22-identity-auth-v1.json"
-      - "docs/scale/phase-22-identity-auth-provider-independence.md"
-      - "scripts/scale/validate-phase22-identity-auth.mjs"
-      - "package.json"
-      - ".github/workflows/phase22-identity-auth.yml"
+      - 'contracts/qfj-phase22-identity-auth-v1.json'
+      - 'docs/scale/phase-22-identity-auth-provider-independence.md'
+      - 'scripts/scale/validate-phase22-identity-auth.mjs'
+      - 'package.json'
+      - '.github/workflows/phase22-identity-auth.yml'
   push:
     branches: [main]
     paths:
-      - "contracts/qfj-phase22-identity-auth-v1.json"
-      - "docs/scale/phase-22-identity-auth-provider-independence.md"
-      - "scripts/scale/validate-phase22-identity-auth.mjs"
-      - "package.json"
-      - ".github/workflows/phase22-identity-auth.yml"
+      - 'contracts/qfj-phase22-identity-auth-v1.json'
+      - 'docs/scale/phase-22-identity-auth-provider-independence.md'
+      - 'scripts/scale/validate-phase22-identity-auth.mjs'
+      - 'package.json'
+      - '.github/workflows/phase22-identity-auth.yml'
 
 permissions:
   contents: read
