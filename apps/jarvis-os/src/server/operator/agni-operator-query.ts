@@ -39,7 +39,7 @@ export function verifyAgniOperatorQuery(input: {
     path: AGNI_OPERATOR_QUERY_PATH,
     rawBody: input.rawBody,
     verificationKeys: input.verificationKeys,
-    nowMs: input.nowMs,
+    ...(input.nowMs === undefined ? {} : { nowMs: input.nowMs }),
     allowLegacy: false,
   });
   if (

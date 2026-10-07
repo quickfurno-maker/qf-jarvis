@@ -18,7 +18,11 @@ const GENERIC_HEADERS = Object.freeze({
   'x-content-type-options': 'nosniff',
 });
 
-function reply(status: number, body: unknown, headers = GENERIC_HEADERS): Response {
+function reply(
+  status: number,
+  body: unknown,
+  headers: Readonly<Record<string, string>> = GENERIC_HEADERS,
+): Response {
   return new Response(JSON.stringify(body), { status, headers });
 }
 
