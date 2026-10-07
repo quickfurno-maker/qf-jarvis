@@ -41,6 +41,7 @@ export interface QuickFurnoWorkerObservationWriterConfig {
   readonly filePath: string;
   readonly revision: string;
   readonly runtimeId: string;
+  readonly providerMode: QuickFurnoWorkerObservationV3['providerMode'];
   readonly knowledge:
     | Readonly<{ mode: 'DISABLED' }>
     | Readonly<{ mode: 'HYBRID'; revision: string; embeddingModelRef: string }>;
@@ -183,7 +184,7 @@ export function createQuickFurnoWorkerObservationWriter(
         revision: config.revision,
         runtimeId: config.runtimeId,
         state,
-        providerMode: 'GROQ_ONLY',
+        providerMode: config.providerMode,
         knowledge: config.knowledge,
         spool,
         outcomes,

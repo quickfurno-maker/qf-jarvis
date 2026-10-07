@@ -408,6 +408,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
     filePath: config.operationalSnapshotFile,
     revision: config.revision,
     runtimeId: config.runtimeId,
+    providerMode,
     knowledge:
       config.knowledge.mode === 'HYBRID'
         ? Object.freeze({

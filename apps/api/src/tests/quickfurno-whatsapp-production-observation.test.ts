@@ -15,6 +15,7 @@ describe('QuickFurno worker production observation', () => {
       filePath,
       revision: 'a'.repeat(40),
       runtimeId: 'qfj.whatsapp.production.v1',
+      providerMode: 'GROQ_ONLY',
       knowledge: {
         mode: 'HYBRID',
         revision: 'knowledge.quickfurno.release.1',
@@ -83,6 +84,7 @@ describe('QuickFurno worker production observation', () => {
       filePath,
       revision: 'b'.repeat(40),
       runtimeId: 'qfj.whatsapp.production.v1',
+      providerMode: 'OPENAI_LUNA_SOL',
       knowledge: { mode: 'DISABLED' },
     });
 
@@ -102,6 +104,7 @@ describe('QuickFurno worker production observation', () => {
     const parsed = parseQuickFurnoWorkerObservation(JSON.parse(raw));
     expect(parsed.protocol).toBe('qfj.quickfurno-worker-observation.v3');
     if (parsed.protocol !== 'qfj.quickfurno-worker-observation.v3') return;
+    expect(parsed.providerMode).toBe('OPENAI_LUNA_SOL');
     expect(parsed.knowledge).toEqual({ mode: 'DISABLED' });
     expect(parsed.embeddingUsage).toEqual({ requests: 0, texts: 0, characters: 0 });
     expect(parsed.knowledgeRetrieval.served).toBe(0);
