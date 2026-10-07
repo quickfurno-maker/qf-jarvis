@@ -7,7 +7,8 @@ import {
   type QfjScaleVerificationKey,
 } from '@qf-jarvis/cross-system-scale-contract';
 
-export const AGNI_OPERATOR_QUERY_PATH = '/api/internal/agni/operator-query' as const;
+export const AGNI_OPERATOR_QUERY_PATH =
+  '/api/internal/agni/operator-query' as const;
 export const AGNI_OPERATOR_QUERY_REQUEST_PROTOCOL =
   'qfj.agni.operator-query.v1' as const;
 export const AGNI_OPERATOR_QUERY_RESPONSE_PROTOCOL =
