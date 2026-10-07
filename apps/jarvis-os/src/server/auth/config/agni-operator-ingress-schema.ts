@@ -11,10 +11,7 @@ const publicKeyPem = z
   .min(80)
   .max(4096)
   .regex(/-----BEGIN PUBLIC KEY-----[\s\S]+-----END PUBLIC KEY-----/u)
-  .refine(
-    (value) => !value.includes('PRIVATE KEY'),
-    'private key material is forbidden',
-  );
+  .refine((value) => !value.includes('PRIVATE KEY'), 'private key material is forbidden');
 
 export const agniOperatorIngressConfigV1Schema = z
   .object({
@@ -43,6 +40,4 @@ export const agniOperatorIngressConfigV1Schema = z
     }
   });
 
-export type AgniOperatorIngressConfigV1 = z.infer<
-  typeof agniOperatorIngressConfigV1Schema
->;
+export type AgniOperatorIngressConfigV1 = z.infer<typeof agniOperatorIngressConfigV1Schema>;
