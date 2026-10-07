@@ -41,7 +41,7 @@ export interface QuickFurnoWorkerObservationWriterConfig {
   readonly filePath: string;
   readonly revision: string;
   readonly runtimeId: string;
-  readonly providerMode: 'GROQ_ONLY' | 'OPENAI_LUNA_SOL';
+  readonly providerMode: QuickFurnoWorkerObservationV3['providerMode'];
   readonly knowledge:
     | Readonly<{ mode: 'DISABLED' }>
     | Readonly<{ mode: 'HYBRID'; revision: string; embeddingModelRef: string }>;
