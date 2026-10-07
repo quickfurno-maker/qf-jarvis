@@ -43,4 +43,6 @@ export const agniOperatorIngressConfigV1Schema = z
     }
   });
 
-export type AgniOperatorIngressConfigV1 = z.infer<typeof agniOperatorIngressConfigV1Schema>;
+export type AgniOperatorIngressConfigV1 = z.infer<
+  typeof agniOperatorIngressConfigV1Schema
+>;
