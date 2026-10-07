@@ -50,7 +50,7 @@ export function verifyAgniOperatorQuery(input: {
   if (
     !verified.ok ||
     verified.mode !== 'v1' ||
-    verified.metadata.actor !== 'qf-agni-control-plane'
+    verified.metadata.actor !== 'qf-agni-operator-gateway'
   ) {
     return Object.freeze({ ok: false });
   }
