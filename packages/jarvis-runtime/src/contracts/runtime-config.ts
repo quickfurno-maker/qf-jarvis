@@ -7,7 +7,12 @@
  * closed at RUNTIME through the lower adapter. The root duplicates no business rule: assignment,
  * privacy, model routing/fallback, reply validation, and Core validation stay in the lower packages.
  */
-import type { KnowledgePort, ModelReleaseRef, RuntimePolicy } from '@qf-jarvis/agent-runtime';
+import type {
+  KnowledgePort,
+  ModelReleaseRef,
+  OrchestrationObservabilityHook,
+  RuntimePolicy,
+} from '@qf-jarvis/agent-runtime';
 import type { CoreDecisionProtocol, CoreDecisionTransport } from '@qf-jarvis/core-decision-adapter';
 import type {
   GovernedKnowledgeRegistry,
@@ -203,6 +208,8 @@ export interface JarvisRuntimeConfig {
   readonly provenanceRefs?: JarvisProvenanceRefs;
 
   readonly observability?: JarvisRuntimeObservabilityHook;
+  /** Content-free M2 orchestration events. Observability only; never business authority. */
+  readonly orchestrationObservability?: OrchestrationObservabilityHook;
 }
 
 /**

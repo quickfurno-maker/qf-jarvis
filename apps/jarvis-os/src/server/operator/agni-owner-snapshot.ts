@@ -15,8 +15,7 @@ export const AGNI_OWNER_ACTOR = 'qf-agni-operator-gateway' as const;
 const MAX_BODY_BYTES = 4096;
 
 export type AgniOwnerSnapshotVerification =
-  | Readonly<{ ok: true; metadata: QfjScaleMetadataV1 }>
-  | Readonly<{ ok: false }>;
+  Readonly<{ ok: true; metadata: QfjScaleMetadataV1 }> | Readonly<{ ok: false }>;
 
 export function verifyAgniOwnerSnapshot(input: {
   readonly headers: Readonly<Record<string, string>>;
@@ -36,11 +35,7 @@ export function verifyAgniOwnerSnapshot(input: {
     ...(input.nowMs === undefined ? {} : { nowMs: input.nowMs }),
     allowLegacy: false,
   });
-  if (
-    !verified.ok ||
-    verified.mode !== 'v1' ||
-    verified.metadata.actor !== AGNI_OWNER_ACTOR
-  ) {
+  if (!verified.ok || verified.mode !== 'v1' || verified.metadata.actor !== AGNI_OWNER_ACTOR) {
     return Object.freeze({ ok: false });
   }
   const keyId = input.headers[QFJ_SCALE_HEADERS.keyId];
@@ -58,7 +53,7 @@ export function parseAgniOwnerSnapshot(rawBody: Uint8Array): boolean {
       !!value &&
       typeof value === 'object' &&
       !Array.isArray(value) &&
-      Object.keys(value as Record<string, unknown>).length === 1 &&
+      Object.keys(value).length === 1 &&
       (value as Record<string, unknown>)['protocol'] === AGNI_OWNER_SNAPSHOT_REQUEST_PROTOCOL
     );
   } catch {
