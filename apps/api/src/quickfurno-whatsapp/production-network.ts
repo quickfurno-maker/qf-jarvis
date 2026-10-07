@@ -1,5 +1,6 @@
 import { boundedNodeHttpPost } from '@qf-jarvis/cross-system-scale-contract';
 
+import type { AgniCaseHttpPost } from './agni-case-escalation.js';
 import type { QuickFurnoWhatsAppHttpPost } from './quickfurno-http.js';
 
 export type QuickFurnoWorkerAvailabilityHttpPost = (
@@ -20,6 +21,8 @@ export type QuickFurnoWorkerAvailabilityHttpPost = (
  * exactly one transport attempt, no redirect following, credential lookup, logging or response interpretation.
  */
 export const quickFurnoWorkerHttpPost: QuickFurnoWhatsAppHttpPost = boundedNodeHttpPost;
+
+export const quickFurnoWorkerAgniCaseHttpPost: AgniCaseHttpPost = boundedNodeHttpPost;
 
 export const quickFurnoWorkerAvailabilityHttpPost: QuickFurnoWorkerAvailabilityHttpPost =
   boundedNodeHttpPost;

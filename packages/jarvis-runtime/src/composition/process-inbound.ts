@@ -558,6 +558,9 @@ export async function composeAndProcessInternal(
       ? {}
       : { requireEvaluationRef: config.requireEvaluationRef }),
     ...(behaviourPort === undefined ? {} : { behaviourPort }),
+    ...(config.orchestrationObservability === undefined
+      ? {}
+      : { observability: config.orchestrationObservability }),
   });
 
   emit('jarvis-composition-started', undefined, undefined);

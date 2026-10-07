@@ -423,7 +423,7 @@ describe('the route file itself', () => {
     }
   });
 
-  it('locks the API route set to exactly twelve, all of them accounted for', () => {
+  it('locks the API route set to exactly thirteen, all of them accounted for', () => {
     // Exact allowlist: adding a debug endpoint, introspection helper or ad-hoc mobile API fails
     // review. The operator API is versioned and is the shared web/mobile boundary.
     const routes = walk(join(SRC, 'app'))
@@ -438,6 +438,8 @@ describe('the route file itself', () => {
       'api/control-plane/v2/snapshot/route.ts',
       // Telegram owner operator: signed, read-only, internal AGNI -> Jarvis ingress.
       'api/internal/agni/operator-query/route.ts',
+      // Owner app: signed, bounded, read-only AGNI -> Jarvis snapshot ingress.
+      'api/internal/agni/owner-snapshot/route.ts',
       'api/operator/v1/agent-flow-trace/route.ts',
       // Phase 14: authenticated operator-only AGNI observation/approval bridge.
       'api/operator/v1/agni/route.ts',

@@ -60,6 +60,7 @@ import {
 import { addMetric, emitStructuredLog, recordMetric, setMetric } from '@qf-jarvis/observability';
 
 import { createFileGroqCredentialBinding } from '../secrets/file-groq-credential-binding.js';
+import { createAgniCaseEscalationPort } from './agni-case-escalation.js';
 import { createFileOpenAICredentialBinding } from '../secrets/file-openai-credential-binding.js';
 import {
   createQuickFurnoClientMatchRequestWriter,
@@ -72,7 +73,10 @@ import {
   createQuickFurnoWhatsAppReplyWriter,
 } from './quickfurno-http.js';
 import { createQuickFurnoWorkerKillSwitch } from './production-kill-switch.js';
-import { quickFurnoWorkerHttpPost } from './production-network.js';
+import {
+  quickFurnoWorkerAgniCaseHttpPost,
+  quickFurnoWorkerHttpPost,
+} from './production-network.js';
 import { createAdaptiveQuickFurnoWhatsAppSpecialistRuntime } from './adaptive-specialist-runtime.js';
 import { createQuickFurnoWhatsAppAuthorityStatePort } from './authority-state-port.js';
 import { createQuickFurnoWhatsAppParallelScheduler } from './parallel-turn-scheduler.js';
@@ -499,6 +503,14 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       });
     }
 
+    const agniCaseEscalation =
+      config.agniCaseEscalation === undefined
+        ? undefined
+        : createAgniCaseEscalationPort({
+            ...config.agniCaseEscalation,
+            httpPost: quickFurnoWorkerAgniCaseHttpPost,
+          });
+
     const promptRegistry = createPromptRegistry([
       ...RIYA_PRODUCTION_PROMPTS,
       JARVIS_V1_PRODUCTION_PROMPT_BY_AGENT.ANISHA,
@@ -519,6 +531,32 @@ export async function createQuickFurnoWhatsAppProductionWorker(
     const aarohiAcquisitionBehaviourInput = createQuickFurnoAarohiBehaviourInputReader(httpConfig);
     const specialists = runtimeStacks.map((stack) => {
       const gatewayInvoker = observedGatewayInvoker(stack.baseGatewayInvoker);
+      const orchestrationObservability =
+        agniCaseEscalation === undefined
+          ? undefined
+          : Object.freeze({
+              onEvent(event: {
+                readonly type: string;
+                readonly runId: string;
+                readonly conversationId: string;
+                readonly actor: string | undefined;
+                readonly proposalKind: string | undefined;
+              }): void {
+                if (
+                  event.type === 'proposal-created' &&
+                  event.actor === 'ANISHA' &&
+                  event.proposalKind === 'ESCALATE_TO_HUMAN'
+                ) {
+                  void agniCaseEscalation
+                    .escalateVendor({
+                      conversationId: event.conversationId,
+                      runId: event.runId,
+                    })
+                    .catch(() => undefined);
+                }
+              },
+            });
+
       const sharedRuntimeConfig = {
         authoritativeState,
         aarohiAcquisitionBehaviourInput,
@@ -538,6 +576,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         gatewayInvoker,
         ...(decisionShadowPort === undefined ? {} : { decisionShadowPort }),
         ...(agentHybridKnowledge === undefined ? {} : { agentHybridKnowledge }),
+        ...(orchestrationObservability === undefined ? {} : { orchestrationObservability }),
         requireEvaluationRef: true as const,
         provenanceRefs: {
           runtimeRef: 'qfj.jarvis-runtime.quickfurno-authority-v2',

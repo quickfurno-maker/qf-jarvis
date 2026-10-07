@@ -217,6 +217,15 @@ const schema = z
         timeoutMs: z.number().int().min(100).max(30_000).default(5000),
       })
       .strict(),
+    agniCaseEscalation: z
+      .object({
+        baseUrl: z.url().max(2048),
+        keyId: z.string().regex(KEY_ID),
+        privateKeyFile: absolutePath,
+        timeoutMs: z.number().int().min(100).max(30_000).default(5000),
+      })
+      .strict()
+      .optional(),
     knowledge: knowledgeSchema,
     decisionIntelligence: decisionIntelligenceSchema.default({ mode: 'DISABLED' }),
     concurrency: concurrencySchema,
@@ -370,6 +379,12 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
     privateKeyPem: string;
     timeoutMs: number;
   }>;
+  readonly agniCaseEscalation?: Readonly<{
+    baseUrl: string;
+    keyId: string;
+    privateKeyPem: string;
+    timeoutMs: number;
+  }>;
   readonly decisionIntelligence:
     | Readonly<{ mode: 'DISABLED' }>
     | Readonly<{
@@ -453,6 +468,20 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
     privateKeyPem = secretText(input.quickfurno.privateKeyFile, MAX_PRIVATE_KEY_BYTES);
   } catch {
     throw new Error('production-worker-config-invalid');
+  }
+
+  let agniCaseEscalation: QuickFurnoWhatsAppProductionWorkerConfig['agniCaseEscalation'];
+  if (input.agniCaseEscalation !== undefined) {
+    try {
+      agniCaseEscalation = Object.freeze({
+        baseUrl: input.agniCaseEscalation.baseUrl,
+        keyId: input.agniCaseEscalation.keyId,
+        privateKeyPem: secretText(input.agniCaseEscalation.privateKeyFile, MAX_PRIVATE_KEY_BYTES),
+        timeoutMs: input.agniCaseEscalation.timeoutMs,
+      });
+    } catch {
+      throw new Error('production-worker-config-invalid');
+    }
   }
 
   let turnStore: QuickFurnoWhatsAppProductionWorkerConfig['turnStore'];
@@ -600,6 +629,7 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
       privateKeyPem,
       timeoutMs: input.quickfurno.timeoutMs,
     }),
+    ...(agniCaseEscalation === undefined ? {} : { agniCaseEscalation }),
     decisionIntelligence,
     knowledge,
     concurrency: Object.freeze({

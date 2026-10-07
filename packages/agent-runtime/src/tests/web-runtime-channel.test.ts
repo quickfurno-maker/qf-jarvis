@@ -457,6 +457,8 @@ describe('(10) no application consumes the web channel', () => {
       'api/control-plane/v2/snapshot/route.ts',
       // Telegram owner operator: signed, read-only, internal AGNI -> Jarvis ingress.
       'api/internal/agni/operator-query/route.ts',
+      // Owner app: signed, bounded, read-only AGNI -> Jarvis snapshot ingress.
+      'api/internal/agni/owner-snapshot/route.ts',
       // Agent Flow Phase 2: authenticated GET-only, content-free trace observation.
       'api/operator/v1/agent-flow-trace/route.ts',
       // Phase 14: authenticated operator-only AGNI observation/approval bridge.
