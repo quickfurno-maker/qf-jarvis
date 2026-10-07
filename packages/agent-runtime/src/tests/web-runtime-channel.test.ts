@@ -455,6 +455,8 @@ describe('(10) no application consumes the web channel', () => {
       // and V1 is served unchanged beside it, because ADR-0086 forbids editing a shipped shape in
       // place. Nine reviewed operator-plane routes, including the command and voice-session boundaries.
       'api/control-plane/v2/snapshot/route.ts',
+      // Telegram owner operator: signed, read-only, internal AGNI -> Jarvis ingress.
+      'api/internal/agni/operator-query/route.ts',
       // Agent Flow Phase 2: authenticated GET-only, content-free trace observation.
       'api/operator/v1/agent-flow-trace/route.ts',
       // Phase 14: authenticated operator-only AGNI observation/approval bridge.
