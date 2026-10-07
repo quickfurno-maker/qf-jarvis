@@ -1,0 +1,38 @@
+name: Temporary Operator Formatting
+
+on:
+  push:
+    branches:
+      - feat/telegram-owner-operator
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: feat/telegram-owner-operator
+      - uses: pnpm/action-setup@32f8a03a636037eb846cf0c9c0cf8b7064c9d690
+        with:
+          version: 11.11.0
+          run_install: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --write apps/jarvis-os/src/server/auth/config/agni-operator-ingress-schema.ts apps/jarvis-os/src/server/operator/agni-operator-query.ts apps/jarvis-os/src/server/operator/agni-operator-query.test.ts apps/jarvis-os/src/app/api/internal/agni/operator-query/route.ts
+      - name: Commit formatter output
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/jarvis-os/src/server/auth/config/agni-operator-ingress-schema.ts apps/jarvis-os/src/server/operator/agni-operator-query.ts apps/jarvis-os/src/server/operator/agni-operator-query.test.ts apps/jarvis-os/src/app/api/internal/agni/operator-query/route.ts
+          git commit -m "style(operator): apply pinned Prettier"
+          git push origin HEAD:feat/telegram-owner-operator
