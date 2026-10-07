@@ -7,23 +7,17 @@ import {
   type QfjScaleVerificationKey,
 } from '@qf-jarvis/cross-system-scale-contract';
 
-export const AGNI_OPERATOR_QUERY_PATH =
-  '/api/internal/agni/operator-query' as const;
-export const AGNI_OPERATOR_QUERY_REQUEST_PROTOCOL =
-  'qfj.agni.operator-query.v1' as const;
-export const AGNI_OPERATOR_QUERY_RESPONSE_PROTOCOL =
-  'qfj.agni.operator-query.response.v1' as const;
+export const AGNI_OPERATOR_QUERY_PATH = '/api/internal/agni/operator-query' as const;
+export const AGNI_OPERATOR_QUERY_REQUEST_PROTOCOL = 'qfj.agni.operator-query.v1' as const;
+export const AGNI_OPERATOR_QUERY_RESPONSE_PROTOCOL = 'qfj.agni.operator-query.response.v1' as const;
 
 const MAX_BODY_BYTES = 4096;
 const MAX_QUERY_CHARS = 500;
 
 export type AgniOperatorQueryVerification =
-  | Readonly<{ ok: true; metadata: QfjScaleMetadataV1 }>
-  | Readonly<{ ok: false }>;
+  Readonly<{ ok: true; metadata: QfjScaleMetadataV1 }> | Readonly<{ ok: false }>;
 
-export function headersToRecord(
-  headers: Headers,
-): Readonly<Record<string, string>> {
+export function headersToRecord(headers: Headers): Readonly<Record<string, string>> {
   const output: Record<string, string> = {};
   for (const [key, value] of headers.entries()) output[key.toLowerCase()] = value;
   return Object.freeze(output);
@@ -35,10 +29,7 @@ export function verifyAgniOperatorQuery(input: {
   readonly verificationKeys: readonly QfjScaleVerificationKey[];
   readonly nowMs?: number;
 }): AgniOperatorQueryVerification {
-  if (
-    input.rawBody.byteLength < 2 ||
-    input.rawBody.byteLength > MAX_BODY_BYTES
-  ) {
+  if (input.rawBody.byteLength < 2 || input.rawBody.byteLength > MAX_BODY_BYTES) {
     return Object.freeze({ ok: false });
   }
   const verified = verifyQfjScaleRequest({
@@ -58,10 +49,7 @@ export function verifyAgniOperatorQuery(input: {
     return Object.freeze({ ok: false });
   }
   const keyId = input.headers[QFJ_SCALE_HEADERS.keyId];
-  if (
-    !keyId ||
-    !input.verificationKeys.some((entry) => entry.keyId === keyId)
-  ) {
+  if (!keyId || !input.verificationKeys.some((entry) => entry.keyId === keyId)) {
     return Object.freeze({ ok: false });
   }
   return Object.freeze({ ok: true, metadata: verified.metadata });
