@@ -46,7 +46,7 @@ const SESSION_COOKIE_NAMES: readonly string[] = Object.freeze([
 ]);
 
 export function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  return PUBLIC_PATHS.includes(pathname);
 }
 
 export function isApiPath(pathname: string): boolean {
