@@ -29,6 +29,7 @@ OS_SLOT="$ROOT/deploy/phase15/compose.jarvis-os-slot.yml"
 GATEWAY_BASE="$ROOT/deploy/quickfurno-gateway/compose.production.yml"
 GATEWAY_REGISTRY="$ROOT/deploy/quickfurno-gateway/compose.registry.yml"
 GATEWAY_COORDINATION="$ROOT/deploy/quickfurno-gateway/compose.coordination.yml"
+GATEWAY_INGRESS="$ROOT/deploy/quickfurno-gateway/compose.ingress.yml"
 GATEWAY_OBSERVABILITY="$ROOT/deploy/quickfurno-gateway/compose.observability.yml"
 WORKER_BASE_GROQ="$ROOT/deploy/quickfurno-worker/compose.production.yml"
 WORKER_BASE_OPENAI="$ROOT/deploy/quickfurno-worker/compose.openai.production.yml"
@@ -142,8 +143,8 @@ roll_gateway(){
   verify_image "$ref" "$sha"
   env QFJ_GATEWAY_IMAGE_TAG="$sha" QFJ_GATEWAY_IMAGE_REF="$ref" \
     docker compose -p qf-jarvis-gateway \
-      -f "$GATEWAY_BASE" -f "$GATEWAY_REGISTRY" -f "$GATEWAY_COORDINATION" -f "$GATEWAY_OBSERVABILITY" up -d quickfurno-gateway
-  id="$(env QFJ_GATEWAY_IMAGE_TAG="$sha" QFJ_GATEWAY_IMAGE_REF="$ref" docker compose -p qf-jarvis-gateway -f "$GATEWAY_BASE" -f "$GATEWAY_REGISTRY" -f "$GATEWAY_COORDINATION" -f "$GATEWAY_OBSERVABILITY" ps -q quickfurno-gateway)"
+      -f "$GATEWAY_BASE" -f "$GATEWAY_REGISTRY" -f "$GATEWAY_COORDINATION" -f "$GATEWAY_INGRESS" -f "$GATEWAY_OBSERVABILITY" up -d quickfurno-gateway
+  id="$(env QFJ_GATEWAY_IMAGE_TAG="$sha" QFJ_GATEWAY_IMAGE_REF="$ref" docker compose -p qf-jarvis-gateway -f "$GATEWAY_BASE" -f "$GATEWAY_REGISTRY" -f "$GATEWAY_COORDINATION" -f "$GATEWAY_INGRESS" -f "$GATEWAY_OBSERVABILITY" ps -q quickfurno-gateway)"
   [[ -n "$id" ]] || die "gateway container missing"
   status=unknown
   for _ in $(seq 1 45); do
