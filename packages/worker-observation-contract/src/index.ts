@@ -126,7 +126,7 @@ export const quickFurnoWorkerObservationV3Schema = z
     revision: z.string().regex(/^[0-9a-f]{40}$/u),
     runtimeId: ref,
     state: z.enum(['HEALTHY', 'DEGRADED', 'DISABLED']),
-    providerMode: z.literal('GROQ_ONLY'),
+    providerMode: z.enum(['GROQ_ONLY', 'OPENAI_LUNA_SOL']),
     knowledge: knowledgeModeSchema,
     spool: spoolSchema,
     outcomes: outcomesSchema,
