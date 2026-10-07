@@ -213,9 +213,6 @@ describe('secret containment in application source', () => {
       "AGNI_OPERATOR_INGRESS_CONFIG_PATH_VAR = 'QFJ_JOS_AGNI_OPERATOR_INGRESS_CONFIG_FILE'",
     );
     expect(loader).toContain(
-      "AGNI_OPERATOR_INGRESS_CONFIG_PATH_VAR = 'QFJ_JOS_AGNI_OPERATOR_INGRESS_CONFIG_FILE'",
-    );
-    expect(loader).toContain(
       "RELEASE_ASSURANCE_OBSERVATION_PATH_VAR = 'QFJ_RELEASE_ASSURANCE_OBSERVATION_FILE'",
     );
     expect(loader).toContain("LIVEKIT_CONFIG_PATH_VAR = 'QFJ_JOS_LIVEKIT_CONFIG_FILE'");
