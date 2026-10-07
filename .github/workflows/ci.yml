@@ -167,7 +167,13 @@ jobs:
       # The event-backbone integration tests run here, against the PostgreSQL service
       # above. They fail rather than skip if DATABASE_URL is absent.
       - name: Run quality gate
-        run: pnpm check
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec prettier --write             apps/jarvis-os/src/server/auth/config/agni-operator-ingress-schema.ts             apps/jarvis-os/src/server/operator/agni-operator-query.ts
+          echo "=== TEMP FORMATTER DIFF ==="
+          git --no-pager diff --             apps/jarvis-os/src/server/auth/config/agni-operator-ingress-schema.ts             apps/jarvis-os/src/server/operator/agni-operator-query.ts
+          exit 1
 
       # Smoke the large-corpus benchmark path itself on the same pgvector service. This is not a
       # production capacity claim; the production runbook requires a separately recorded machine /
