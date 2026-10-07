@@ -30,9 +30,14 @@ function walk(dir: string): string[] {
 }
 
 describe('proxy route classification', () => {
-  it('treats only the login page and login POST as public', () => {
+  it('treats only reviewed unauthenticated entry points as public', () => {
     expect(isPublicPath('/login')).toBe(true);
     expect(isPublicPath('/api/auth/login')).toBe(true);
+    // The AGNI route is exempt from browser-session auth only because the route itself
+    // requires a current-version signed Ed25519 machine request and rejects legacy calls.
+    expect(isPublicPath('/api/internal/agni/operator-query')).toBe(true);
+    expect(isPublicPath('/api/internal/agni/operator-query/extra')).toBe(false);
+    expect(isPublicPath('/login/extra')).toBe(false);
   });
 
   it('protects every operator page and the snapshot API by default', () => {
@@ -205,6 +210,9 @@ describe('secret containment in application source', () => {
     expect(loader).toContain("CORE_COMMAND_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_COMMAND_CONFIG_FILE'");
     expect(loader).toContain("AGNI_CONFIG_PATH_VAR = 'QFJ_JOS_AGNI_CONFIG_FILE'");
     expect(loader).toContain(
+      "AGNI_OPERATOR_INGRESS_CONFIG_PATH_VAR = 'QFJ_JOS_AGNI_OPERATOR_INGRESS_CONFIG_FILE'",
+    );
+    expect(loader).toContain(
       "RELEASE_ASSURANCE_OBSERVATION_PATH_VAR = 'QFJ_RELEASE_ASSURANCE_OBSERVATION_FILE'",
     );
     expect(loader).toContain("LIVEKIT_CONFIG_PATH_VAR = 'QFJ_JOS_LIVEKIT_CONFIG_FILE'");
@@ -213,7 +221,7 @@ describe('secret containment in application source', () => {
     expect(loader).toContain("CONFIG_SCHEMA_VERSION_VAR = 'QFJ_CONFIG_SCHEMA_VERSION'");
     expect(loader).toContain("SERVICE_ID_VAR = 'QFJ_SERVICE_ID'");
     const envReads = loader.match(/process\.env(?:\[|\.)/gu) ?? [];
-    expect(envReads).toHaveLength(13);
+    expect(envReads).toHaveLength(14);
   });
 
   it('imports node:fs only in the auth config loader', () => {

@@ -66,6 +66,7 @@ export const QFJ_SCALE_ACTORS = [
   'qf-jarvis-os',
   'qf-agni-control-plane',
   'qf-agni-action-broker',
+  'qf-agni-operator-gateway',
   'RIYA',
   'ANISHA',
   'AAROHI',

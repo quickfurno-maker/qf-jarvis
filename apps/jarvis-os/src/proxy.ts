@@ -32,7 +32,12 @@ import type { NextRequest } from 'next/server';
  */
 
 /** Paths reachable without a session. Everything not listed here is protected by default. */
-const PUBLIC_PATHS: readonly string[] = Object.freeze(['/login', '/api/auth/login']);
+const PUBLIC_PATHS: readonly string[] = Object.freeze([
+  '/login',
+  '/api/auth/login',
+  // M2M-only ingress: the route performs strict signed Ed25519 verification itself.
+  '/api/internal/agni/operator-query',
+]);
 
 /** Cookie names, duplicated deliberately: the proxy must not import the server-only auth modules. */
 const SESSION_COOKIE_NAMES: readonly string[] = Object.freeze([
@@ -41,7 +46,7 @@ const SESSION_COOKIE_NAMES: readonly string[] = Object.freeze([
 ]);
 
 export function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  return PUBLIC_PATHS.includes(pathname);
 }
 
 export function isApiPath(pathname: string): boolean {
