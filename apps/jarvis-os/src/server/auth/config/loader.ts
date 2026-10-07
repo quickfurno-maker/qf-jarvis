@@ -2,6 +2,8 @@ import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
 
 import { AuthFailure } from '../errors';
 
+import { agniOperatorIngressConfigV1Schema } from './agni-operator-ingress-schema';
+import type { AgniOperatorIngressConfigV1 } from './agni-operator-ingress-schema';
 import { coreReadConfigV1Schema } from './core-read-schema';
 import type { CoreReadConfigV1 } from './core-read-schema';
 import { liveKitOperatorConfigV1Schema } from './livekit-schema';
@@ -39,6 +41,7 @@ export const AGENT_FLOW_TRACE_PATH_VAR = 'QFJ_AGENT_FLOW_TRACE_FILE';
 export const CORE_READ_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_READ_CONFIG_FILE';
 export const CORE_COMMAND_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_COMMAND_CONFIG_FILE';
 export const AGNI_CONFIG_PATH_VAR = 'QFJ_JOS_AGNI_CONFIG_FILE';
+export const AGNI_OPERATOR_INGRESS_CONFIG_PATH_VAR = 'QFJ_JOS_AGNI_OPERATOR_INGRESS_CONFIG_FILE';
 export const RELEASE_ASSURANCE_OBSERVATION_PATH_VAR = 'QFJ_RELEASE_ASSURANCE_OBSERVATION_FILE';
 export const LIVEKIT_CONFIG_PATH_VAR = 'QFJ_JOS_LIVEKIT_CONFIG_FILE';
 export const RELEASE_SHA_VAR = 'QFJ_JOS_RELEASE_SHA';
@@ -73,6 +76,11 @@ export function readCoreCommandConfigPathFromEnvironment(): string | undefined {
 
 export function readAgniConfigPathFromEnvironment(): string | undefined {
   const value = process.env[AGNI_CONFIG_PATH_VAR];
+  return value === undefined || value.trim() === '' ? undefined : value;
+}
+
+export function readAgniOperatorIngressConfigPathFromEnvironment(): string | undefined {
+  const value = process.env[AGNI_OPERATOR_INGRESS_CONFIG_PATH_VAR];
   return value === undefined || value.trim() === '' ? undefined : value;
 }
 
@@ -124,6 +132,25 @@ export function loadCoreCommandConfig(options: LoaderOptions = {}): CoreReadConf
 export function loadAgniConfig(options: LoaderOptions = {}): CoreReadConfigV1 {
   const path = options.path ?? readAgniConfigPathFromEnvironment();
   return loadCoreTransportConfig(path, options.platform, 'agni');
+}
+
+export function loadAgniOperatorIngressConfig(
+  options: LoaderOptions = {},
+): AgniOperatorIngressConfigV1 {
+  const path = options.path ?? readAgniOperatorIngressConfigPathFromEnvironment();
+  if (path === undefined || path.trim() === '') {
+    throw new TypeError('agni-operator-ingress-config-path-unset');
+  }
+  const raw = readBoundedRegularFile(path, options.platform ?? process.platform);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new TypeError('agni-operator-ingress-config-malformed');
+  }
+  const result = agniOperatorIngressConfigV1Schema.safeParse(parsed);
+  if (!result.success) throw new TypeError('agni-operator-ingress-config-invalid');
+  return result.data;
 }
 
 export function loadLiveKitOperatorConfig(options: LoaderOptions = {}): LiveKitOperatorConfigV1 {
