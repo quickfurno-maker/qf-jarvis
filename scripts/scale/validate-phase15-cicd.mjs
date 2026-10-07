@@ -101,9 +101,13 @@ add(
 );
 add(
   'Phase 15 preserves Phase 14 observability on gateway and worker replacements',
-  controller.includes('GATEWAY_OBSERVABILITY="$ROOT/deploy/quickfurno-gateway/compose.observability.yml"') &&
+  controller.includes(
+    'GATEWAY_OBSERVABILITY="$ROOT/deploy/quickfurno-gateway/compose.observability.yml"',
+  ) &&
     controller.includes('-f "$GATEWAY_OBSERVABILITY"') &&
-    controller.includes('WORKER_OBSERVABILITY="$ROOT/deploy/quickfurno-worker/compose.observability.yml"') &&
+    controller.includes(
+      'WORKER_OBSERVABILITY="$ROOT/deploy/quickfurno-worker/compose.observability.yml"',
+    ) &&
     controller.includes('-f "$WORKER_OBSERVABILITY"'),
 );
 add(
