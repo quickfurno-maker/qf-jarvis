@@ -13,7 +13,7 @@ import {
   verifyAgniOperatorQuery,
 } from './agni-operator-query';
 
-function fixture(actor: 'qf-agni-control-plane' | 'qf-jarvis' = 'qf-agni-control-plane') {
+function fixture(actor: 'qf-agni-operator-gateway' | 'qf-jarvis' = 'qf-agni-operator-gateway') {
   const { privateKey, publicKey } = generateKeyPairSync('ed25519');
   const body = Buffer.from(
     JSON.stringify({
