@@ -8,8 +8,10 @@ import {
 } from '@qf-jarvis/cross-system-scale-contract';
 
 export const AGNI_OPERATOR_QUERY_PATH = '/api/internal/agni/operator-query' as const;
-export const AGNI_OPERATOR_QUERY_REQUEST_PROTOCOL = 'qfj.agni.operator-query.v1' as const;
-export const AGNI_OPERATOR_QUERY_RESPONSE_PROTOCOL = 'qfj.agni.operator-query.response.v1' as const;
+export const AGNI_OPERATOR_QUERY_REQUEST_PROTOCOL =
+  'qfj.agni.operator-query.v1' as const;
+export const AGNI_OPERATOR_QUERY_RESPONSE_PROTOCOL =
+  'qfj.agni.operator-query.response.v1' as const;
 
 const MAX_BODY_BYTES = 4096;
 const MAX_QUERY_CHARS = 500;
@@ -18,7 +20,9 @@ export type AgniOperatorQueryVerification =
   | Readonly<{ ok: true; metadata: QfjScaleMetadataV1 }>
   | Readonly<{ ok: false }>;
 
-export function headersToRecord(headers: Headers): Readonly<Record<string, string>> {
+export function headersToRecord(
+  headers: Headers,
+): Readonly<Record<string, string>> {
   const output: Record<string, string> = {};
   for (const [key, value] of headers.entries()) output[key.toLowerCase()] = value;
   return Object.freeze(output);
