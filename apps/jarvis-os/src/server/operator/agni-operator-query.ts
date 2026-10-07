@@ -35,7 +35,10 @@ export function verifyAgniOperatorQuery(input: {
   readonly verificationKeys: readonly QfjScaleVerificationKey[];
   readonly nowMs?: number;
 }): AgniOperatorQueryVerification {
-  if (input.rawBody.byteLength < 2 || input.rawBody.byteLength > MAX_BODY_BYTES) {
+  if (
+    input.rawBody.byteLength < 2 ||
+    input.rawBody.byteLength > MAX_BODY_BYTES
+  ) {
     return Object.freeze({ ok: false });
   }
   const verified = verifyQfjScaleRequest({
@@ -55,7 +58,10 @@ export function verifyAgniOperatorQuery(input: {
     return Object.freeze({ ok: false });
   }
   const keyId = input.headers[QFJ_SCALE_HEADERS.keyId];
-  if (!keyId || !input.verificationKeys.some((entry) => entry.keyId === keyId)) {
+  if (
+    !keyId ||
+    !input.verificationKeys.some((entry) => entry.keyId === keyId)
+  ) {
     return Object.freeze({ ok: false });
   }
   return Object.freeze({ ok: true, metadata: verified.metadata });
