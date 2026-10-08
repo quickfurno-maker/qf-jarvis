@@ -11,5 +11,5 @@ for path in "$CONTROL_ROOT" "$CONTROLLER"; do
   [[ "${perms:5:1}" != "w" && "${perms:8:1}" != "w" ]] || die "$path must not be group/world writable"
 done
 [[ -x "$CONTROLLER" ]] || die "controller is not executable"
-case "${1:-}" in stage|promote|rollback|status) ;; *) die "command not allowlisted" ;; esac
+case "${1:-}" in stage|promote|rollback|reconcile-bootstrap|status) ;; *) die "command not allowlisted" ;; esac
 exec "$CONTROLLER" "$@"
