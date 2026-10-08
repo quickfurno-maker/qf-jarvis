@@ -5,7 +5,7 @@ services:
     image: valkey/valkey@sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507
     container_name: qf-jarvis-valkey
     restart: unless-stopped
-    init: true
+    user: '999:1000'
     read_only: true
     command:
       - valkey-server
@@ -20,7 +20,7 @@ services:
       - --maxmemory-policy
       - volatile-ttl
     tmpfs:
-      - /data:rw,noexec,nosuid,nodev,size=320m
+      - /data:rw,noexec,nosuid,nodev,size=320m,uid=999,gid=1000,mode=0700
     security_opt:
       - no-new-privileges:true
     cap_drop:
