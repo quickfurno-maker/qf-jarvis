@@ -122,6 +122,17 @@ add(
     !bootstrap.includes('docker pull traefik'),
 );
 add(
+  'bootstrap reconcile is fail-closed and restores legacy routing before slot cleanup',
+  controller.includes('reconcile-bootstrap) reconcile_bootstrap') &&
+    controller.includes('bootstrap reconcile requires null release state') &&
+    controller.includes('legacy_runtime_healthy') &&
+    controller.includes('bootstrap-reconcile-route.yml') &&
+    controller.includes("grep -qi '^x-qfj-release:'") &&
+    controller.includes('legacy route did not recover; Phase-15 route restored') &&
+    controller.includes('docker stop qf-jarvis-os-blue qf-jarvis-os-green') &&
+    controller.includes('QFJ_PHASE15_BOOTSTRAP_RECONCILED route=legacy state=null'),
+);
+add(
   'durable consumers are rolling, not dual-active blue/green',
   controller.includes(
     'Stateful/durable consumers deliberately do NOT run blue/green concurrently',
@@ -178,10 +189,11 @@ add(
     schema.includes('"automaticProductionApply": { "const": false }'),
 );
 add(
-  'root wrapper refuses mutable release-control code',
+  'root wrapper refuses mutable release-control code and exposes only governed commands',
   wrapper.includes("CONTROL_ROOT='/srv/qf-jarvis/release-control'") &&
     wrapper.includes('must be root-owned') &&
-    wrapper.includes('group/world writable'),
+    wrapper.includes('group/world writable') &&
+    wrapper.includes('stage|promote|rollback|reconcile-bootstrap|status'),
 );
 add(
   'AGNI/OpenAI have no deployment-host authority',

@@ -18,6 +18,7 @@ PREVIOUS_MANIFEST="$STATE_ROOT/previous-manifest.json"
 LOCK_FILE="$STATE_ROOT/release.lock"
 SWITCH_ADAPTER="${QFJ_PHASE15_SWITCH_ADAPTER:-/usr/local/sbin/qfj-phase15-switch}"
 PUBLIC_SMOKE_URL="${QFJ_PHASE15_PUBLIC_SMOKE_URL:-https://jarvis.quickfurno.in/login}"
+TRAEFIK_DYNAMIC_FILE="${QFJ_PHASE15_TRAEFIK_DYNAMIC_FILE:-/docker/traefik/dynamic/jarvis-phase15.yml}"
 REPO_DIR="${QFJ_REPO_DIR:-/srv/qf-jarvis/repo}"
 WORKER_PROVIDER_MODE="${QFJ_WORKER_PROVIDER_MODE:-OPENAI_LUNA_SOL}"
 WORKER_KNOWLEDGE_MODE="${QFJ_WORKER_KNOWLEDGE_MODE:-DISABLED}"
@@ -141,6 +142,51 @@ switch_traffic(){
 public_smoke(){
   [[ "$PUBLIC_SMOKE_URL" == https://* ]] || die "public smoke must use HTTPS"
   curl --fail --silent --show-error --location --max-time 10 --retry 2 "$PUBLIC_SMOKE_URL" >/dev/null
+}
+
+legacy_runtime_healthy(){
+  [[ "$(docker inspect qf-jarvis-os --format '{{.State.Health.Status}}' 2>/dev/null || true)" == "healthy" ]] || return 1
+  [[ "$(docker inspect qf-jarvis-gateway --format '{{.State.Health.Status}}' 2>/dev/null || true)" == "healthy" ]] || return 1
+  [[ "$(docker inspect qf-jarvis-whatsapp-worker --format '{{.State.Running}}' 2>/dev/null || true)" == "true" ]] || return 1
+  docker logs qf-jarvis-whatsapp-worker 2>&1 | grep -q 'qfj-whatsapp-worker READY'
+}
+
+reconcile_bootstrap(){
+  local active backup headers ok
+  active="$(state_value activeSlot)"
+  [[ -z "$active" ]] || die "bootstrap reconcile requires null release state"
+  [[ ! -f "$CURRENT_MANIFEST" && ! -f "$PREVIOUS_MANIFEST" ]] ||
+    die "bootstrap reconcile refuses signed current/previous state"
+  [[ -f "$TRAEFIK_DYNAMIC_FILE" && ! -L "$TRAEFIK_DYNAMIC_FILE" ]] ||
+    die "bootstrap reconcile route is absent"
+  grep -Eq "127\\.0\\.0\\.1:(3201|3202)" "$TRAEFIK_DYNAMIC_FILE" ||
+    die "bootstrap reconcile route is not a Phase-15 slot"
+  legacy_runtime_healthy || die "legacy Jarvis runtime is not healthy"
+
+  backup="$STATE_ROOT/bootstrap-reconcile-route.yml"
+  install -o 0 -g 0 -m 0600 "$TRAEFIK_DYNAMIC_FILE" "$backup"
+  rm -f "$TRAEFIK_DYNAMIC_FILE"
+
+  ok=0
+  for _ in $(seq 1 30); do
+    headers="$(mktemp "$STATE_ROOT/.bootstrap-headers.XXXXXX")"
+    if curl -fsS -D "$headers" -o /dev/null --max-time 10 "$PUBLIC_SMOKE_URL" &&
+       ! tr -d '\r' < "$headers" | grep -qi '^x-qfj-release:'; then
+      ok=1
+      rm -f "$headers"
+      break
+    fi
+    rm -f "$headers"
+    sleep 2
+  done
+  if [[ "$ok" != "1" ]]; then
+    install -o 0 -g 0 -m 0644 "$backup" "$TRAEFIK_DYNAMIC_FILE"
+    die "legacy route did not recover; Phase-15 route restored"
+  fi
+
+  docker stop qf-jarvis-os-blue qf-jarvis-os-green >/dev/null 2>&1 || true
+  rm -f "$STAGED_MANIFEST"
+  echo "QFJ_PHASE15_BOOTSTRAP_RECONCILED route=legacy state=null"
 }
 
 ensure_coordination(){
@@ -353,6 +399,7 @@ case "$COMMAND" in
   stage) stage ;;
   promote) promote ;;
   rollback) rollback ;;
+  reconcile-bootstrap) reconcile_bootstrap ;;
   status) [[ -f "$STATE_FILE" ]] && cat "$STATE_FILE" || echo '{"protocol":"qf.release.state.v1","activeSlot":null}' ;;
-  *) die "usage: release.sh <stage manifest|promote|rollback|status>" ;;
+  *) die "usage: release.sh <stage manifest|promote|rollback|reconcile-bootstrap|status>" ;;
 esac
