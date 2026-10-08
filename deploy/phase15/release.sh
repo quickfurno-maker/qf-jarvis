@@ -33,6 +33,8 @@ GATEWAY_REGISTRY="$ROOT/deploy/quickfurno-gateway/compose.registry.yml"
 GATEWAY_COORDINATION="$ROOT/deploy/quickfurno-gateway/compose.coordination.yml"
 GATEWAY_INGRESS="$ROOT/deploy/quickfurno-gateway/compose.ingress.yml"
 GATEWAY_OBSERVABILITY="$ROOT/deploy/quickfurno-gateway/compose.observability.yml"
+GATEWAY_DATABASE_CONFIG="/srv/qf-jarvis/secrets/qf-jarvis-gateway-database.json"
+GATEWAY_DATABASE_CA="/srv/qf-jarvis/secrets/postgres-ca.pem"
 WORKER_BASE_GROQ="$ROOT/deploy/quickfurno-worker/compose.production.yml"
 WORKER_BASE_OPENAI="$ROOT/deploy/quickfurno-worker/compose.openai.production.yml"
 WORKER_REGISTRY="$ROOT/deploy/quickfurno-worker/compose.registry.yml"
@@ -206,8 +208,51 @@ ensure_coordination(){
   docker network inspect qf-jarvis-coordination >/dev/null 2>&1 || die "coordination network missing"
 }
 
+preflight_gateway_database_secrets(){
+  [[ -f "$GATEWAY_DATABASE_CONFIG" && ! -L "$GATEWAY_DATABASE_CONFIG" && -s "$GATEWAY_DATABASE_CONFIG" ]] || {
+    echo "QFJ_PHASE15_CONSUMER_REFUSED: gateway database config source must be a non-empty regular file" >&2
+    return 1
+  }
+  [[ -f "$GATEWAY_DATABASE_CA" && ! -L "$GATEWAY_DATABASE_CA" && -s "$GATEWAY_DATABASE_CA" ]] || {
+    echo "QFJ_PHASE15_CONSUMER_REFUSED: gateway database CA source must be a non-empty regular file" >&2
+    return 1
+  }
+  node - "$GATEWAY_DATABASE_CONFIG" <<'NODE' || return 1
+const fs = require("node:fs");
+const path = process.argv[2];
+let value;
+try {
+  value = JSON.parse(fs.readFileSync(path, "utf8"));
+} catch {
+  process.stderr.write("QFJ_PHASE15_CONSUMER_REFUSED: gateway database config JSON invalid\n");
+  process.exit(1);
+}
+const ok =
+  value &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  typeof value.connectionString === "string" &&
+  value.connectionString.length > 0 &&
+  value.tls &&
+  typeof value.tls === "object" &&
+  value.tls.mode === "verify-full" &&
+  value.tls.caFile === "/run/secrets/postgres-ca.pem" &&
+  (value.maxConnections === undefined ||
+    (Number.isInteger(value.maxConnections) && value.maxConnections >= 1 && value.maxConnections <= 3));
+if (!ok) {
+  process.stderr.write("QFJ_PHASE15_CONSUMER_REFUSED: gateway database config shape invalid\n");
+  process.exit(1);
+}
+NODE
+  openssl x509 -in "$GATEWAY_DATABASE_CA" -noout -text 2>/dev/null | grep -q 'CA:TRUE' || {
+    echo "QFJ_PHASE15_CONSUMER_REFUSED: gateway database CA bundle invalid" >&2
+    return 1
+  }
+}
+
 roll_gateway(){
   local manifest="$1" sha ref id status
+  preflight_gateway_database_secrets || return 1
   sha="$(manifest_value "$manifest" sha)"
   ref="$(manifest_value "$manifest" image:jarvis-gateway)"
   verify_image "$ref" "$sha" || return 1

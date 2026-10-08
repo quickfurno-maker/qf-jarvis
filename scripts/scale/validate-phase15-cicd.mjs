@@ -141,6 +141,17 @@ add(
     controller.includes('roll_worker_disabled "$STAGED_MANIFEST"'),
 );
 add(
+  'gateway database secrets are preflighted before container replacement',
+  controller.includes('preflight_gateway_database_secrets') &&
+    controller.includes('gateway database config source must be a non-empty regular file') &&
+    controller.includes('gateway database CA source must be a non-empty regular file') &&
+    controller.includes('gateway database config shape invalid') &&
+    controller.includes('value.maxConnections <= 3') &&
+    controller.includes('gateway database CA bundle invalid') &&
+    controller.indexOf('preflight_gateway_database_secrets || return 1') <
+      controller.indexOf('verify_image "$ref" "$sha" || return 1'),
+);
+add(
   'Phase 15 preserves Phase 14 observability on gateway and worker replacements',
   controller.includes('GATEWAY_INGRESS="$ROOT/deploy/quickfurno-gateway/compose.ingress.yml"') &&
     controller.includes('-f "$GATEWAY_INGRESS"') &&
