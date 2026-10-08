@@ -86,6 +86,7 @@ jobs:
           GATEWAY_REF: ${{ inputs.gateway_image_ref }}
           WORKER_REF: ${{ inputs.worker_image_ref }}
           REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
