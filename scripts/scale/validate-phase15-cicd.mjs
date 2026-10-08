@@ -92,7 +92,7 @@ add(
 add(
   'Jarvis OS inactive slot is private, loopback-only and health-proven before switch',
   slot.includes("traefik.enable: 'false'") &&
-    slot.includes("127.0.0.1:${QFJ_PHASE15_HOST_PORT") &&
+    slot.includes('127.0.0.1:${QFJ_PHASE15_HOST_PORT') &&
     controller.includes('blue) host_port=3201') &&
     controller.includes('green) host_port=3202') &&
     controller.includes('QFJ_PHASE15_HOST_PORT="$host_port"') &&
