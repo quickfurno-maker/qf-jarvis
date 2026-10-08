@@ -97,10 +97,15 @@ target_slot(){
 
 os_compose(){
   local slot="$1" manifest="$2"; shift 2
-  local sha ref
+  local sha ref host_port
   sha="$(manifest_value "$manifest" sha)"
   ref="$(manifest_value "$manifest" image:jarvis-os)"
-  env JOS_IMAGE_TAG="$sha" JOS_IMAGE_REF="$ref" QFJ_PHASE15_SLOT="$slot" \
+  case "$slot" in
+    blue) host_port=3201 ;;
+    green) host_port=3202 ;;
+    *) die "invalid Jarvis OS slot: $slot" ;;
+  esac
+  env JOS_IMAGE_TAG="$sha" JOS_IMAGE_REF="$ref" QFJ_PHASE15_SLOT="$slot" QFJ_PHASE15_HOST_PORT="$host_port" \
     docker compose -p "qf-jarvis-os-$slot" -f "$OS_BASE" -f "$OS_REGISTRY" -f "$OS_SLOT" "$@"
 }
 
