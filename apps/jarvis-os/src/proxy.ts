@@ -35,8 +35,9 @@ import type { NextRequest } from 'next/server';
 const PUBLIC_PATHS: readonly string[] = Object.freeze([
   '/login',
   '/api/auth/login',
-  // M2M-only ingress: the route performs strict signed Ed25519 verification itself.
+  // M2M-only ingress: these routes perform strict signed Ed25519 verification themselves.
   '/api/internal/agni/operator-query',
+  '/api/internal/agni/owner-snapshot',
 ]);
 
 /** Cookie names, duplicated deliberately: the proxy must not import the server-only auth modules. */

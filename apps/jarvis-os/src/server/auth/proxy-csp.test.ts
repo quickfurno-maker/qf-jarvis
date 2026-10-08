@@ -36,7 +36,9 @@ describe('proxy route classification', () => {
     // The AGNI route is exempt from browser-session auth only because the route itself
     // requires a current-version signed Ed25519 machine request and rejects legacy calls.
     expect(isPublicPath('/api/internal/agni/operator-query')).toBe(true);
+    expect(isPublicPath('/api/internal/agni/owner-snapshot')).toBe(true);
     expect(isPublicPath('/api/internal/agni/operator-query/extra')).toBe(false);
+    expect(isPublicPath('/api/internal/agni/owner-snapshot/extra')).toBe(false);
     expect(isPublicPath('/login/extra')).toBe(false);
   });
 
