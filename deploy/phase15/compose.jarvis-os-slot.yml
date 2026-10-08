@@ -1,5 +1,7 @@
 services:
   jarvis-os:
     container_name: 'qf-jarvis-os-${QFJ_PHASE15_SLOT:?QFJ_PHASE15_SLOT must be blue or green}'
+    ports:
+      - '127.0.0.1:${QFJ_PHASE15_HOST_PORT:?QFJ_PHASE15_HOST_PORT must be the private blue/green host port}:3000'
     labels:
       traefik.enable: 'false'

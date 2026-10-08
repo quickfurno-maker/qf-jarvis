@@ -10,7 +10,9 @@ const [
   rollback,
   controller,
   slot,
+  switcher,
   wrapper,
+  bootstrap,
   schema,
   docs,
   workerDisable,
@@ -21,7 +23,9 @@ const [
   read('.github/workflows/phase15-rollback.yml'),
   read('deploy/phase15/release.sh'),
   read('deploy/phase15/compose.jarvis-os-slot.yml'),
+  read('deploy/phase15/qfj-phase15-switch'),
   read('deploy/phase15/qfj-phase15-release.wrapper'),
+  read('deploy/phase15/bootstrap-production-host.sh'),
   read('contracts/qf-release-phase15-v1.schema.json'),
   read('docs/operations/phase15-immutable-cicd-bluegreen.md'),
   read('deploy/quickfurno-worker/disable.sh'),
@@ -86,10 +90,36 @@ add(
     promote.includes('PROMOTE_EXACT_JARVIS_DIGESTS'),
 );
 add(
-  'Jarvis OS inactive slot is private and health-proven before switch',
+  'Jarvis OS inactive slot is private, loopback-only and health-proven before switch',
   slot.includes("traefik.enable: 'false'") &&
+    slot.includes('127.0.0.1:${QFJ_PHASE15_HOST_PORT') &&
+    controller.includes('blue) host_port=3201') &&
+    controller.includes('green) host_port=3202') &&
+    controller.includes('QFJ_PHASE15_HOST_PORT="$host_port"') &&
     controller.indexOf('wait_os "$target" "$STAGED_MANIFEST"') <
       controller.indexOf('switch_traffic "$target" "$STAGED_MANIFEST"'),
+);
+add(
+  'Traefik switch is atomic, Cloudflare-only and release-identity proven',
+  switcher.includes('--providers.file.directory=/dynamic') &&
+    switcher.includes('127.0.0.1:$HOST_PORT') &&
+    switcher.includes('qf-jarvis-phase15-cloudflare') &&
+    switcher.includes('X-QFJ-Release') &&
+    switcher.includes('EXPECTED_HEADER="x-qfj-release: $SOURCE_SHA"') &&
+    switcher.includes('restore') &&
+    switcher.includes('public route did not converge to requested Jarvis release'),
+);
+add(
+  'Jarvis host bootstrap preserves traffic and enables watched dynamic routing without image drift',
+  bootstrap.includes('TRAFFIC_UNCHANGED router=legacy-docker-provider') &&
+    bootstrap.includes('--providers.file.directory=/dynamic') &&
+    bootstrap.includes('--providers.file.watch=true') &&
+    bootstrap.includes('BEFORE_IMAGE=') &&
+    bootstrap.includes('AFTER_IMAGE=') &&
+    bootstrap.includes('Traefik image changed during bootstrap') &&
+    bootstrap.includes('/usr/local/sbin/qfj-phase15-switch') &&
+    bootstrap.includes('QFJ_PHASE15_BOOTSTRAP_READY') &&
+    !bootstrap.includes('docker pull traefik'),
 );
 add(
   'durable consumers are rolling, not dual-active blue/green',

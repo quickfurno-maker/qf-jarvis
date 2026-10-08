@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# Atomic Jarvis OS blue/green Traefik switch.
+# Requires the one-time file-provider seam installed by bootstrap-production-host.sh.
+set -Eeuo pipefail
+umask 077
+
+SLOT="${1:-}"
+CONTAINER_ID="${2:-}"
+SOURCE_SHA="${3:-}"
+TRAEFIK_CONTAINER="${QFJ_PHASE15_TRAEFIK_CONTAINER:-traefik-traefik-1}"
+DYNAMIC_DIR="${QFJ_PHASE15_TRAEFIK_DYNAMIC_DIR:-/docker/traefik/dynamic}"
+TARGET="$DYNAMIC_DIR/jarvis-phase15.yml"
+BACKUP_ROOT="/var/lib/qf-jarvis-phase15-switch"
+
+die(){ echo "QFJ_PHASE15_SWITCH_REFUSED: $1" >&2; exit 1; }
+
+[[ "$(id -u)" -eq 0 ]] || die "must run as root"
+[[ "$SLOT" == "blue" || "$SLOT" == "green" ]] || die "slot must be blue or green"
+[[ "$CONTAINER_ID" =~ ^[0-9a-f]{12,64}$ ]] || die "container id invalid"
+[[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || die "source SHA invalid"
+[[ -d "$DYNAMIC_DIR" && ! -L "$DYNAMIC_DIR" ]] || die "Traefik dynamic directory missing"
+docker inspect "$TRAEFIK_CONTAINER" >/dev/null 2>&1 || die "Traefik container missing"
+
+CMD_JSON="$(docker inspect "$TRAEFIK_CONTAINER" --format '{{json .Config.Cmd}}')"
+[[ "$CMD_JSON" == *"--providers.file.directory=/dynamic"* ]] || die "Traefik file provider not enabled"
+[[ "$CMD_JSON" == *"--providers.file.watch=true"* ]] || die "Traefik file watch not enabled"
+docker inspect "$TRAEFIK_CONTAINER" --format '{{range .Mounts}}{{println .Destination}}{{end}}' |
+  grep -Fx '/dynamic' >/dev/null || die "Traefik dynamic mount missing"
+
+HEALTH="$(docker inspect "$CONTAINER_ID" --format '{{.State.Health.Status}}' 2>/dev/null || true)"
+[[ "$HEALTH" == "healthy" ]] || die "target Jarvis OS container is not healthy"
+[[ "$(docker inspect "$CONTAINER_ID" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" == "$SOURCE_SHA" ]] ||
+  die "target Jarvis OS revision mismatch"
+[[ "$(docker inspect "$CONTAINER_ID" --format '{{ index .Config.Labels "traefik.enable" }}')" == "false" ]] ||
+  die "target Jarvis OS must remain private"
+
+case "$SLOT" in
+  blue) HOST_PORT=3201 ;;
+  green) HOST_PORT=3202 ;;
+esac
+
+BINDING="$(docker inspect "$CONTAINER_ID" --format '{{with index .HostConfig.PortBindings "3000/tcp"}}{{(index . 0).HostIp}}:{{(index . 0).HostPort}}{{end}}')"
+[[ "$BINDING" == "127.0.0.1:$HOST_PORT" ]] || die "target slot loopback binding mismatch"
+[[ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$HOST_PORT/login")" == "200" ]] ||
+  die "target slot local login smoke failed"
+
+install -d -o 0 -g 0 -m 0700 "$BACKUP_ROOT"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+BACKUP="$BACKUP_ROOT/$STAMP"
+if [[ -f "$TARGET" ]]; then
+  install -o 0 -g 0 -m 0600 "$TARGET" "$BACKUP"
+fi
+
+TMP="$(mktemp "$DYNAMIC_DIR/.jarvis-phase15.XXXXXX")"
+cleanup(){ rm -f "$TMP"; }
+trap cleanup EXIT
+
+cat >"$TMP" <<EOF
+http:
+  routers:
+    qf-jarvis-phase15:
+      rule: 'Host(\`jarvis.quickfurno.in\`)'
+      entryPoints:
+        - websecure
+      priority: 1000
+      service: qf-jarvis-phase15
+      middlewares:
+        - qf-jarvis-phase15-cloudflare
+        - qf-jarvis-phase15-ratelimit
+        - qf-jarvis-phase15-hsts
+        - qf-jarvis-phase15-release
+      tls:
+        certResolver: letsencrypt
+    qf-jarvis-phase15-login:
+      rule: 'Host(\`jarvis.quickfurno.in\`) && Path(\`/api/auth/login\`)'
+      entryPoints:
+        - websecure
+      priority: 1100
+      service: qf-jarvis-phase15
+      middlewares:
+        - qf-jarvis-phase15-cloudflare
+        - qf-jarvis-phase15-login-ratelimit
+        - qf-jarvis-phase15-login-buffer
+        - qf-jarvis-phase15-hsts
+        - qf-jarvis-phase15-release
+      tls:
+        certResolver: letsencrypt
+  services:
+    qf-jarvis-phase15:
+      loadBalancer:
+        servers:
+          - url: 'http://127.0.0.1:$HOST_PORT'
+  middlewares:
+    qf-jarvis-phase15-cloudflare:
+      ipAllowList:
+        sourceRange:
+          - 173.245.48.0/20
+          - 103.21.244.0/22
+          - 103.22.200.0/22
+          - 103.31.4.0/22
+          - 141.101.64.0/18
+          - 108.162.192.0/18
+          - 190.93.240.0/20
+          - 188.114.96.0/20
+          - 197.234.240.0/22
+          - 198.41.128.0/17
+          - 162.158.0.0/15
+          - 104.16.0.0/13
+          - 104.24.0.0/14
+          - 172.64.0.0/13
+          - 131.0.72.0/22
+          - '2400:cb00::/32'
+          - '2606:4700::/32'
+          - '2803:f800::/32'
+          - '2405:b500::/32'
+          - '2405:8100::/32'
+          - '2a06:98c0::/29'
+          - '2c0f:f248::/32'
+    qf-jarvis-phase15-ratelimit:
+      rateLimit:
+        average: 30
+        burst: 60
+    qf-jarvis-phase15-login-ratelimit:
+      rateLimit:
+        average: 5
+        period: 1m
+        burst: 5
+    qf-jarvis-phase15-login-buffer:
+      buffering:
+        maxRequestBodyBytes: 8192
+        memRequestBodyBytes: 8192
+    qf-jarvis-phase15-hsts:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: false
+        stsPreload: false
+        forceSTSHeader: false
+    qf-jarvis-phase15-release:
+      headers:
+        customResponseHeaders:
+          X-QFJ-Release: '$SOURCE_SHA'
+EOF
+
+chown 0:0 "$TMP"
+chmod 0644 "$TMP"
+mv -f "$TMP" "$TARGET"
+trap - EXIT
+
+restore(){
+  echo "QFJ_PHASE15_SWITCH_ROLLBACK: restoring prior Traefik route" >&2
+  if [[ -f "$BACKUP" ]]; then
+    install -o 0 -g 0 -m 0644 "$BACKUP" "$TARGET"
+  else
+    rm -f "$TARGET"
+  fi
+}
+
+EXPECTED_HEADER="x-qfj-release: $SOURCE_SHA"
+FOUND=0
+for _ in $(seq 1 30); do
+  if curl -fsS -D - -o /dev/null --max-time 10 https://jarvis.quickfurno.in/login |
+      tr -d '\r' | tr '[:upper:]' '[:lower:]' | grep -Fx "$EXPECTED_HEADER" >/dev/null; then
+    FOUND=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$FOUND" != "1" ]]; then
+  restore
+  sleep 2
+  die "public route did not converge to requested Jarvis release"
+fi
+
+echo "QFJ_PHASE15_SWITCHED slot=$SLOT source=$SOURCE_SHA hostPort=$HOST_PORT"
