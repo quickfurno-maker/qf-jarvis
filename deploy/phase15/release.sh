@@ -26,6 +26,7 @@ WORKER_JEV_MODE="${QFJ_WORKER_JEV_MODE:-DISABLED}"
 OS_BASE="$ROOT/deploy/jarvis-os/compose.production.yml"
 OS_REGISTRY="$ROOT/deploy/jarvis-os/compose.registry.yml"
 OS_SLOT="$ROOT/deploy/phase15/compose.jarvis-os-slot.yml"
+COORDINATION_COMPOSE="$ROOT/deploy/coordination/compose.production.yml"
 GATEWAY_BASE="$ROOT/deploy/quickfurno-gateway/compose.production.yml"
 GATEWAY_REGISTRY="$ROOT/deploy/quickfurno-gateway/compose.registry.yml"
 GATEWAY_COORDINATION="$ROOT/deploy/quickfurno-gateway/compose.coordination.yml"
@@ -34,6 +35,7 @@ GATEWAY_OBSERVABILITY="$ROOT/deploy/quickfurno-gateway/compose.observability.yml
 WORKER_BASE_GROQ="$ROOT/deploy/quickfurno-worker/compose.production.yml"
 WORKER_BASE_OPENAI="$ROOT/deploy/quickfurno-worker/compose.openai.production.yml"
 WORKER_REGISTRY="$ROOT/deploy/quickfurno-worker/compose.registry.yml"
+WORKER_COORDINATION="$ROOT/deploy/quickfurno-worker/compose.coordination.yml"
 WORKER_KNOWLEDGE="$ROOT/deploy/quickfurno-worker/compose.knowledge.yml"
 WORKER_JEV="$ROOT/deploy/quickfurno-worker/compose.jev.yml"
 WORKER_OBSERVABILITY="$ROOT/deploy/quickfurno-worker/compose.observability.yml"
@@ -78,10 +80,10 @@ validate_manifest(){
 
 verify_image(){
   local ref="$1" sha="$2" actual
-  [[ "$ref" =~ @sha256:[0-9a-f]{64}$ ]] || die "mutable image reference refused"
-  docker pull "$ref" >/dev/null
+  [[ "$ref" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "QFJ_PHASE15_IMAGE_REFUSED: mutable image reference" >&2; return 1; }
+  docker pull "$ref" >/dev/null || return 1
   actual="$(docker image inspect "$ref" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
-  [[ "$actual" == "$sha" ]] || die "image revision $actual does not match $sha"
+  [[ "$actual" == "$sha" ]] || { echo "QFJ_PHASE15_IMAGE_REFUSED: image revision $actual does not match $sha" >&2; return 1; }
 }
 
 target_slot(){
@@ -141,25 +143,44 @@ public_smoke(){
   curl --fail --silent --show-error --location --max-time 10 --retry 2 "$PUBLIC_SMOKE_URL" >/dev/null
 }
 
-roll_gateway(){
-  local manifest="$1" sha ref id status
-  sha="$(manifest_value "$manifest" sha)"
-  ref="$(manifest_value "$manifest" image:jarvis-gateway)"
-  verify_image "$ref" "$sha"
-  env QFJ_GATEWAY_IMAGE_TAG="$sha" QFJ_GATEWAY_IMAGE_REF="$ref" \
-    docker compose -p qf-jarvis-gateway \
-      -f "$GATEWAY_BASE" -f "$GATEWAY_REGISTRY" -f "$GATEWAY_COORDINATION" -f "$GATEWAY_INGRESS" -f "$GATEWAY_OBSERVABILITY" up -d quickfurno-gateway
-  id="$(env QFJ_GATEWAY_IMAGE_TAG="$sha" QFJ_GATEWAY_IMAGE_REF="$ref" docker compose -p qf-jarvis-gateway -f "$GATEWAY_BASE" -f "$GATEWAY_REGISTRY" -f "$GATEWAY_COORDINATION" -f "$GATEWAY_INGRESS" -f "$GATEWAY_OBSERVABILITY" ps -q quickfurno-gateway)"
-  [[ -n "$id" ]] || die "gateway container missing"
+ensure_coordination(){
+  local id status
+  [[ -f "$COORDINATION_COMPOSE" ]] || die "coordination compose missing"
+  docker compose -p qf-jarvis-coordination -f "$COORDINATION_COMPOSE" up -d valkey ||
+    die "coordination startup failed"
+  id="$(docker compose -p qf-jarvis-coordination -f "$COORDINATION_COMPOSE" ps -q valkey)"
+  [[ -n "$id" ]] || die "coordination container missing"
   status=unknown
   for _ in $(seq 1 45); do
     status="$(docker inspect "$id" --format '{{.State.Health.Status}}' 2>/dev/null || echo unknown)"
     [[ "$status" == "healthy" ]] && break
     sleep 2
   done
-  [[ "$status" == "healthy" ]] || die "gateway unhealthy: $status"
-  [[ "$(docker inspect "$id" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" == "$sha" ]] ||
-    die "gateway revision mismatch"
+  [[ "$status" == "healthy" ]] || die "coordination unhealthy: $status"
+  docker network inspect qf-jarvis-coordination >/dev/null 2>&1 || die "coordination network missing"
+}
+
+roll_gateway(){
+  local manifest="$1" sha ref id status
+  sha="$(manifest_value "$manifest" sha)"
+  ref="$(manifest_value "$manifest" image:jarvis-gateway)"
+  verify_image "$ref" "$sha" || return 1
+  env QFJ_GATEWAY_IMAGE_TAG="$sha" QFJ_GATEWAY_IMAGE_REF="$ref" \
+    docker compose -p qf-jarvis-gateway \
+      -f "$GATEWAY_BASE" -f "$GATEWAY_REGISTRY" -f "$GATEWAY_COORDINATION" -f "$GATEWAY_INGRESS" -f "$GATEWAY_OBSERVABILITY" up -d quickfurno-gateway || return 1
+  id="$(env QFJ_GATEWAY_IMAGE_TAG="$sha" QFJ_GATEWAY_IMAGE_REF="$ref" docker compose -p qf-jarvis-gateway -f "$GATEWAY_BASE" -f "$GATEWAY_REGISTRY" -f "$GATEWAY_COORDINATION" -f "$GATEWAY_INGRESS" -f "$GATEWAY_OBSERVABILITY" ps -q quickfurno-gateway)"
+  [[ -n "$id" ]] || { echo "QFJ_PHASE15_CONSUMER_REFUSED: gateway container missing" >&2; return 1; }
+  status=unknown
+  for _ in $(seq 1 45); do
+    status="$(docker inspect "$id" --format '{{.State.Health.Status}}' 2>/dev/null || echo unknown)"
+    [[ "$status" == "healthy" ]] && break
+    sleep 2
+  done
+  [[ "$status" == "healthy" ]] || { echo "QFJ_PHASE15_CONSUMER_REFUSED: gateway unhealthy: $status" >&2; return 1; }
+  [[ "$(docker inspect "$id" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" == "$sha" ]] || {
+    echo "QFJ_PHASE15_CONSUMER_REFUSED: gateway revision mismatch" >&2
+    return 1
+  }
 }
 
 worker_args(){
@@ -169,7 +190,7 @@ worker_args(){
     OPENAI_LUNA_SOL) base="$WORKER_BASE_OPENAI" ;;
     *) die "worker provider mode invalid" ;;
   esac
-  WORKER_ARGS=(-p qf-jarvis-whatsapp-worker -f "$base" -f "$WORKER_REGISTRY" -f "$WORKER_OBSERVABILITY")
+  WORKER_ARGS=(-p qf-jarvis-whatsapp-worker -f "$base" -f "$WORKER_REGISTRY" -f "$WORKER_COORDINATION" -f "$WORKER_OBSERVABILITY")
   case "$WORKER_KNOWLEDGE_MODE" in
     DISABLED) ;;
     HYBRID) WORKER_ARGS+=(-f "$WORKER_KNOWLEDGE") ;;
@@ -186,23 +207,25 @@ roll_worker_disabled(){
   local manifest="$1" sha ref id running
   sha="$(manifest_value "$manifest" sha)"
   ref="$(manifest_value "$manifest" image:jarvis-worker)"
-  verify_image "$ref" "$sha"
-  "$WORKER_DISABLE" >/dev/null
+  verify_image "$ref" "$sha" || return 1
+  "$WORKER_DISABLE" >/dev/null || return 1
   worker_args
   env QFJ_WORKER_IMAGE_TAG="$sha" QFJ_WORKER_IMAGE_REF="$ref" \
-    docker compose "${WORKER_ARGS[@]}" up -d quickfurno-worker
+    docker compose "${WORKER_ARGS[@]}" up -d quickfurno-worker || return 1
   id="$(env QFJ_WORKER_IMAGE_TAG="$sha" QFJ_WORKER_IMAGE_REF="$ref" docker compose "${WORKER_ARGS[@]}" ps -q quickfurno-worker)"
-  [[ -n "$id" ]] || die "worker container missing"
+  [[ -n "$id" ]] || { echo "QFJ_PHASE15_CONSUMER_REFUSED: worker container missing" >&2; return 1; }
   running=false
   for _ in $(seq 1 60); do
     running="$(docker inspect "$id" --format '{{.State.Running}}' 2>/dev/null || echo false)"
     if [[ "$running" == "true" ]] && docker logs "$id" 2>&1 | grep -q 'qfj-whatsapp-worker READY'; then break; fi
     sleep 2
   done
-  [[ "$running" == "true" ]] || die "worker not running"
-  docker logs "$id" 2>&1 | grep -q 'qfj-whatsapp-worker READY' || die "worker not READY"
-  [[ "$(docker inspect "$id" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" == "$sha" ]] ||
-    die "worker revision mismatch"
+  [[ "$running" == "true" ]] || { echo "QFJ_PHASE15_CONSUMER_REFUSED: worker not running" >&2; return 1; }
+  docker logs "$id" 2>&1 | grep -q 'qfj-whatsapp-worker READY' || { echo "QFJ_PHASE15_CONSUMER_REFUSED: worker not READY" >&2; return 1; }
+  [[ "$(docker inspect "$id" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')" == "$sha" ]] || {
+    echo "QFJ_PHASE15_CONSUMER_REFUSED: worker revision mismatch" >&2
+    return 1
+  }
 }
 
 activate_worker(){
@@ -270,6 +293,7 @@ promote(){
   target="$(target_slot "$STAGED_MANIFEST")"
   active="$(state_value activeSlot)"
   wait_os "$target" "$STAGED_MANIFEST"
+  ensure_coordination
   switch_traffic "$target" "$STAGED_MANIFEST"
   if ! public_smoke; then
     if [[ -n "$active" && -f "$CURRENT_MANIFEST" ]]; then switch_traffic "$active" "$CURRENT_MANIFEST" || true; fi

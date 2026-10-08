@@ -53,7 +53,7 @@ install -o 0 -g 0 -m 0600 "$TRAEFIK_COMPOSE" "$BACKUP/traefik-compose.yml"
 # Install a minimal root-owned release closure. Secret files are not copied.
 rm -rf "$CONTROL_ROOT.new"
 install -d -o 0 -g 0 -m 0755 "$CONTROL_ROOT.new"
-tar -C "$SOURCE_ROOT" -cf -   deploy/phase15   deploy/jarvis-os   deploy/quickfurno-gateway   deploy/quickfurno-worker   scripts/scale/phase15-release.mjs   contracts/qf-release-phase15-v1.schema.json |
+tar -C "$SOURCE_ROOT" -cf -   deploy/phase15   deploy/coordination   deploy/jarvis-os   deploy/quickfurno-gateway   deploy/quickfurno-worker   scripts/scale/phase15-release.mjs   contracts/qf-release-phase15-v1.schema.json |
   (cd "$CONTROL_ROOT.new" && umask 022 && tar --no-same-owner --no-same-permissions -xf -)
 chown -R 0:0 "$CONTROL_ROOT.new"
 find "$CONTROL_ROOT.new" -type d -exec chmod go-w {} +
