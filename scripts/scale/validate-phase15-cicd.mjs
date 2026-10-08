@@ -8,6 +8,7 @@ const [
   supply,
   promote,
   rollback,
+  reconcile,
   controller,
   slot,
   switcher,
@@ -21,6 +22,7 @@ const [
   read('.github/workflows/scale-container-supply-chain.yml'),
   read('.github/workflows/phase15-promote.yml'),
   read('.github/workflows/phase15-rollback.yml'),
+  read('.github/workflows/phase15-reconcile-bootstrap.yml'),
   read('deploy/phase15/release.sh'),
   read('deploy/phase15/compose.jarvis-os-slot.yml'),
   read('deploy/phase15/qfj-phase15-switch'),
@@ -131,6 +133,15 @@ add(
     controller.includes('legacy route did not recover; Phase-15 route restored') &&
     controller.includes('docker stop qf-jarvis-os-blue qf-jarvis-os-green') &&
     controller.includes('QFJ_PHASE15_BOOTSTRAP_RECONCILED route=legacy state=null'),
+);
+add(
+  'bootstrap reconciliation is human gated through the production deployer',
+  reconcile.includes('workflow_dispatch:') &&
+    reconcile.includes('RECONCILE_FAILED_JARVIS_BOOTSTRAP') &&
+    reconcile.includes('environment: production') &&
+    reconcile.includes('runs-on: [self-hosted, Linux, X64, qfj-phase15-deployer]') &&
+    reconcile.includes('sudo -n /usr/local/sbin/qfj-phase15-release reconcile-bootstrap') &&
+    reconcile.includes('group: qf-jarvis-phase15-production'),
 );
 add(
   'durable consumers are rolling, not dual-active blue/green',
