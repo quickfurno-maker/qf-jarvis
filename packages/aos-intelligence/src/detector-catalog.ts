@@ -183,6 +183,17 @@ export const AOS_DETECTOR_CATALOG_V1: readonly AosDetectorDefinition[] = Object.
       'Compares open demand with eligible supply by city/locality/category using aggregate Core facts.',
   }),
   detector({
+    detectorId: 'market.capacity-balance',
+    label: 'Area/category marketplace capacity balance',
+    domain: 'MARKETPLACE',
+    detectorType: 'SUPPLY_DEMAND',
+    defaultPriority: 'P1',
+    coverage: 'SOURCE_REQUIRED',
+    sourceRefs: ['core.marketplace-capacity-snapshot'],
+    description:
+      'Classifies area/category cells using 7/30/90-day demand, three-vendor lead opportunity capacity, effective active/credit-ready supply, fill rate and vendor response quality.',
+  }),
+  detector({
     detectorId: 'market.relative-anomaly',
     label: 'Marketplace relative anomaly',
     domain: 'MARKETPLACE',

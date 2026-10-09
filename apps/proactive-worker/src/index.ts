@@ -356,6 +356,16 @@ export {
 } from './aos-owner-attention-observation.js';
 export type { AosOwnerAttentionObservationWriter } from './aos-owner-attention-observation.js';
 
+export {
+  buildAosMarketCapacityObservation,
+  createFileAosMarketCapacityObservationWriter,
+} from './aos-market-capacity-observation.js';
+export type {
+  AosMarketCapacityObservation,
+  AosMarketCapacityObservationWriter,
+  AosMarketCapacitySourceCoverage,
+} from './aos-market-capacity-observation.js';
+
 export { runAosSupervisorShadowCycle } from './aos-supervisor-cycle.js';
 export type {
   AosSupervisorAiBudget,

@@ -19,5 +19,6 @@ export * from './behaviour-manifest.js';
 export * from './goals.js';
 export * from './journeys.js';
 export * from './marketplace.js';
+export * from './market-cell.js';
 export * from './policy-versioning.js';
 export * from './policy-simulation.js';

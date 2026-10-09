@@ -1,5 +1,10 @@
 import type { AosBehaviourContext, AosBehaviourTrigger } from './behavior.js';
 import type { AosEvidenceFact } from './contracts.js';
+import {
+  assessAosMarketCell,
+  type AosMarketCellAssessment,
+  type AosMarketCellSnapshot,
+} from './market-cell.js';
 import { detectAosObservation, type AosObservation } from './observation.js';
 import { validInstant, validNonNegativeInt, validRef, validUnit } from './validation.js';
 
@@ -13,6 +18,16 @@ export interface AosMarketplaceSliceSnapshot {
   readonly openDemand: number;
   readonly eligibleSupply: number;
   readonly maximumDemandPerSupply: number;
+  readonly marketCell?: Omit<
+    AosMarketCellSnapshot,
+    | 'cellRef'
+    | 'cityRef'
+    | 'localityRef'
+    | 'categoryRef'
+    | 'observedAt'
+    | 'evidenceRef'
+    | 'eligibleSupply'
+  >;
   readonly vendorResponseRate?: {
     readonly current: number;
     readonly baseline: number;
@@ -103,6 +118,37 @@ function scope(input: AosMarketplaceSliceSnapshot): Omit<AosBehaviourContext, 'm
   });
 }
 
+export function marketCellAssessmentForSlice(
+  input: AosMarketplaceSliceSnapshot,
+): AosMarketCellAssessment | undefined {
+  if (input.marketCell === undefined) return undefined;
+  return assessAosMarketCell({
+    cellRef: input.sliceRef,
+    cityRef: input.cityRef,
+    ...(input.localityRef === undefined ? {} : { localityRef: input.localityRef }),
+    categoryRef: input.categoryRef,
+    observedAt: input.observedAt,
+    evidenceRef: input.evidenceRef,
+    eligibleSupply: input.eligibleSupply,
+    ...input.marketCell,
+  });
+}
+
+function marketCellTrigger(assessment: AosMarketCellAssessment): AosBehaviourTrigger | undefined {
+  switch (assessment.state) {
+    case 'UNDER_SUPPLIED':
+      return 'MARKET_UNDER_SUPPLIED';
+    case 'OVER_SUPPLIED':
+      return 'MARKET_OVER_SUPPLIED';
+    case 'LOW_QUALITY_SUPPLY':
+      return 'MARKET_LOW_QUALITY_SUPPLY';
+    case 'DEMAND_STARVED':
+      return 'MARKET_DEMAND_STARVED';
+    case 'BALANCED':
+      return undefined;
+  }
+}
+
 export function bridgeMarketplaceSliceToAos(
   input: AosMarketplaceSliceSnapshot,
 ): readonly AosMarketplaceBridgeItem[] {
@@ -114,36 +160,133 @@ export function bridgeMarketplaceSliceToAos(
   ]);
   const items: AosMarketplaceBridgeItem[] = [];
 
-  items.push(
-    Object.freeze({
-      observation: Object.freeze({
-        kind: 'SUPPLY_DEMAND' as const,
-        input: Object.freeze({
-          signalId: 'signal.' + input.sliceRef + '.supply-demand',
-          detectorId: 'market.supply-demand',
-          caseKey: key,
-          subjectRef: key,
-          openDemand: input.openDemand,
-          eligibleSupply: input.eligibleSupply,
-          maximumDemandPerSupply: input.maximumDemandPerSupply,
-          observedAt: input.observedAt,
-          evidenceRefs: Object.freeze([input.evidenceRef]),
-          reasonCode: 'MARKET_SUPPLY_DEMAND_PRESSURE',
-        }),
-      }),
-      behaviour: Object.freeze({
-        trigger: 'SUPPLY_SHORTAGE' as const,
-        context: Object.freeze({
-          ...scope(input),
-          metrics: Object.freeze({
-            matchingDemandCount: input.openDemand,
+  const assessment = marketCellAssessmentForSlice(input);
+  const capacityTrigger = assessment === undefined ? undefined : marketCellTrigger(assessment);
+  if (assessment !== undefined && capacityTrigger !== undefined) {
+    const priority =
+      assessment.state === 'UNDER_SUPPLIED' || assessment.state === 'LOW_QUALITY_SUPPLY'
+        ? ('P1' as const)
+        : ('P2' as const);
+    items.push(
+      Object.freeze({
+        observation: Object.freeze({
+          kind: 'BUSINESS_EVENT' as const,
+          input: Object.freeze({
+            signalId: 'signal.' + input.sliceRef + '.market-cell',
+            detectorId: 'market.capacity-balance',
+            detectorType: 'SUPPLY_DEMAND' as const,
+            caseKey: key,
+            subjectRef: key,
+            priority,
+            score: assessment.confidence,
+            observedAt: input.observedAt,
+            evidenceRefs: Object.freeze([input.evidenceRef]),
+            reasonCode: 'MARKET_' + assessment.state,
           }),
         }),
+        behaviour: Object.freeze({
+          trigger: capacityTrigger,
+          context: Object.freeze({
+            ...scope(input),
+            metrics: Object.freeze({
+              matchingDemandCount: input.marketCell?.demand30d ?? input.openDemand,
+              vendorResponseRate: input.marketCell?.vendorResponseRate ?? 1,
+            }),
+          }),
+        }),
+        facts: Object.freeze([
+          ...commonFacts,
+          fact(
+            'fact:market-demand-7d',
+            input.evidenceRef,
+            input.observedAt,
+            input.marketCell?.demand7d ?? 0,
+          ),
+          fact(
+            'fact:market-demand-30d',
+            input.evidenceRef,
+            input.observedAt,
+            input.marketCell?.demand30d ?? 0,
+          ),
+          fact(
+            'fact:market-demand-90d',
+            input.evidenceRef,
+            input.observedAt,
+            input.marketCell?.demand90d ?? 0,
+          ),
+          fact(
+            'fact:market-registered-supply',
+            input.evidenceRef,
+            input.observedAt,
+            input.marketCell?.registeredSupply ?? 0,
+          ),
+          fact(
+            'fact:market-active-supply',
+            input.evidenceRef,
+            input.observedAt,
+            input.marketCell?.activeSupply ?? 0,
+          ),
+          fact(
+            'fact:market-credit-ready-supply',
+            input.evidenceRef,
+            input.observedAt,
+            input.marketCell?.creditReadySupply ?? 0,
+          ),
+          fact(
+            'fact:market-effective-supply',
+            input.evidenceRef,
+            input.observedAt,
+            assessment.effectiveSupply,
+          ),
+          fact(
+            'fact:market-lead-opportunities-30d',
+            input.evidenceRef,
+            input.observedAt,
+            assessment.leadOpportunities30d,
+          ),
+          fact(
+            'fact:market-three-vendor-fill-rate',
+            input.evidenceRef,
+            input.observedAt,
+            input.marketCell?.threeVendorFillRate ?? 0,
+          ),
+          fact('fact:market-capacity-state', input.evidenceRef, input.observedAt, assessment.state),
+        ]),
+        policyRefs: Object.freeze(['aos:marketplace-capacity-balance:v1']),
       }),
-      facts: commonFacts,
-      policyRefs: Object.freeze(['aos:marketplace-supply-demand:v1']),
-    }),
-  );
+    );
+  } else if (assessment === undefined) {
+    items.push(
+      Object.freeze({
+        observation: Object.freeze({
+          kind: 'SUPPLY_DEMAND' as const,
+          input: Object.freeze({
+            signalId: 'signal.' + input.sliceRef + '.supply-demand',
+            detectorId: 'market.supply-demand',
+            caseKey: key,
+            subjectRef: key,
+            openDemand: input.openDemand,
+            eligibleSupply: input.eligibleSupply,
+            maximumDemandPerSupply: input.maximumDemandPerSupply,
+            observedAt: input.observedAt,
+            evidenceRefs: Object.freeze([input.evidenceRef]),
+            reasonCode: 'MARKET_SUPPLY_DEMAND_PRESSURE',
+          }),
+        }),
+        behaviour: Object.freeze({
+          trigger: 'SUPPLY_SHORTAGE' as const,
+          context: Object.freeze({
+            ...scope(input),
+            metrics: Object.freeze({
+              matchingDemandCount: input.openDemand,
+            }),
+          }),
+        }),
+        facts: commonFacts,
+        policyRefs: Object.freeze(['aos:marketplace-supply-demand:v1']),
+      }),
+    );
+  }
 
   if (input.vendorResponseRate !== undefined) {
     items.push(

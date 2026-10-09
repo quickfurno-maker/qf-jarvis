@@ -12,6 +12,7 @@ const CORE_DECISION_ACTIONS = new Set<AosRecommendationAction>([
   'REQUEST_VENDOR_REMINDER',
   'REQUEST_REPLACEMENT_BATCH',
   'REQUEST_CLIENT_FOLLOW_UP',
+  'REQUEST_PACKAGE_CAPACITY_HOLD_REVIEW',
 ]);
 
 export interface AosRecommendationCandidate {

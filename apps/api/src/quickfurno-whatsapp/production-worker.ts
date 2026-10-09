@@ -58,6 +58,11 @@ import {
   RIYA_PRODUCTION_PROMPTS,
 } from '@qf-jarvis/riya-prompts';
 import { addMetric, emitStructuredLog, recordMetric, setMetric } from '@qf-jarvis/observability';
+import {
+  createFileAosMarketCapacityObservationWriter,
+  createFileAosOwnerAttentionObservationWriter,
+  runAosSupervisorShadowCycle,
+} from '@qf-jarvis/proactive-worker';
 
 import { createFileGroqCredentialBinding } from '../secrets/file-groq-credential-binding.js';
 import { createAgniCaseEscalationPort } from './agni-case-escalation.js';
@@ -97,6 +102,7 @@ import { bindOpenAIV1SealForProduction } from './openai-production-seal-binding.
 import { bindJf5cSealForProduction } from './production-seal-binding.js';
 import type { QuickFurnoWhatsAppProductionWorkerConfig } from './production-worker-config.js';
 import { createAgentFlowTraceObservationWriter } from './agent-flow-trace-observation.js';
+import { createQuickFurnoAosMarketCapacityReader } from './aos-market-capacity-http.js';
 import { createQuickFurnoWorkerObservationWriter } from './production-observation.js';
 
 function boundedProvider(event: GatewayEvent): 'openai' | 'groq' | 'other' {
@@ -154,6 +160,22 @@ export interface QuickFurnoWhatsAppProductionWorker {
 
 function systemInstant(): string {
   return new Date().toISOString();
+}
+
+function sleepUntilAosCycle(milliseconds: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, milliseconds);
+    const onAbort = () => {
+      done();
+    };
+    function done() {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 interface ProductionRuntimeStack {
@@ -525,6 +547,138 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       httpPost: quickFurnoWorkerHttpPost,
       timeoutMs: config.quickfurno.timeoutMs,
     };
+
+    const aosShadowConfig = config.aosShadow.mode === 'SHADOW' ? config.aosShadow : undefined;
+    const aosRuntime =
+      aosShadowConfig === undefined
+        ? undefined
+        : (() => {
+            const reader = createQuickFurnoAosMarketCapacityReader(httpConfig);
+            const ownerAttention = createFileAosOwnerAttentionObservationWriter(
+              aosShadowConfig.ownerAttentionObservationFile,
+            );
+            const marketCapacity = createFileAosMarketCapacityObservationWriter(
+              aosShadowConfig.marketCapacityObservationFile,
+            );
+
+            const runOnce = async (): Promise<void> => {
+              const startedAt = performance.now();
+              const generatedAt = systemInstant();
+              try {
+                const snapshot = await reader.read('quickfurno');
+                const cycle = await runAosSupervisorShadowCycle({
+                  cycleId: 'aos.market.' + String(Date.parse(generatedAt)),
+                  generatedAt,
+                  marketplaceSlices: snapshot.cells.map((cell) =>
+                    Object.freeze({
+                      sliceRef: cell.cellRef,
+                      cityRef: cell.cityRef,
+                      localityRef: cell.localityRef,
+                      categoryRef: cell.categoryRef,
+                      observedAt: snapshot.observedAt,
+                      evidenceRef: 'capacity.' + cell.cellRef,
+                      openDemand: cell.demand30d,
+                      eligibleSupply: cell.eligibleSupply,
+                      maximumDemandPerSupply: 3,
+                      marketCell: Object.freeze({
+                        demand7d: cell.demand7d,
+                        demand30d: cell.demand30d,
+                        demand90d: cell.demand90d,
+                        registeredSupply: cell.registeredSupply,
+                        activeSupply: cell.activeSupply,
+                        creditReadySupply: cell.creditReadySupply,
+                        threeVendorFillRate: cell.threeVendorFillRate,
+                      }),
+                    }),
+                  ),
+                });
+
+                await Promise.all([
+                  ownerAttention.write(cycle, generatedAt),
+                  marketCapacity.write({
+                    cycle,
+                    emittedAt: generatedAt,
+                    sourceObservedAt: snapshot.observedAt,
+                    sourceCoverage: snapshot.coverage,
+                    responseEvidence: snapshot.responseEvidence,
+                  }),
+                ]);
+
+                const stateCounts =
+                  cycle.marketplace?.marketCells.reduce(
+                    (counts, one) => {
+                      counts[one.state] = (counts[one.state] ?? 0) + 1;
+                      return counts;
+                    },
+                    {} as Record<string, number>,
+                  ) ?? {};
+                const recommendationCounts =
+                  cycle.marketplace?.marketCells.reduce(
+                    (counts, one) => {
+                      counts[one.recommendation] = (counts[one.recommendation] ?? 0) + 1;
+                      return counts;
+                    },
+                    {} as Record<string, number>,
+                  ) ?? {};
+
+                addMetric('qfj.aos.cycles', 1, { result: 'success' });
+                recordMetric('qfj.aos.cycle.duration', performance.now() - startedAt, {
+                  result: 'success',
+                });
+                setMetric('qfj.aos.source.cells', snapshot.cells.length, {
+                  result: snapshot.coverage.cellsTruncated ? 'truncated' : 'complete',
+                });
+                for (const state of [
+                  'UNDER_SUPPLIED',
+                  'BALANCED',
+                  'OVER_SUPPLIED',
+                  'LOW_QUALITY_SUPPLY',
+                  'DEMAND_STARVED',
+                ] as const) {
+                  setMetric('qfj.aos.market.cells', stateCounts[state] ?? 0, {
+                    result: state.toLowerCase(),
+                  });
+                }
+                for (const recommendation of [
+                  'ACQUIRE_VENDORS',
+                  'MAINTAIN',
+                  'HOLD_PACKAGE_ACTIVATION',
+                  'IMPROVE_VENDOR_QUALITY',
+                  'BOOST_CLIENT_DEMAND',
+                ] as const) {
+                  setMetric('qfj.aos.recommendations', recommendationCounts[recommendation] ?? 0, {
+                    result: recommendation.toLowerCase(),
+                  });
+                }
+                emitStructuredLog('INFO', 'aos.market_capacity.cycle_completed', {
+                  'aos.cells': snapshot.cells.length,
+                  'aos.cases': cycle.cases.length,
+                  'aos.recommendations': cycle.recommendations.length,
+                  'aos.model_calls': cycle.modelCalls,
+                  'aos.source_truncated': snapshot.coverage.cellsTruncated,
+                  'aos.execution_authority': 'NONE',
+                });
+              } catch {
+                addMetric('qfj.aos.cycles', 1, { result: 'failed' });
+                recordMetric('qfj.aos.cycle.duration', performance.now() - startedAt, {
+                  result: 'failed',
+                });
+                emitStructuredLog('WARN', 'aos.market_capacity.cycle_failed', {
+                  'aos.execution_authority': 'NONE',
+                });
+              }
+            };
+
+            return Object.freeze({
+              async run(signal: AbortSignal): Promise<void> {
+                while (!signal.aborted) {
+                  await runOnce();
+                  await sleepUntilAosCycle(aosShadowConfig.cadenceMs, signal);
+                }
+              },
+            });
+          })();
+
     const authoritativeState = createQuickFurnoWhatsAppAuthorityStatePort(
       createQuickFurnoWhatsAppAuthorityReader(httpConfig),
     );
@@ -803,7 +957,12 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       async run(signal: AbortSignal): Promise<void> {
         // Process-local scheduling bounds each selected agent lane. In MULTI_REPLICA mode the
         // PostgreSQL spool adds the shared per-conversation ordering fence across all replicas.
-        await scheduler.run(signal);
+        // AOS runs beside customer chat as a powerless SHADOW loop. Its per-cycle failures are
+        // contained inside aosRuntime and never stop Riya/Anisha/Aarohi processing.
+        await Promise.all([
+          scheduler.run(signal),
+          aosRuntime === undefined ? Promise.resolve() : aosRuntime.run(signal),
+        ]);
       },
       async close(): Promise<void> {
         if (closed) return;

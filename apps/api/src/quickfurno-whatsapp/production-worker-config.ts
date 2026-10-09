@@ -167,6 +167,18 @@ const semanticCacheSchema = z.union([
     }),
 ]);
 
+const aosShadowSchema = z.union([
+  z.object({ mode: z.literal('DISABLED') }).strict(),
+  z
+    .object({
+      mode: z.literal('SHADOW'),
+      cadenceMs: z.number().int().min(60_000).max(3_600_000).default(900_000),
+      ownerAttentionObservationFile: absolutePath,
+      marketCapacityObservationFile: absolutePath,
+    })
+    .strict(),
+]);
+
 const knowledgeSchema = z.union([
   z.object({ mode: z.literal('DISABLED') }).strict(),
   z
@@ -228,6 +240,7 @@ const schema = z
       .optional(),
     knowledge: knowledgeSchema,
     decisionIntelligence: decisionIntelligenceSchema.default({ mode: 'DISABLED' }),
+    aosShadow: aosShadowSchema.default({ mode: 'DISABLED' }),
     concurrency: concurrencySchema,
     // spoolDirectory is the legacy SINGLE_OWNER file-spool field. New deployments
     // use turnStore; keeping this optional preserves existing config compatibility.
@@ -385,6 +398,14 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
     privateKeyPem: string;
     timeoutMs: number;
   }>;
+  readonly aosShadow:
+    | Readonly<{ mode: 'DISABLED' }>
+    | Readonly<{
+        mode: 'SHADOW';
+        cadenceMs: number;
+        ownerAttentionObservationFile: string;
+        marketCapacityObservationFile: string;
+      }>;
   readonly decisionIntelligence:
     | Readonly<{ mode: 'DISABLED' }>
     | Readonly<{
@@ -630,6 +651,15 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
       timeoutMs: input.quickfurno.timeoutMs,
     }),
     ...(agniCaseEscalation === undefined ? {} : { agniCaseEscalation }),
+    aosShadow:
+      input.aosShadow.mode === 'DISABLED'
+        ? Object.freeze({ mode: 'DISABLED' as const })
+        : Object.freeze({
+            mode: 'SHADOW' as const,
+            cadenceMs: input.aosShadow.cadenceMs,
+            ownerAttentionObservationFile: input.aosShadow.ownerAttentionObservationFile,
+            marketCapacityObservationFile: input.aosShadow.marketCapacityObservationFile,
+          }),
     decisionIntelligence,
     knowledge,
     concurrency: Object.freeze({

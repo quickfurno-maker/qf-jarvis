@@ -120,6 +120,21 @@ const GOVERNANCE: Readonly<Record<AosRecommendationAction, ActionGovernance>> = 
     summary: 'Vendor acquisition coverage should be reviewed.',
     risk: 'informational',
   }),
+  REQUEST_PACKAGE_CAPACITY_HOLD_REVIEW: Object.freeze({
+    recommendationType: 'aos.package-capacity-review',
+    summary: 'New package activation capacity should be reviewed for this market cell.',
+    risk: 'high-risk-or-novel',
+  }),
+  REQUEST_CLIENT_DEMAND_GROWTH_REVIEW: Object.freeze({
+    recommendationType: 'aos.client-demand-growth-review',
+    summary: 'Client demand acquisition should be increased for this market cell.',
+    risk: 'informational',
+  }),
+  REQUEST_VENDOR_QUALITY_REVIEW: Object.freeze({
+    recommendationType: 'aos.vendor-quality-review',
+    summary: 'Vendor quality/readiness should be improved before acquiring more supply.',
+    risk: 'informational',
+  }),
   REQUEST_INCIDENT_INVESTIGATION: Object.freeze({
     recommendationType: 'aos.incident-review',
     summary: 'A marketplace incident should be investigated.',

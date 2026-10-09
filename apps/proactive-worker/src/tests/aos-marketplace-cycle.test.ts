@@ -131,4 +131,83 @@ describe('AOS marketplace shadow cycle', () => {
       'REQUEST_VENDOR_ACQUISITION_REVIEW',
     );
   });
+
+  it('classifies over-supply and recommends a governed package-capacity hold review', async () => {
+    const result = await runAosMarketplaceShadowCycle({
+      cycleId: 'aos.market.capacity-over',
+      generatedAt: at,
+      slices: [
+        {
+          sliceRef: 'pune.wakad.plumber',
+          cityRef: 'pune',
+          localityRef: 'wakad',
+          categoryRef: 'plumber',
+          observedAt: at,
+          evidenceRef: 'metric:pune:wakad:plumber:capacity',
+          openDemand: 8,
+          eligibleSupply: 120,
+          maximumDemandPerSupply: 3,
+          marketCell: {
+            demand7d: 70,
+            demand30d: 300,
+            demand90d: 900,
+            registeredSupply: 160,
+            activeSupply: 125,
+            creditReadySupply: 120,
+            vendorResponseRate: 0.82,
+            threeVendorFillRate: 0.99,
+          },
+        },
+      ],
+    });
+
+    expect(result.marketCells).toHaveLength(1);
+    expect(result.marketCells[0]).toMatchObject({
+      state: 'OVER_SUPPLIED',
+      recommendation: 'HOLD_PACKAGE_ACTIVATION',
+      executionAuthority: 'NONE',
+      businessEffect: false,
+    });
+    expect(result.shadow.cases[0]?.recommendation).toMatchObject({
+      action: 'REQUEST_PACKAGE_CAPACITY_HOLD_REVIEW',
+      requiresCoreDecision: true,
+      requiresOwnerReview: true,
+      executionAuthorized: false,
+    });
+  });
+
+  it('separates demand starvation from excess acquisition and recommends client-demand growth', async () => {
+    const result = await runAosMarketplaceShadowCycle({
+      cycleId: 'aos.market.demand-starved',
+      generatedAt: at,
+      slices: [
+        {
+          sliceRef: 'pune.wakad.interior',
+          cityRef: 'pune',
+          localityRef: 'wakad',
+          categoryRef: 'interior',
+          observedAt: at,
+          evidenceRef: 'metric:pune:wakad:interior:capacity',
+          openDemand: 2,
+          eligibleSupply: 60,
+          maximumDemandPerSupply: 3,
+          marketCell: {
+            demand7d: 5,
+            demand30d: 80,
+            demand90d: 500,
+            registeredSupply: 80,
+            activeSupply: 55,
+            creditReadySupply: 50,
+            vendorResponseRate: 0.8,
+            threeVendorFillRate: 0.98,
+          },
+        },
+      ],
+    });
+
+    expect(result.marketCells[0]?.state).toBe('DEMAND_STARVED');
+    expect(result.shadow.cases[0]?.recommendation?.action).toBe(
+      'REQUEST_CLIENT_DEMAND_GROWTH_REVIEW',
+    );
+  });
 });

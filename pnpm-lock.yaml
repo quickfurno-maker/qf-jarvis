@@ -164,6 +164,9 @@ importers:
       '@qf-jarvis/postgres-riya-turn-coordinator':
         specifier: workspace:*
         version: link:../../packages/postgres-riya-turn-coordinator
+      '@qf-jarvis/proactive-worker':
+        specifier: workspace:*
+        version: link:../proactive-worker
       '@qf-jarvis/prompt-registry':
         specifier: workspace:*
         version: link:../../packages/prompt-registry

@@ -219,7 +219,7 @@ export function detectSupplyDemandPressure(input: SupplyDemandObservation): AosS
 export interface BusinessEventObservation {
   readonly signalId: string;
   readonly detectorId: string;
-  readonly detectorType?: 'BUSINESS_EVENT' | 'OPPORTUNITY';
+  readonly detectorType?: 'BUSINESS_EVENT' | 'OPPORTUNITY' | 'SUPPLY_DEMAND';
   readonly caseKey: string;
   readonly subjectRef: string;
   readonly correlationRef?: string;

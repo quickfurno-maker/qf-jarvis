@@ -1,8 +1,10 @@
 import {
   bridgeMarketplaceSliceToAos,
+  marketCellAssessmentForSlice,
   type AosBehaviourRuntimeBinding,
   type AosCaseContextMemory,
   type AosMarketplaceSliceSnapshot,
+  type AosMarketCellAssessment,
 } from '@qf-jarvis/aos-intelligence';
 import type { AosModelReasoner } from '@qf-jarvis/aos-model-reasoning';
 import type { AosDecisionAdjudicator } from '@qf-jarvis/aos-governance-integration';
@@ -30,6 +32,7 @@ export interface AosMarketplaceShadowCycleResult {
   readonly protocol: 'qfj.aos.marketplace-cycle.v1';
   readonly slices: number;
   readonly detections: number;
+  readonly marketCells: readonly AosMarketCellAssessment[];
   readonly shadow: AosShadowCycleResult;
   readonly executionAuthority: 'NONE';
   readonly businessEffect: false;
@@ -46,6 +49,12 @@ export async function runAosMarketplaceShadowCycle(
     throw new TypeError('aos-marketplace-cycle-input-invalid');
   }
 
+  const marketCells = Object.freeze(
+    input.slices.flatMap((slice) => {
+      const assessment = marketCellAssessmentForSlice(slice);
+      return assessment === undefined ? [] : [assessment];
+    }),
+  );
   const bridged = input.slices.flatMap((slice) => bridgeMarketplaceSliceToAos(slice));
   const materialByCase = new Map<
     string,
@@ -123,6 +132,7 @@ export async function runAosMarketplaceShadowCycle(
     protocol: 'qfj.aos.marketplace-cycle.v1' as const,
     slices: input.slices.length,
     detections: bridged.length,
+    marketCells,
     shadow,
     executionAuthority: 'NONE' as const,
     businessEffect: false as const,

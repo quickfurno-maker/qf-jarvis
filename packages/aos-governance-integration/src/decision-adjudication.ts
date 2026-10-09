@@ -24,6 +24,9 @@ const ACTION_TOKEN: Readonly<Record<AosRecommendationAction, string>> = Object.f
   REQUEST_HUMAN_REVIEW: 'aos.action.human-review',
   REQUEST_SUPPLY_REVIEW: 'aos.action.supply-review',
   REQUEST_VENDOR_ACQUISITION_REVIEW: 'aos.action.vendor-acquisition',
+  REQUEST_PACKAGE_CAPACITY_HOLD_REVIEW: 'aos.action.package-capacity-hold-review',
+  REQUEST_CLIENT_DEMAND_GROWTH_REVIEW: 'aos.action.client-demand-growth-review',
+  REQUEST_VENDOR_QUALITY_REVIEW: 'aos.action.vendor-quality-review',
   REQUEST_INCIDENT_INVESTIGATION: 'aos.action.incident-investigation',
   REQUEST_MODEL_FALLBACK_REVIEW: 'aos.action.model-fallback-review',
 });
