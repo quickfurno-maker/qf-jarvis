@@ -7,6 +7,11 @@
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
   },
   "references": [
+    { "path": "../../packages/aos-behaviour-control/tsconfig.build.json" },
+    { "path": "../../packages/aos-core-event-bridge/tsconfig.build.json" },
+    { "path": "../../packages/aos-governance-integration/tsconfig.build.json" },
+    { "path": "../../packages/aos-intelligence/tsconfig.build.json" },
+    { "path": "../../packages/aos-model-reasoning/tsconfig.build.json" },
     { "path": "../../packages/event-backbone" },
     { "path": "../../packages/model-gateway" },
     { "path": "../worker/tsconfig.build.json" }

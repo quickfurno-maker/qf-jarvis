@@ -33,6 +33,12 @@
   "decisionIntelligence": {
     "mode": "DISABLED"
   },
+  "aosShadow": {
+    "mode": "SHADOW",
+    "cadenceMs": 900000,
+    "ownerAttentionObservationFile": "/var/run/qfj-observability/aos-owner-attention.json",
+    "marketCapacityObservationFile": "/var/run/qfj-observability/aos-market-capacity.json"
+  },
   "concurrency": {
     "globalMaxConcurrentTurns": 200,
     "maxConcurrentByAgent": {

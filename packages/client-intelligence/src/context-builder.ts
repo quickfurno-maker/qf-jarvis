@@ -75,6 +75,7 @@ export function buildClientIntelligenceContextV1(
     vendorNoContactCount: input.journey.vendorNoContactCount,
     allReleasedVendorsContacted: input.journey.allReleasedVendorsContacted,
     satisfactionKnown: input.journey.satisfactionState !== 'UNKNOWN',
+    satisfactionPositive: input.journey.satisfactionState === 'SATISFIED',
     followUpDue: input.journey.followUpDue,
     opportunities,
   });

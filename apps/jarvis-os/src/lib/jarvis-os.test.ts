@@ -518,6 +518,8 @@ describe('live operator capability remains contained behind reviewed seams', () 
         'src/server/auth/config/loader.ts',
         'src/server/control-plane/sources/worker-observation-source.ts',
         'src/server/control-plane/sources/worker-observation-source.test.ts',
+        'src/server/control-plane/sources/aos-owner-attention-source.ts',
+        'src/server/control-plane/sources/aos-owner-attention-source.test.ts',
         'src/server/control-plane/sources/agent-flow-trace-source.ts',
         'src/server/control-plane/sources/agent-flow-trace-source.test.ts',
         'src/server/control-plane/sources/release-assurance-source.ts',
@@ -568,6 +570,10 @@ describe('live operator capability remains contained behind reviewed seams', () 
       '@qf-jarvis/agent-flow-orchestration',
       '@qf-jarvis/agent-flow-registry',
       '@qf-jarvis/agent-flow-trace-contract',
+      // ADR-0177: pure dependency-free AOS v2 presentation/read model. It contains deterministic
+      // policy/detector/pipeline declarations only for this UI use and has no provider, database,
+      // network, credential, command, approval or execution surface.
+      '@qf-jarvis/aos-intelligence',
       '@qf-jarvis/control-plane-read-contract',
       // SCALE-P11: authority-neutral signed metadata/bulkhead transport used only by the reviewed
       // QuickFurno operator read/command seams. No provider, database or business authority.

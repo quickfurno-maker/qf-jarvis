@@ -1,11 +1,20 @@
 import type { DatabasePool } from '@qf-jarvis/event-backbone';
 import type { ModelGateway } from '@qf-jarvis/model-gateway';
+import type { AosModelReasoner } from '@qf-jarvis/aos-model-reasoning';
 import {
   JAO5_LIMITS,
   runJao5AmbientCycle,
   type Jao5Clock,
   type Jao5TelemetryHook,
 } from '@qf-jarvis/worker/internal/jao5-ambient';
+
+import {
+  runAosSupervisorShadowCycle,
+  type AosSupervisorCycleInput,
+  type AosSupervisorGovernanceExtensions,
+} from './aos-supervisor-cycle.js';
+import type { AosOwnerAttentionObservationWriter } from './aos-owner-attention-observation.js';
+import type { AosShadowPersistencePort } from './aos-shadow-cycle.js';
 
 export const PROACTIVE_WORKER_MODES = ['DORMANT', 'SHADOW'] as const;
 export type ProactiveWorkerMode = (typeof PROACTIVE_WORKER_MODES)[number];
@@ -27,7 +36,11 @@ export interface ProactiveWorkerConfig {
   readonly cadenceMs: number;
   readonly maxConsecutiveFailures: number;
   readonly monitorInstanceIds: readonly string[];
+  /** Explicit opt-in for the new AOS v2 supervisor. It remains SHADOW-only. */
+  readonly aosV2ShadowEnabled?: boolean;
 }
+
+export type AosSupervisorSourceSnapshot = Omit<AosSupervisorCycleInput, 'cycleId' | 'generatedAt'>;
 
 export interface ProactiveWorkerDependencies {
   readonly pool: DatabasePool;
@@ -36,6 +49,14 @@ export interface ProactiveWorkerDependencies {
   readonly readSystemHealthSnapshot: (signal?: AbortSignal) => Promise<unknown>;
   readonly sleep: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
   readonly telemetry?: Jao5TelemetryHook;
+  readonly readAosSupervisorSnapshot?: (
+    input: { readonly cycleId: string; readonly generatedAt: string },
+    signal?: AbortSignal,
+  ) => Promise<AosSupervisorSourceSnapshot>;
+  readonly aosReasoner?: AosModelReasoner;
+  readonly aosPersistence?: AosShadowPersistencePort;
+  readonly aosGovernance?: AosSupervisorGovernanceExtensions;
+  readonly aosOwnerAttentionObservation?: AosOwnerAttentionObservationWriter;
 }
 
 export interface ProactiveWorkerResult {
@@ -43,6 +64,13 @@ export interface ProactiveWorkerResult {
   readonly cyclesAttempted: number;
   readonly cyclesCompleted: number;
   readonly attentionCreated: number;
+  readonly aosCyclesCompleted: number;
+  readonly aosCasesObserved: number;
+  readonly aosRecommendationsCreated: number;
+  readonly aosAdjudicationHolds: number;
+  readonly aosCanonicalRecommendations: number;
+  readonly aosCanonicalProjectionFailures: number;
+  readonly aosModelCalls: number;
   readonly consecutiveFailures: number;
   readonly executionAuthority: 'NONE';
   readonly businessEffect: false;
@@ -84,12 +112,36 @@ function result(
   cyclesCompleted: number,
   attentionCreated: number,
   consecutiveFailures: number,
+  aos: Readonly<{
+    cyclesCompleted: number;
+    casesObserved: number;
+    recommendationsCreated: number;
+    adjudicationHolds: number;
+    canonicalRecommendations: number;
+    canonicalProjectionFailures: number;
+    modelCalls: number;
+  }> = Object.freeze({
+    cyclesCompleted: 0,
+    casesObserved: 0,
+    recommendationsCreated: 0,
+    adjudicationHolds: 0,
+    canonicalRecommendations: 0,
+    canonicalProjectionFailures: 0,
+    modelCalls: 0,
+  }),
 ): ProactiveWorkerResult {
   return Object.freeze({
     state,
     cyclesAttempted,
     cyclesCompleted,
     attentionCreated,
+    aosCyclesCompleted: aos.cyclesCompleted,
+    aosCasesObserved: aos.casesObserved,
+    aosRecommendationsCreated: aos.recommendationsCreated,
+    aosAdjudicationHolds: aos.adjudicationHolds,
+    aosCanonicalRecommendations: aos.canonicalRecommendations,
+    aosCanonicalProjectionFailures: aos.canonicalProjectionFailures,
+    aosModelCalls: aos.modelCalls,
     consecutiveFailures,
     executionAuthority: 'NONE' as const,
     businessEffect: false as const,
@@ -132,16 +184,30 @@ export async function runProactiveWorker(
   if (config.mode === 'DORMANT') {
     return result('DORMANT', 0, 0, 0, 0);
   }
+  if (config.aosV2ShadowEnabled === true && dependencies.readAosSupervisorSnapshot === undefined) {
+    throw new TypeError('proactive-worker-aos-source-required');
+  }
 
   let cyclesAttempted = 0;
   let cyclesCompleted = 0;
   let attentionCreated = 0;
   let consecutiveFailures = 0;
+  const aos = {
+    cyclesCompleted: 0,
+    casesObserved: 0,
+    recommendationsCreated: 0,
+    adjudicationHolds: 0,
+    canonicalRecommendations: 0,
+    canonicalProjectionFailures: 0,
+    modelCalls: 0,
+  };
 
   while (!signal?.aborted) {
     cyclesAttempted += 1;
     try {
-      const identity = cycleIdentity(dependencies.clock.nowMs(), config.cadenceMs);
+      const nowMs = dependencies.clock.nowMs();
+      const identity = cycleIdentity(nowMs, config.cadenceMs);
+      const generatedAt = new Date(nowMs).toISOString();
       const snapshot = await dependencies.readSystemHealthSnapshot(signal);
       const cycle = await runJao5AmbientCycle(
         {
@@ -159,6 +225,37 @@ export async function runProactiveWorker(
         },
         signal,
       );
+      if (config.aosV2ShadowEnabled === true) {
+        const readAosSupervisorSnapshot = dependencies.readAosSupervisorSnapshot;
+        if (readAosSupervisorSnapshot === undefined) {
+          throw new TypeError('proactive-worker-aos-source-required');
+        }
+        const aosCycleId = 'aos.' + identity.cycleId;
+        const aosSnapshot = await readAosSupervisorSnapshot(
+          { cycleId: aosCycleId, generatedAt },
+          signal,
+        );
+        const aosCycle = await runAosSupervisorShadowCycle(
+          {
+            ...aosSnapshot,
+            cycleId: aosCycleId,
+            generatedAt,
+          },
+          dependencies.aosReasoner,
+          dependencies.aosPersistence,
+          dependencies.aosGovernance,
+        );
+        aos.cyclesCompleted += 1;
+        aos.casesObserved += aosCycle.cases.length;
+        aos.recommendationsCreated += aosCycle.recommendations.length;
+        aos.adjudicationHolds += aosCycle.adjudicationHolds;
+        aos.canonicalRecommendations += aosCycle.canonicalRecommendations.length;
+        aos.canonicalProjectionFailures += aosCycle.canonicalProjectionFailures;
+        aos.modelCalls += aosCycle.modelCalls;
+        if (dependencies.aosOwnerAttentionObservation !== undefined) {
+          await dependencies.aosOwnerAttentionObservation.write(aosCycle, generatedAt);
+        }
+      }
       cyclesCompleted += 1;
       attentionCreated += cycle.attentionCreated;
       consecutiveFailures = 0;
@@ -171,6 +268,7 @@ export async function runProactiveWorker(
           cyclesCompleted,
           attentionCreated,
           consecutiveFailures,
+          aos,
         );
       }
     }
@@ -188,10 +286,90 @@ export async function runProactiveWorker(
           cyclesCompleted,
           attentionCreated,
           consecutiveFailures,
+          aos,
         );
       }
     }
   }
 
-  return result('STOPPED', cyclesAttempted, cyclesCompleted, attentionCreated, consecutiveFailures);
+  return result(
+    'STOPPED',
+    cyclesAttempted,
+    cyclesCompleted,
+    attentionCreated,
+    consecutiveFailures,
+    aos,
+  );
 }
+
+export { runAosShadowCycle } from './aos-shadow-cycle.js';
+export type {
+  AosShadowBehaviourMaterial,
+  AosShadowCaseMaterial,
+  AosShadowCaseReason,
+  AosShadowCaseResult,
+  AosShadowCycleInput,
+  AosShadowCycleResult,
+  AosShadowRoutingEvidence,
+  AosShadowPersistencePort,
+} from './aos-shadow-cycle.js';
+
+export { runAosCanonicalEventShadowCycle } from './aos-canonical-cycle.js';
+export type {
+  AosCanonicalEventCycleInput,
+  AosCanonicalEventCycleResult,
+} from './aos-canonical-cycle.js';
+
+export { runAosClientJourneyShadowCycle } from './aos-client-journey-cycle.js';
+export type {
+  AosClientJourneyShadowCycleInput,
+  AosClientJourneyShadowCycleResult,
+} from './aos-client-journey-cycle.js';
+
+export { runAosClientIntelligenceShadowCycle } from './aos-client-intelligence-cycle.js';
+export type {
+  AosClientIntelligenceShadowCycleInput,
+  AosClientIntelligenceShadowCycleResult,
+} from './aos-client-intelligence-cycle.js';
+
+export { runAosMarketplaceShadowCycle } from './aos-marketplace-cycle.js';
+export type {
+  AosMarketplaceShadowCycleInput,
+  AosMarketplaceShadowCycleResult,
+} from './aos-marketplace-cycle.js';
+
+export { runAosLeadDeliveryShadowCycle } from './aos-lead-delivery-cycle.js';
+export type {
+  AosLeadDeliveryShadowCycleInput,
+  AosLeadDeliveryShadowCycleResult,
+} from './aos-lead-delivery-cycle.js';
+
+export { runAosVendorSuccessShadowCycle } from './aos-vendor-success-cycle.js';
+export type {
+  AosVendorSuccessShadowCycleInput,
+  AosVendorSuccessShadowCycleResult,
+} from './aos-vendor-success-cycle.js';
+
+export {
+  buildAosOwnerAttentionObservation,
+  createFileAosOwnerAttentionObservationWriter,
+} from './aos-owner-attention-observation.js';
+export type { AosOwnerAttentionObservationWriter } from './aos-owner-attention-observation.js';
+
+export {
+  buildAosMarketCapacityObservation,
+  createFileAosMarketCapacityObservationWriter,
+} from './aos-market-capacity-observation.js';
+export type {
+  AosMarketCapacityObservation,
+  AosMarketCapacityObservationWriter,
+  AosMarketCapacitySourceCoverage,
+} from './aos-market-capacity-observation.js';
+
+export { runAosSupervisorShadowCycle } from './aos-supervisor-cycle.js';
+export type {
+  AosSupervisorAiBudget,
+  AosSupervisorClientInput,
+  AosSupervisorCycleInput,
+  AosSupervisorCycleResult,
+} from './aos-supervisor-cycle.js';

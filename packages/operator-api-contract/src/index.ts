@@ -32,6 +32,7 @@ export const operatorModuleSchema = z
       'conversations',
       'execution',
       'intelligence',
+      'aos',
       'knowledge',
       'memory',
       'simulation',
@@ -157,6 +158,14 @@ export const OPERATOR_MODULES = Object.freeze([
     scope: 'Read-only proactive operator reasoning',
     webPath: '/intelligence',
     mobilePrimary: true,
+  },
+  {
+    id: 'aos',
+    group: 'INTELLIGENCE',
+    label: 'AOS Intelligence',
+    scope: 'Marketplace sentry, cases, governed behaviour and recommendation control',
+    webPath: '/aos',
+    mobilePrimary: false,
   },
   {
     id: 'memory',

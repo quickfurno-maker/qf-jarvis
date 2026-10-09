@@ -1,3 +1,5 @@
+import type { AosOwnerAttentionObservation } from '@qf-jarvis/aos-intelligence';
+
 import type { AttentionItem, ControlPlaneReadModel } from './types';
 import { isReadable } from './types';
 import { proactiveNowBrief } from './proactive';
@@ -13,8 +15,50 @@ function item(
   return { id, kind, title, context, severity, age: 'now', href };
 }
 
-export function operationalAttention(plane: ControlPlaneReadModel): readonly AttentionItem[] {
-  const merged: AttentionItem[] = [...plane.attention().items];
+function actionLabel(action: string | undefined): string {
+  if (action === undefined) return 'case review';
+  return action
+    .toLowerCase()
+    .replace(/^request_/u, '')
+    .replaceAll('_', ' ');
+}
+
+export function aosOwnerAttentionItems(
+  observation: AosOwnerAttentionObservation | undefined,
+): readonly AttentionItem[] {
+  if (observation === undefined) return Object.freeze([]);
+  return Object.freeze(
+    observation.items.map((entry) => ({
+      id: 'aos:' + entry.caseId,
+      kind: entry.requiresOwnerReview ? ('escalation' as const) : ('warning' as const),
+      title: 'AOS ' + entry.priority + ' · ' + actionLabel(entry.recommendationAction),
+      context:
+        entry.lane +
+        ' lane · score ' +
+        String(entry.attentionScore) +
+        ' · ' +
+        entry.reasonCodes.join(', ') +
+        '. Suggestion only; QuickFurno Core remains business authority.',
+      age: 'shadow',
+      severity:
+        entry.priority === 'P0'
+          ? ('critical' as const)
+          : entry.priority === 'P1'
+            ? ('warning' as const)
+            : ('info' as const),
+      href: '/aos',
+    })),
+  );
+}
+
+export function operationalAttention(
+  plane: ControlPlaneReadModel,
+  aosObservation?: AosOwnerAttentionObservation,
+): readonly AttentionItem[] {
+  const merged: AttentionItem[] = [
+    ...aosOwnerAttentionItems(aosObservation),
+    ...plane.attention().items,
+  ];
 
   for (const finding of proactiveNowBrief(plane).findings) {
     merged.unshift({

@@ -572,6 +572,17 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // match -- this records an authorised addition, it does not relax the assertion.
       'anisha-agent',
       'anisha-prompts',
+      // ADR-0177: AOS v2 is an advisory marketplace-intelligence substrate. These exact additions
+      // remain SHADOW/SUGGEST only: policy binding, Core/source bridges, certified-model/Jev/Digital
+      // Twin governance composition, evidence/case intelligence, bounded model reasoning and inert
+      // canonical recommendation projection. None grants Core mutation, communication authorization
+      // or execution authority.
+      'aos-behaviour-control',
+      'aos-core-event-bridge',
+      'aos-governance-integration',
+      'aos-intelligence',
+      'aos-model-reasoning',
+      'aos-recommendation-adapter',
       // QFJ-P08 (ADR-0082): the Core approval submission protocol. Still an EXACT set match -- this
       // records an authorised addition, it does not relax the assertion.
       'approval-core-adapter',
@@ -720,6 +731,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // authority is introduced by recording them in the exact package set.
       'operator-api-contract',
       'operator-client-core',
+      // ADR-0177: append-only AOS shadow case/recommendation/context evidence store. It is not
+      // QuickFurno business truth and carries no approval or execution authority.
+      'postgres-aos-intelligence-store',
       // QFJ-P08 (ADR-0081): the durable approval queue and audit. Still an EXACT set match -- this
       // records an authorised addition, it does not relax the assertion.
       'postgres-approval-queue',

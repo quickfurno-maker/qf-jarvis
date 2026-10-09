@@ -58,6 +58,7 @@
     "@qf-jarvis/postgres-knowledge-index": "workspace:*",
     "@qf-jarvis/postgres-riya-conversation-continuity-store": "workspace:*",
     "@qf-jarvis/postgres-riya-turn-coordinator": "workspace:*",
+    "@qf-jarvis/proactive-worker": "workspace:*",
     "@qf-jarvis/prompt-registry": "workspace:*",
     "@qf-jarvis/quickfurno-gateway": "workspace:*",
     "@qf-jarvis/rag-provisioning": "workspace:*",
