@@ -683,6 +683,9 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       // ADR-0170: the parallel scheduler owns one abortable idle-poll delay. It does not repeat via
       // setInterval or self-reschedule; every arm is cleared on abort before the promise resolves.
       'src/quickfurno-whatsapp/parallel-turn-scheduler.ts': 1,
+      // AOS marketplace intelligence owns one reviewed abortable cadence delay. The loop is SHADOW-only,
+      // arms only after a completed cycle, clears on abort, and grants no execution or business authority.
+      'src/quickfurno-whatsapp/production-worker.ts': 1,
       // Offline OpenAI launch smoke owns one hard provider-call deadline and clears it in finally.
       [OPENAI_LAUNCH_SMOKE_CLI]: 1,
       // Aarohi Phase 2: one abortable Core call, one discovery provider call, one social provider
@@ -847,6 +850,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       // Riya already requires. They receive the caller-owned pool and add no environment authority.
       '@qf-jarvis/postgres-riya-conversation-continuity-store',
       '@qf-jarvis/postgres-riya-turn-coordinator',
+      // AOS marketplace SHADOW composition only. It contributes deterministic observation/recommendation
+      // orchestration and no credential source, Core mutation, customer send, or execution authority.
+      '@qf-jarvis/proactive-worker',
       // QFJ-S3-I-B (ADR-0073): the SHADOW runner's fixed synthetic prompt is now a real
       // `PromptDefinition`, so its identity and its bytes cannot drift apart. Still an EXACT set.
       '@qf-jarvis/prompt-registry',
