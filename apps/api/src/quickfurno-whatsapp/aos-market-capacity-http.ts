@@ -1,3 +1,5 @@
+[Reading 317 lines from start (total: 317 lines, 0 remaining)]
+
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 
 import { executeQfjScaleRequest } from '@qf-jarvis/cross-system-scale-contract';
@@ -186,13 +188,22 @@ function parseSnapshot(value: unknown): QuickFurnoAosMarketCapacitySnapshotV1 | 
     coverage['cellsReturned'] !== value['cells'].length
   )
     return null;
-  const cells = value['cells'].map(parseCell);
-  if (cells.some((one) => one === null)) return null;
-  if (
-    new Set((cells as QuickFurnoAosMarketCapacityCellV1[]).map((one) => one.cellRef)).size !==
-    cells.length
-  )
-    return null;
+  const cells: QuickFurnoAosMarketCapacityCellV1[] = [];
+  for (const candidate of value['cells']) {
+    const parsed = parseCell(candidate);
+    if (parsed === null) return null;
+    cells.push(parsed);
+  }
+  if (new Set(cells.map((one) => one.cellRef)).size !== cells.length) return null;
+
+  const demandRows = Number(coverage['demandRows']);
+  const excludedDemandRows = Number(coverage['excludedDemandRows']);
+  const vendorRows = Number(coverage['vendorRows']);
+  const excludedVendorRows = Number(coverage['excludedVendorRows']);
+  const assignmentRows = Number(coverage['assignmentRows']);
+  const cellsTotal = Number(coverage['cellsTotal']);
+  const cellsReturned = coverage['cellsReturned'];
+  const cellsTruncated = coverage['cellsTruncated'];
   return Object.freeze({
     protocol: 'qfj.aos.market-capacity.snapshot.v1' as const,
     observedAt: value['observedAt'],
@@ -200,16 +211,16 @@ function parseSnapshot(value: unknown): QuickFurnoAosMarketCapacitySnapshotV1 | 
     vendorOpportunityPerLead: 3,
     responseEvidence: 'UNAVAILABLE' as const,
     coverage: Object.freeze({
-      demandRows: coverage['demandRows'] as number,
-      excludedDemandRows: coverage['excludedDemandRows'] as number,
-      vendorRows: coverage['vendorRows'] as number,
-      excludedVendorRows: coverage['excludedVendorRows'] as number,
-      assignmentRows: coverage['assignmentRows'] as number,
-      cellsTotal: coverage['cellsTotal'] as number,
-      cellsReturned: coverage['cellsReturned'] as number,
-      cellsTruncated: coverage['cellsTruncated'] as boolean,
+      demandRows,
+      excludedDemandRows,
+      vendorRows,
+      excludedVendorRows,
+      assignmentRows,
+      cellsTotal,
+      cellsReturned,
+      cellsTruncated,
     }),
-    cells: Object.freeze(cells as QuickFurnoAosMarketCapacityCellV1[]),
+    cells: Object.freeze(cells),
   });
 }
 function endpoint(baseUrl: string): string {
@@ -306,3 +317,5 @@ export function createQuickFurnoAosMarketCapacityReader(config: QuickFurnoWhatsA
     },
   });
 }
+
+[executed on device: JARVIS (1001cb62-b86a-43dc-8620-0cbe523df918)]
