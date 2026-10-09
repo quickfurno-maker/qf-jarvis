@@ -1,8 +1,9 @@
 import { createHash, generateKeyPairSync, verify } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createQuickFurnoAosMarketCapacityReader } from '../quickfurno-whatsapp/aos-market-capacity-http.js';
-import type { QuickFurnoWhatsAppHttpPost } from '../quickfurno-whatsapp/quickfurno-http.js';
+import type { QfjScaleHttpPost } from '@qf-jarvis/cross-system-scale-contract';
+
+import { createQuickFurnoAosMarketCapacityReader } from '../aos/quickfurno-market-capacity-http.js';
 
 const PATH = '/api/internal/jarvis/aos-market-capacity';
 const DOMAIN = 'qfj.aos.market-capacity.http.sig.v1';
@@ -26,7 +27,7 @@ function signedInput(body: string, requestId: string, issuedAt: string): string 
     digest(body),
   ].join('\n');
 }
-function config(httpPost: QuickFurnoWhatsAppHttpPost) {
+function config(httpPost: QfjScaleHttpPost) {
   return {
     baseUrl: 'https://quickfurno.example/',
     keyId,
@@ -80,7 +81,7 @@ function response(requestId: string) {
 
 describe('AOS market-capacity signed Core reader', () => {
   it('signs the exact request bytes and accepts only the bounded aggregate snapshot', async () => {
-    const post = vi.fn<QuickFurnoWhatsAppHttpPost>((url, init) => {
+    const post = vi.fn<QfjScaleHttpPost>((url, init) => {
       expect(url).toBe('https://quickfurno.example' + PATH);
       const request = JSON.parse(init.body) as Record<string, unknown>;
       expect(request).toMatchObject({
@@ -122,7 +123,7 @@ describe('AOS market-capacity signed Core reader', () => {
   });
 
   it('fails closed on structurally inconsistent supply aggregates', async () => {
-    const post = vi.fn<QuickFurnoWhatsAppHttpPost>((_url, init) => {
+    const post = vi.fn<QfjScaleHttpPost>((_url, init) => {
       const request = JSON.parse(init.body) as Record<string, unknown>;
       const body = response(String(request['requestId']));
       const [cell] = body.snapshot.cells;

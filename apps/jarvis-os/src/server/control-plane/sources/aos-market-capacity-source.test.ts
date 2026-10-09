@@ -50,10 +50,10 @@ function validObservation() {
     },
     topCells: [
       {
-        cellRef: 'market.pune.wakad.plumber',
-        cityRef: 'pune',
-        localityRef: 'wakad',
-        categoryRef: 'plumber',
+        cellRef: 'market.city-alpha.area-alpha.service-alpha',
+        cityRef: 'city-alpha',
+        localityRef: 'area-alpha',
+        categoryRef: 'service-alpha',
         state: 'UNDER_SUPPLIED',
         recommendation: 'ACQUIRE_VENDORS',
         demand30d: 300,
@@ -83,8 +83,8 @@ describe('AOS market-capacity observation source', () => {
         stateCounts: { UNDER_SUPPLIED: 2, OVER_SUPPLIED: 1 },
         topCells: [
           {
-            localityRef: 'wakad',
-            categoryRef: 'plumber',
+            localityRef: 'area-alpha',
+            categoryRef: 'service-alpha',
             recommendation: 'ACQUIRE_VENDORS',
           },
         ],

@@ -1,8 +1,7 @@
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 
 import { executeQfjScaleRequest } from '@qf-jarvis/cross-system-scale-contract';
-
-import type { QuickFurnoWhatsAppHttpConfig } from './quickfurno-http.js';
+import type { QfjScaleHttpPost } from '@qf-jarvis/cross-system-scale-contract';
 
 const PATH = '/api/internal/jarvis/aos-market-capacity';
 const DOMAIN = 'qfj.aos.market-capacity.http.sig.v1';
@@ -243,7 +242,19 @@ function signingInput(requestId: string, issuedAt: string, keyId: string, digest
   return [DOMAIN, 'POST', PATH, CALLER, AUDIENCE, requestId, issuedAt, keyId, digest].join('\n');
 }
 
-export function createQuickFurnoAosMarketCapacityReader(config: QuickFurnoWhatsAppHttpConfig) {
+export interface QuickFurnoAosMarketCapacityHttpConfig {
+  readonly baseUrl: string;
+  readonly keyId: string;
+  readonly privateKeyPem: string;
+  readonly clock: () => string;
+  readonly requestId: () => string;
+  readonly httpPost: QfjScaleHttpPost;
+  readonly timeoutMs?: number;
+}
+
+export function createQuickFurnoAosMarketCapacityReader(
+  config: QuickFurnoAosMarketCapacityHttpConfig,
+) {
   const url = endpoint(config.baseUrl);
   const timeoutMs = config.timeoutMs ?? 5000;
   const key = createPrivateKey(config.privateKeyPem);

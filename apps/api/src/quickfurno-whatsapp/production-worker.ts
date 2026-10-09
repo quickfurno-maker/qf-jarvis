@@ -102,7 +102,7 @@ import { bindOpenAIV1SealForProduction } from './openai-production-seal-binding.
 import { bindJf5cSealForProduction } from './production-seal-binding.js';
 import type { QuickFurnoWhatsAppProductionWorkerConfig } from './production-worker-config.js';
 import { createAgentFlowTraceObservationWriter } from './agent-flow-trace-observation.js';
-import { createQuickFurnoAosMarketCapacityReader } from './aos-market-capacity-http.js';
+import { createQuickFurnoAosMarketCapacityReader } from '../aos/quickfurno-market-capacity-http.js';
 import { createQuickFurnoWorkerObservationWriter } from './production-observation.js';
 
 function boundedProvider(event: GatewayEvent): 'openai' | 'groq' | 'other' {
