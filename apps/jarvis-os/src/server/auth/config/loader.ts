@@ -38,6 +38,7 @@ import type { AuthConfigV1 } from './schema';
 export const AUTH_CONFIG_PATH_VAR = 'QFJ_JOS_AUTH_CONFIG_FILE';
 export const WORKER_OBSERVATION_PATH_VAR = 'QFJ_WORKER_OBSERVATION_FILE';
 export const AOS_OWNER_ATTENTION_OBSERVATION_PATH_VAR = 'QFJ_AOS_OWNER_ATTENTION_OBSERVATION_FILE';
+export const AOS_MARKET_CAPACITY_OBSERVATION_PATH_VAR = 'QFJ_AOS_MARKET_CAPACITY_OBSERVATION_FILE';
 export const AGENT_FLOW_TRACE_PATH_VAR = 'QFJ_AGENT_FLOW_TRACE_FILE';
 export const CORE_READ_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_READ_CONFIG_FILE';
 export const CORE_COMMAND_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_COMMAND_CONFIG_FILE';
@@ -62,6 +63,11 @@ export function readWorkerObservationPathFromEnvironment(): string | undefined {
 
 export function readAosOwnerAttentionObservationPathFromEnvironment(): string | undefined {
   const value = process.env[AOS_OWNER_ATTENTION_OBSERVATION_PATH_VAR];
+  return value === undefined || value.trim() === '' ? undefined : value;
+}
+
+export function readAosMarketCapacityObservationPathFromEnvironment(): string | undefined {
+  const value = process.env[AOS_MARKET_CAPACITY_OBSERVATION_PATH_VAR];
   return value === undefined || value.trim() === '' ? undefined : value;
 }
 

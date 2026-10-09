@@ -9,7 +9,7 @@ import { SECURITY_HEADERS, contentSecurityPolicy, isApiPath, isPublicPath } from
  * Proxy classification and Content-Security-Policy (JOS-01C, ADR-0087).
  *
  * The proxy's routing decisions and its CSP are pure functions, exported so they can be asserted
- * without a Next.js request pipeline. What cannot be asserted here — that the proxy actually runs —
+ * without a Next.js request pipeline. What cannot be asserted here â€” that the proxy actually runs â€”
  * does not matter, because the proxy is deliberately NOT the authorization boundary: the route and
  * layout tests prove the protected surfaces refuse on their own.
  */
@@ -149,7 +149,7 @@ describe('security headers', () => {
     }
   });
 
-  it('does NOT claim HSTS — the tier that terminates TLS owns that header', () => {
+  it('does NOT claim HSTS â€” the tier that terminates TLS owns that header', () => {
     // Sending HSTS from the application would either do nothing or read as protection that is not
     // there. JOS-01D put it in a reviewed Traefik overlay applied only after trusted TLS is proven,
     // so it must stay absent here even though the deployment now serves real HTTPS.
@@ -210,6 +210,9 @@ describe('secret containment in application source', () => {
     expect(loader).toContain(
       "AOS_OWNER_ATTENTION_OBSERVATION_PATH_VAR = 'QFJ_AOS_OWNER_ATTENTION_OBSERVATION_FILE'",
     );
+    expect(loader).toContain(
+      "AOS_MARKET_CAPACITY_OBSERVATION_PATH_VAR = 'QFJ_AOS_MARKET_CAPACITY_OBSERVATION_FILE'",
+    );
     expect(loader).toContain("AGENT_FLOW_TRACE_PATH_VAR = 'QFJ_AGENT_FLOW_TRACE_FILE'");
     expect(loader).toContain("CORE_READ_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_READ_CONFIG_FILE'");
     expect(loader).toContain("CORE_COMMAND_CONFIG_PATH_VAR = 'QFJ_JOS_CORE_COMMAND_CONFIG_FILE'");
@@ -226,7 +229,7 @@ describe('secret containment in application source', () => {
     expect(loader).toContain("CONFIG_SCHEMA_VERSION_VAR = 'QFJ_CONFIG_SCHEMA_VERSION'");
     expect(loader).toContain("SERVICE_ID_VAR = 'QFJ_SERVICE_ID'");
     const envReads = loader.match(/process\.env(?:\[|\.)/gu) ?? [];
-    expect(envReads).toHaveLength(15);
+    expect(envReads).toHaveLength(16);
   });
 
   it('imports node:fs only in the auth config loader', () => {
@@ -242,6 +245,7 @@ describe('secret containment in application source', () => {
         relative !== 'server/auth/config/loader.ts' &&
         relative !== 'server/control-plane/sources/worker-observation-source.ts' &&
         relative !== 'server/control-plane/sources/aos-owner-attention-source.ts' &&
+        relative !== 'server/control-plane/sources/aos-market-capacity-source.ts' &&
         relative !== 'server/control-plane/sources/agent-flow-trace-source.ts' &&
         relative !== 'server/control-plane/sources/release-assurance-source.ts'
       ) {

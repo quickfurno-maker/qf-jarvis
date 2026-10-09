@@ -1,12 +1,16 @@
 import { buildOperatorIntelligenceContext } from '@/lib/control-plane/operator-intelligence';
 import { controlPlane } from '@/lib/control-plane';
-import { loadAgniOperatorIngressConfig } from '@/server/auth/config/loader';
+import {
+  loadAgniOperatorIngressConfig,
+  readAosMarketCapacityObservationPathFromEnvironment,
+} from '@/server/auth/config/loader';
 import {
   AGNI_OWNER_SNAPSHOT_RESPONSE_PROTOCOL,
   agniOwnerSnapshotResponseHeaders,
   parseAgniOwnerSnapshot,
   verifyAgniOwnerSnapshot,
 } from '@/server/operator/agni-owner-snapshot';
+import { readAosMarketCapacityObservation } from '@/server/control-plane/sources/aos-market-capacity-source';
 import { headersToRecord } from '@/server/operator/agni-operator-query';
 import { operatorBootstrap } from '@/server/operator/bootstrap';
 
@@ -58,7 +62,10 @@ export async function POST(request: Request): Promise<Response> {
   if (!parseAgniOwnerSnapshot(rawBody)) return reply(400, { error: 'invalid_request' });
 
   try {
-    const plane = await controlPlane();
+    const [plane, marketplace] = await Promise.all([
+      controlPlane(),
+      readAosMarketCapacityObservation(readAosMarketCapacityObservationPathFromEnvironment()),
+    ]);
     const context = buildOperatorIntelligenceContext(plane, operatorBootstrap());
     return reply(
       200,
@@ -69,6 +76,7 @@ export async function POST(request: Request): Promise<Response> {
         agents: context.agents,
         systems: context.systems,
         capabilities: context.capabilities,
+        marketplace,
       },
       agniOwnerSnapshotResponseHeaders(verified.metadata),
     );
