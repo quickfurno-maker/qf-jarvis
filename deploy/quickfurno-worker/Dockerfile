@@ -11,6 +11,7 @@ COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json tsconfig
 COPY packages ./packages
 COPY apps/api ./apps/api
 COPY apps/proactive-worker ./apps/proactive-worker
+COPY apps/worker ./apps/worker
 COPY apps/quickfurno-gateway ./apps/quickfurno-gateway
 
 RUN pnpm install --frozen-lockfile --filter @qf-jarvis/api... --filter @qf-jarvis/quickfurno-gateway... --filter .
@@ -18,8 +19,8 @@ RUN pnpm --filter @qf-jarvis/api... build
 
 # Production image needs package manifests + dist only. Remove TypeScript sources/tests from the
 # copied workspace packages after build while preserving pnpm's workspace symlink layout.
-RUN find packages apps/api apps/proactive-worker apps/quickfurno-gateway -type d \( -name src -o -name tests \) -prune -exec rm -rf '{}' + \
- && find packages apps/api apps/proactive-worker apps/quickfurno-gateway -type f \( -name '*.tsbuildinfo' -o -name '*.map' \) -delete
+RUN find packages apps/api apps/proactive-worker apps/worker apps/quickfurno-gateway -type d \( -name src -o -name tests \) -prune -exec rm -rf '{}' + \
+ && find packages apps/api apps/proactive-worker apps/worker apps/quickfurno-gateway -type f \( -name '*.tsbuildinfo' -o -name '*.map' \) -delete
 
 FROM ${NODE_IMAGE} AS runtime
 
@@ -38,6 +39,7 @@ COPY --from=builder --chown=10003:10002 /build/node_modules ./node_modules
 COPY --from=builder --chown=10003:10002 /build/packages ./packages
 COPY --from=builder --chown=10003:10002 /build/apps/api ./apps/api
 COPY --from=builder --chown=10003:10002 /build/apps/proactive-worker ./apps/proactive-worker
+COPY --from=builder --chown=10003:10002 /build/apps/worker ./apps/worker
 COPY --from=builder --chown=10003:10002 /build/apps/quickfurno-gateway ./apps/quickfurno-gateway
 
 USER 10003:10002
