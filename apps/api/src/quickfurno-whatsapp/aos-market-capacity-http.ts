@@ -1,5 +1,3 @@
-[Reading 317 lines from start (total: 317 lines, 0 remaining)]
-
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 
 import { executeQfjScaleRequest } from '@qf-jarvis/cross-system-scale-contract';
@@ -317,5 +315,3 @@ export function createQuickFurnoAosMarketCapacityReader(config: QuickFurnoWhatsA
     },
   });
 }
-
-[executed on device: JARVIS (1001cb62-b86a-43dc-8620-0cbe523df918)]
