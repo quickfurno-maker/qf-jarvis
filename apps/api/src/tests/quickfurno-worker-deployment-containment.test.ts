@@ -20,6 +20,7 @@ const example = read('deploy/quickfurno-worker/worker-config.example.json');
 const jevCompose = read('deploy/quickfurno-worker/compose.jev.yml');
 const jevExample = read('deploy/quickfurno-worker/worker-config.jev-shadow.example.json');
 const gatewayCompose = read('deploy/quickfurno-gateway/compose.production.yml');
+const phase15Release = read('deploy/phase15/release.sh');
 const aosMarketObservation = read('apps/proactive-worker/src/aos-market-capacity-observation.ts');
 const aosOwnerAttentionObservation = read(
   'apps/proactive-worker/src/aos-owner-attention-observation.ts',
@@ -41,6 +42,8 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(compose).toContain("user: '10003:10002'");
     expect(aosMarketObservation).toContain('mode: 0o640');
     expect(aosOwnerAttentionObservation).toContain('mode: 0o640');
+    expect(aosMarketObservation).toContain('chmod(temporary, 0o640)');
+    expect(aosOwnerAttentionObservation).toContain('chmod(temporary, 0o640)');
     expect(aosMarketObservation).toContain('mode: 0o750');
     expect(aosOwnerAttentionObservation).toContain('mode: 0o750');
     expect(aosMarketObservation).not.toContain('mode: 0o700');
@@ -58,6 +61,17 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(deploy).toContain('/var/run/qfj-observability/aos-market-capacity.json');
     expect(deploy).toContain('/var/run/qfj-observability/aos-owner-attention.json');
     expect(deploy).toContain('aos.market_capacity.cycle_failed');
+  });
+
+  it('certifies that the staged Jarvis OS consumer can read the AOS observations before promotion', () => {
+    expect(phase15Release).toContain('verify_os_aos_observations');
+    expect(phase15Release).toContain('QFJ_PHASE15_AOS_OS_NOT_READABLE');
+    expect(phase15Release).toContain('/run/observability/aos-market-capacity.json');
+    expect(phase15Release).toContain('/run/observability/aos-owner-attention.json');
+    expect(phase15Release).toContain('QFJ_PHASE15_AOS_OS_READABLE');
+    expect(phase15Release).toContain(
+      '! verify_os_aos_observations "$target" "$STAGED_MANIFEST" ||',
+    );
   });
   it('uses PostgreSQL for durable turns and no longer mounts a host spool', () => {
     expect(gatewayCompose).toContain('QFJ_GATEWAY_TURN_STORE: POSTGRES');
