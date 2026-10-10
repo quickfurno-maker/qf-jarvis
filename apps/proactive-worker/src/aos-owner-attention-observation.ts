@@ -44,7 +44,7 @@ export function createFileAosOwnerAttentionObservationWriter(
     async write(cycle: AosSupervisorCycleResult, emittedAt: string): Promise<void> {
       const snapshot = buildAosOwnerAttentionObservation(cycle, emittedAt);
       const directory = dirname(filePath);
-      await mkdir(directory, { recursive: true, mode: 0o700 });
+      await mkdir(directory, { recursive: true, mode: 0o750 });
       const temporary = filePath + '.tmp';
       await writeFile(temporary, JSON.stringify(snapshot), { encoding: 'utf8', mode: 0o640 });
       await rename(temporary, filePath);

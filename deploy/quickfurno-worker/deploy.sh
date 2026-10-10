@@ -57,6 +57,15 @@ done
 [[ -d "$CONTROL" && ! -L "$CONTROL" ]] || die "$CONTROL must be a real directory."
 [[ -d "$OBSERVABILITY" && ! -L "$OBSERVABILITY" ]] || die "$OBSERVABILITY must be a real directory."
 
+# The worker writes observations as 10003:10002 and Jarvis OS reads them as 10001 plus
+# supplementary group 10002. Keep the shared directory root-controlled, group-writable
+# for atomic replacement, and group-traversable/readable without granting world access.
+install -d -o 0 -g 10002 -m 0770 "$OBSERVABILITY"
+[[ "$(stat -c '%u:%g' "$OBSERVABILITY")" == "0:10002" ]] ||
+  die "$OBSERVABILITY owner/group must be 0:10002."
+[[ "$(stat -c '%a' "$OBSERVABILITY")" == "770" ]] ||
+  die "$OBSERVABILITY mode must be 770."
+
 # Durable turn ownership lives in PostgreSQL. No application-host spool directory is
 # created, repaired, mounted or permissioned here. The control and observability paths
 # below are operational surfaces only; neither is business truth.
