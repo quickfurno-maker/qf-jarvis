@@ -43,7 +43,7 @@ COPY --from=builder --chown=10003:10002 /build/apps/worker ./apps/worker
 COPY --from=builder --chown=10003:10002 /build/apps/quickfurno-gateway ./apps/quickfurno-gateway
 
 USER 10003:10002
-CMD ["node", "apps/api/dist/bin/run-quickfurno-whatsapp-production-worker.js", "--config", "/run/secrets/qf-jarvis-whatsapp-worker.json"]
+CMD ["node", "apps/api/dist/bin/run-quickfurno-whatsapp-production-worker.js", "--config", "/run/secrets/qf-jarvis-whatsapp-worker.json", "--enable-aos-shadow"]
 
 ARG GIT_SHA=unknown
 LABEL org.opencontainers.image.title="qf-jarvis-quickfurno-worker" \

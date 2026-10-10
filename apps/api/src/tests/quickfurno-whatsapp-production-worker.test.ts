@@ -4,7 +4,11 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { loadQuickFurnoWhatsAppProductionWorkerConfig } from '../quickfurno-whatsapp/production-worker-config.js';
+import {
+  CANONICAL_AOS_SHADOW_DEPLOYMENT,
+  enableCanonicalAosShadow,
+  loadQuickFurnoWhatsAppProductionWorkerConfig,
+} from '../quickfurno-whatsapp/production-worker-config.js';
 
 const SYNTHETIC_CA_PEM = [
   '-----BEGIN CERTIFICATE-----',
@@ -137,6 +141,24 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
       mode: 'GROQ_ONLY',
       seal: {},
       credentialReference: 'groq.qfj.production.v1',
+    });
+    expect(config.aosShadow).toEqual({ mode: 'DISABLED' });
+  });
+
+  it('enables only the canonical bounded AOS SHADOW deployment posture', () => {
+    const root = tempRoot();
+    const path = join(root, 'worker.json');
+    writeFileSync(path, JSON.stringify(validConfig(root)));
+    const base = loadQuickFurnoWhatsAppProductionWorkerConfig(path);
+    const enabled = enableCanonicalAosShadow(base);
+
+    expect(base.aosShadow).toEqual({ mode: 'DISABLED' });
+    expect(enabled.aosShadow).toEqual(CANONICAL_AOS_SHADOW_DEPLOYMENT);
+    expect(enabled.aosShadow).toEqual({
+      mode: 'SHADOW',
+      cadenceMs: 900_000,
+      ownerAttentionObservationFile: '/var/run/qfj-observability/aos-owner-attention.json',
+      marketCapacityObservationFile: '/var/run/qfj-observability/aos-market-capacity.json',
     });
   });
 
@@ -510,6 +532,7 @@ describe('QuickFurno WhatsApp production worker containment', () => {
   const killSwitch = source('../quickfurno-whatsapp/production-kill-switch.ts');
   const network = source('../quickfurno-whatsapp/production-network.ts');
   const bin = source('../bin/run-quickfurno-whatsapp-production-worker.ts');
+  const workerDockerfile = source('../../../../deploy/quickfurno-worker/Dockerfile');
 
   it('has no Nara provider, discovery, credential or fallback surface', () => {
     for (const forbidden of [
@@ -589,6 +612,12 @@ describe('QuickFurno WhatsApp production worker containment', () => {
     expect(bin).not.toContain('String(error)');
     expect(bin).not.toContain('error.message');
     expect(bin).toContain('qfj-whatsapp-worker REFUSED');
+    expect(bin).toContain("argv[2] === '--enable-aos-shadow'");
+    expect(bin).toContain('enableCanonicalAosShadow');
+    expect(bin).toContain('aosShadow=${config.aosShadow.mode}');
+    expect(workerDockerfile).toContain(
+      '"/run/secrets/qf-jarvis-whatsapp-worker.json", "--enable-aos-shadow"',
+    );
   });
 
   it('checks a fail-closed filesystem kill switch before claiming and at gateway invocation', () => {
