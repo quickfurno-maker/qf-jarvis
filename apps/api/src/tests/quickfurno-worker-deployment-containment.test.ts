@@ -20,6 +20,10 @@ const example = read('deploy/quickfurno-worker/worker-config.example.json');
 const jevCompose = read('deploy/quickfurno-worker/compose.jev.yml');
 const jevExample = read('deploy/quickfurno-worker/worker-config.jev-shadow.example.json');
 const gatewayCompose = read('deploy/quickfurno-gateway/compose.production.yml');
+const aosMarketObservation = read('apps/proactive-worker/src/aos-market-capacity-observation.ts');
+const aosOwnerAttentionObservation = read(
+  'apps/proactive-worker/src/aos-owner-attention-observation.ts',
+);
 
 describe('QuickFurno production worker deployment containment', () => {
   it('is a private non-root read-only container with no public routing surface', () => {
@@ -31,6 +35,14 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(compose).not.toMatch(/^\s*ports:/m);
     expect(dockerfile).not.toMatch(/^EXPOSE\b/m);
     expect(dockerfile).toContain('USER 10003:10002');
+  });
+
+  it('keeps AOS observation files private but readable by the shared Jarvis OS group', () => {
+    expect(compose).toContain("user: '10003:10002'");
+    expect(aosMarketObservation).toContain('mode: 0o640');
+    expect(aosOwnerAttentionObservation).toContain('mode: 0o640');
+    expect(aosMarketObservation).not.toContain('mode: 0o644');
+    expect(aosOwnerAttentionObservation).not.toContain('mode: 0o644');
   });
 
   it('uses PostgreSQL for durable turns and no longer mounts a host spool', () => {
