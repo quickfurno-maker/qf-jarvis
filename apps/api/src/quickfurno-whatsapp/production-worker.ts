@@ -196,9 +196,13 @@ function aosSafeFailureCode(error: unknown): string {
   const mapped = AOS_SAFE_FAILURE_MESSAGES.get(message);
   if (mapped) return mapped;
   if (error && typeof error === 'object' && 'code' in error) {
-    const code = String((error as { readonly code?: unknown }).code ?? '');
-    if (['EACCES', 'EPERM', 'EROFS', 'ENOENT', 'ENOSPC'].includes(code))
+    const code = (error as { readonly code?: unknown }).code;
+    if (
+      typeof code === 'string' &&
+      ['EACCES', 'EPERM', 'EROFS', 'ENOENT', 'ENOSPC'].includes(code)
+    ) {
       return 'FILESYSTEM_' + code;
+    }
   }
   return 'UNKNOWN';
 }
