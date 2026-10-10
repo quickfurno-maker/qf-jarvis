@@ -1,0 +1,85 @@
+name: Phase 1 AOS Shadow Production Diagnostic
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type DIAGNOSE_AOS_SHADOW_PHASE1'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qf-jarvis-phase1-aos-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    name: Read-only production AOS shadow diagnostic
+    environment: production
+    runs-on: [self-hosted, Linux, X64, qfj-phase15-deployer]
+    timeout-minutes: 10
+    steps:
+      - name: Enforce explicit diagnostic request
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "DIAGNOSE_AOS_SHADOW_PHASE1"
+
+      - name: Inspect immutable revisions and observation mounts
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== containers ==="
+          docker ps --format '{{.Names}} {{.Image}}' | grep '^qf-jarvis-' | sort
+
+          echo "=== worker revision ==="
+          WORKER="qf-jarvis-whatsapp-worker"
+          docker inspect "$WORKER" --format 'revision={{ index .Config.Labels "org.opencontainers.image.revision" }}'
+          docker inspect "$WORKER" --format '{{range .Mounts}}{{if eq .Destination "/var/run/qfj-observability"}}worker_observation_source={{.Source}} rw={{.RW}}{{end}}{{end}}'
+
+          echo "=== jarvis os observation env/mount ==="
+          OS="$(docker ps --format '{{.Names}}' | grep -E '^qf-jarvis-(blue|green)-jarvis-os-1$' | head -n1)"
+          test -n "$OS"
+          docker inspect "$OS" --format 'revision={{ index .Config.Labels "org.opencontainers.image.revision" }}'
+          docker inspect "$OS" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^QFJ_AOS_'
+          docker inspect "$OS" --format '{{range .Mounts}}{{if eq .Destination "/run/observability"}}jarvis_observation_source={{.Source}} rw={{.RW}}{{end}}{{end}}'
+
+      - name: Inspect safe AOS observation metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="/srv/qf-jarvis/state/observability"
+          for file in aos-market-capacity.json aos-owner-attention.json whatsapp-worker.json; do
+            path="$ROOT/$file"
+            if [[ -f "$path" ]]; then
+              echo "FILE $file present size=$(stat -c '%s' "$path") mtime=$(stat -c '%y' "$path")"
+            else
+              echo "FILE $file missing"
+            fi
+          done
+
+          MARKET="$ROOT/aos-market-capacity.json"
+          if [[ -f "$MARKET" ]]; then
+            jq '{
+              protocol,
+              observedAt,
+              sourceObservedAt,
+              responseEvidence,
+              cellsTotal,
+              cellsTruncated,
+              stateCounts,
+              recommendationCounts,
+              topCellsCount:(.topCells|length)
+            }' "$MARKET"
+          fi
+
+      - name: Inspect recent safe AOS worker events
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker logs --since 90m qf-jarvis-whatsapp-worker 2>&1             | grep -E 'aos\.market_capacity\.(cycle_completed|cycle_failed)|qfj-whatsapp-worker READY'             | tail -n 80 || true
