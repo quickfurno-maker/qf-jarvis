@@ -155,7 +155,7 @@ export function createFileAosMarketCapacityObservationWriter(
   return Object.freeze({
     async write(input: Parameters<AosMarketCapacityObservationWriter['write']>[0]): Promise<void> {
       const snapshot = buildAosMarketCapacityObservation(input);
-      await mkdir(dirname(filePath), { recursive: true, mode: 0o700 });
+      await mkdir(dirname(filePath), { recursive: true, mode: 0o750 });
       const temporary = filePath + '.tmp';
       await writeFile(temporary, JSON.stringify(snapshot), { encoding: 'utf8', mode: 0o640 });
       await rename(temporary, filePath);

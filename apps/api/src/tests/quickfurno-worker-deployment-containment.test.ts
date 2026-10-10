@@ -37,12 +37,19 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(dockerfile).toContain('USER 10003:10002');
   });
 
-  it('keeps AOS observation files private but readable by the shared Jarvis OS group', () => {
+  it('keeps AOS observation files and directory private but readable by the shared Jarvis OS group', () => {
     expect(compose).toContain("user: '10003:10002'");
     expect(aosMarketObservation).toContain('mode: 0o640');
     expect(aosOwnerAttentionObservation).toContain('mode: 0o640');
+    expect(aosMarketObservation).toContain('mode: 0o750');
+    expect(aosOwnerAttentionObservation).toContain('mode: 0o750');
+    expect(aosMarketObservation).not.toContain('mode: 0o700');
+    expect(aosOwnerAttentionObservation).not.toContain('mode: 0o700');
     expect(aosMarketObservation).not.toContain('mode: 0o644');
     expect(aosOwnerAttentionObservation).not.toContain('mode: 0o644');
+    expect(deploy).toContain('install -d -o 0 -g 10002 -m 0770 "$OBSERVABILITY"');
+    expect(deploy).toContain('owner/group must be 0:10002');
+    expect(deploy).toContain('mode must be 770');
   });
 
   it('certifies bounded AOS SHADOW observation readiness during worker deployment', () => {
