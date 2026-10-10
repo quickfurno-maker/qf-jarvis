@@ -1,4 +1,4 @@
-import { mkdir, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute } from 'node:path';
 
 import {
@@ -47,6 +47,7 @@ export function createFileAosOwnerAttentionObservationWriter(
       await mkdir(directory, { recursive: true, mode: 0o750 });
       const temporary = filePath + '.tmp';
       await writeFile(temporary, JSON.stringify(snapshot), { encoding: 'utf8', mode: 0o640 });
+      await chmod(temporary, 0o640);
       await rename(temporary, filePath);
     },
   });

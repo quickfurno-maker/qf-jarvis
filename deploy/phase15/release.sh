@@ -299,6 +299,40 @@ roll_worker_disabled(){
   echo "QFJ_PHASE15_AOS_SHADOW_READY source=$sha"
 }
 
+verify_os_aos_observations(){
+  local slot="$1" manifest="$2" id
+  id="$(os_compose "$slot" "$manifest" ps -q jarvis-os)"
+  [[ -n "$id" ]] || {
+    echo "QFJ_PHASE15_AOS_OS_NOT_READABLE: jarvis-os container missing" >&2
+    return 1
+  }
+
+  if ! docker exec "$id" node -e '
+    const fs=require("node:fs");
+    const market=JSON.parse(fs.readFileSync("/run/observability/aos-market-capacity.json","utf8"));
+    if(market.protocol!=="qfj.aos.market-capacity-observation.v1")process.exit(2);
+    if(market.executionAuthority!=="NONE"||market.businessEffect!==false||market.productionMutation!==false)process.exit(3);
+    const attention=JSON.parse(fs.readFileSync("/run/observability/aos-owner-attention.json","utf8"));
+    if(attention.protocol!=="qfj.aos.owner-attention-observation.v1")process.exit(4);
+    if(attention.executionAuthority!=="NONE"||attention.businessEffect!==false||attention.outboundNotificationAuthorized!==false)process.exit(5);
+  ' >/dev/null 2>&1; then
+    echo "QFJ_PHASE15_AOS_OS_NOT_READABLE" >&2
+    docker exec "$id" node -e '
+      const fs=require("node:fs");
+      for(const path of ["/run/observability","/run/observability/aos-market-capacity.json","/run/observability/aos-owner-attention.json"]){
+        try{
+          const s=fs.statSync(path);
+          console.error(JSON.stringify({path,mode:(s.mode&0o777).toString(8),uid:s.uid,gid:s.gid,size:s.size}));
+        }catch(error){
+          console.error(JSON.stringify({path,errorCode:error&&typeof error==="object"&&"code" in error?String(error.code):"UNKNOWN"}));
+        }
+      }
+    ' >&2 || true
+    return 1
+  fi
+  echo "QFJ_PHASE15_AOS_OS_READABLE slot=$slot"
+}
+
 activate_worker(){
   local manifest="$1" sha
   sha="$(manifest_value "$manifest" sha)"
@@ -312,6 +346,7 @@ restore_runtime(){
   public_smoke || failed=1
   roll_gateway "$manifest" || failed=1
   roll_worker_disabled "$manifest" || failed=1
+  verify_os_aos_observations "$slot" "$manifest" || failed=1
   activate_worker "$manifest" || failed=1
   return "$failed"
 }
@@ -373,6 +408,7 @@ promote(){
   # Stateful/durable consumers deliberately do NOT run blue/green concurrently.
   if ! roll_gateway "$STAGED_MANIFEST" ||
      ! roll_worker_disabled "$STAGED_MANIFEST" ||
+     ! verify_os_aos_observations "$target" "$STAGED_MANIFEST" ||
      ! activate_worker "$STAGED_MANIFEST"; then
     echo "QFJ_PHASE15_CONSUMER_PROMOTION_FAILED" >&2
     if [[ -n "$active" && -f "$CURRENT_MANIFEST" ]]; then
@@ -402,6 +438,7 @@ rollback(){
   # Durable consumers are rolled back disabled first; V0/V1 rolling compatibility keeps the boundary valid.
   roll_gateway "$PREVIOUS_MANIFEST"
   roll_worker_disabled "$PREVIOUS_MANIFEST"
+  verify_os_aos_observations "$previous" "$PREVIOUS_MANIFEST"
   switch_traffic "$previous" "$PREVIOUS_MANIFEST"
   if ! public_smoke; then
     echo "QFJ_PHASE15_ROLLBACK_SMOKE_FAILED" >&2
