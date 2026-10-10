@@ -456,6 +456,22 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
   readonly staleProcessingMs: number;
 }
 
+export const CANONICAL_AOS_SHADOW_DEPLOYMENT = Object.freeze({
+  mode: 'SHADOW' as const,
+  cadenceMs: 900_000,
+  ownerAttentionObservationFile: '/var/run/qfj-observability/aos-owner-attention.json',
+  marketCapacityObservationFile: '/var/run/qfj-observability/aos-market-capacity.json',
+});
+
+export function enableCanonicalAosShadow(
+  config: QuickFurnoWhatsAppProductionWorkerConfig,
+): QuickFurnoWhatsAppProductionWorkerConfig {
+  return Object.freeze({
+    ...config,
+    aosShadow: CANONICAL_AOS_SHADOW_DEPLOYMENT,
+  });
+}
+
 function boundedFile(path: string, maxBytes: number): Buffer {
   const raw = readFileSync(path);
   if (raw.length < 2 || raw.length > maxBytes) throw new Error('production-worker-config-invalid');
