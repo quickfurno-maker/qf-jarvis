@@ -620,6 +620,15 @@ describe('QuickFurno WhatsApp production worker containment', () => {
     );
   });
 
+  it('emits only bounded AOS SHADOW failure codes and never raw exception text', () => {
+    expect(worker).toContain("['aos-market-capacity-request-failed', 'SOURCE_REQUEST_FAILED']");
+    expect(worker).toContain("['aos-market-capacity-response-invalid', 'SOURCE_RESPONSE_INVALID']");
+    expect(worker).toContain("'aos.failure_code': failureCode");
+    expect(worker).toContain("'aos.execution_authority': 'NONE'");
+    expect(worker).not.toContain("'aos.error':");
+    expect(worker).not.toContain("'aos.error_message':");
+  });
+
   it('checks a fail-closed filesystem kill switch before claiming and at gateway invocation', () => {
     expect(killSwitch).toContain('statSync(path)');
     expect(killSwitch).toContain("code !== 'ENOENT'");

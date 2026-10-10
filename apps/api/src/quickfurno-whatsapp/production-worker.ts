@@ -178,6 +178,35 @@ function sleepUntilAosCycle(milliseconds: number, signal: AbortSignal): Promise<
   });
 }
 
+const AOS_SAFE_FAILURE_MESSAGES = new Map<string, string>([
+  ['aos-market-capacity-request-failed', 'SOURCE_REQUEST_FAILED'],
+  ['aos-market-capacity-response-invalid', 'SOURCE_RESPONSE_INVALID'],
+  ['aos-market-capacity-config-invalid', 'SOURCE_CONFIG_INVALID'],
+  ['aos-market-capacity-input-invalid', 'SOURCE_INPUT_INVALID'],
+  ['aos-marketplace-snapshot-invalid', 'SUPERVISOR_SNAPSHOT_INVALID'],
+  ['aos-market-cell-reference-invalid', 'MARKET_CELL_REFERENCE_INVALID'],
+  ['aos-market-cell-count-invalid', 'MARKET_CELL_COUNT_INVALID'],
+  ['aos-market-cell-shape-invalid', 'MARKET_CELL_SHAPE_INVALID'],
+  ['aos-market-capacity-observation-path-invalid', 'MARKET_OBSERVATION_PATH_INVALID'],
+  ['aos-owner-attention-observation-path-invalid', 'ATTENTION_OBSERVATION_PATH_INVALID'],
+]);
+
+function aosSafeFailureCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  const mapped = AOS_SAFE_FAILURE_MESSAGES.get(message);
+  if (mapped) return mapped;
+  if (error && typeof error === 'object' && 'code' in error) {
+    const code = (error as { readonly code?: unknown }).code;
+    if (
+      typeof code === 'string' &&
+      ['EACCES', 'EPERM', 'EROFS', 'ENOENT', 'ENOSPC'].includes(code)
+    ) {
+      return 'FILESYSTEM_' + code;
+    }
+  }
+  return 'UNKNOWN';
+}
+
 interface ProductionRuntimeStack {
   readonly tier: 'GROQ' | 'LUNA' | 'SOL';
   readonly release: ProviderReleaseRef;
@@ -658,12 +687,14 @@ export async function createQuickFurnoWhatsAppProductionWorker(
                   'aos.source_truncated': snapshot.coverage.cellsTruncated,
                   'aos.execution_authority': 'NONE',
                 });
-              } catch {
+              } catch (error) {
+                const failureCode = aosSafeFailureCode(error);
                 addMetric('qfj.aos.cycles', 1, { result: 'failed' });
                 recordMetric('qfj.aos.cycle.duration', performance.now() - startedAt, {
                   result: 'failed',
                 });
                 emitStructuredLog('WARN', 'aos.market_capacity.cycle_failed', {
+                  'aos.failure_code': failureCode,
                   'aos.execution_authority': 'NONE',
                 });
               }

@@ -45,6 +45,13 @@ describe('QuickFurno production worker deployment containment', () => {
     expect(aosOwnerAttentionObservation).not.toContain('mode: 0o644');
   });
 
+  it('certifies bounded AOS SHADOW observation readiness during worker deployment', () => {
+    expect(deploy).toContain('AOS_SHADOW_OBSERVATION_NOT_READY');
+    expect(deploy).toContain('AOS shadow observations');
+    expect(deploy).toContain('/var/run/qfj-observability/aos-market-capacity.json');
+    expect(deploy).toContain('/var/run/qfj-observability/aos-owner-attention.json');
+    expect(deploy).toContain('aos.market_capacity.cycle_failed');
+  });
   it('uses PostgreSQL for durable turns and no longer mounts a host spool', () => {
     expect(gatewayCompose).toContain('QFJ_GATEWAY_TURN_STORE: POSTGRES');
     expect(gatewayCompose).toContain('QFJ_GATEWAY_DATABASE_CONFIG_FILE');

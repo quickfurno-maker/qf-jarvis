@@ -122,6 +122,29 @@ done
 docker logs qf-jarvis-whatsapp-worker 2>&1 | grep -q "qfj-whatsapp-worker READY" ||
   die "worker never reached evidence-gated READY."
 
+aos_observation_status="missing"
+for _ in $(seq 1 30); do
+  if docker exec qf-jarvis-whatsapp-worker node -e '
+    const fs=require("node:fs");
+    const market=JSON.parse(fs.readFileSync("/var/run/qfj-observability/aos-market-capacity.json","utf8"));
+    if(market.protocol!=="qfj.aos.market-capacity-observation.v1")process.exit(2);
+    if(market.executionAuthority!=="NONE"||market.businessEffect!==false||market.productionMutation!==false)process.exit(3);
+    const attention=JSON.parse(fs.readFileSync("/var/run/qfj-observability/aos-owner-attention.json","utf8"));
+    if(attention.protocol!=="qfj.aos.owner-attention-observation.v1")process.exit(4);
+    if(attention.executionAuthority!=="NONE"||attention.businessEffect!==false||attention.outboundNotificationAuthorized!==false)process.exit(5);
+  ' >/dev/null 2>&1; then
+    aos_observation_status="ready"
+    break
+  fi
+  sleep 1
+done
+if [[ "$aos_observation_status" != "ready" ]]; then
+  echo "AOS_SHADOW_OBSERVATION_NOT_READY" >&2
+  docker logs qf-jarvis-whatsapp-worker 2>&1 |
+    grep 'aos.market_capacity.cycle_failed' |
+    tail -n 1 >&2 || true
+fi
+
 fail=0
 prove() {
   if [[ "$2" == "$3" ]]; then printf '  ok    %-38s %s\n' "$1" "$3"; else
@@ -143,6 +166,7 @@ prove "legacy turn spool absent" ""   "$(docker inspect qf-jarvis-whatsapp-worke
 prove "postgres CA source" "$CA"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/postgres-ca.pem"}}{{.Source}}{{end}}{{end}}')"
 prove "observation source" "$OBSERVABILITY"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/run/qfj-observability"}}{{.Source}}{{end}}{{end}}')"
 prove "observation writable" "true"   "$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/var/run/qfj-observability"}}{{.RW}}{{end}}{{end}}')"
+prove "AOS shadow observations" "ready" "$aos_observation_status"
 prove "kill switch visible" "true"   "$(docker exec qf-jarvis-whatsapp-worker node -e "const fs=require('node:fs');console.log(fs.existsSync('/var/run/qfj-control/DISABLE_MODEL'))")"
 
 openai_mount="$(docker inspect qf-jarvis-whatsapp-worker --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/openai-production.key"}}{{.Source}}{{end}}{{end}}')"
