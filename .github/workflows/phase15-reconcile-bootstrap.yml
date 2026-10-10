@@ -1,0 +1,40 @@
+name: Phase 15 Reconcile Bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type RECONCILE_FAILED_JARVIS_BOOTSTRAP'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qf-jarvis-phase15-production
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Human-approved Jarvis bootstrap reconciliation
+    if: vars.PHASE15_PRODUCTION_CUTOVER_ENABLED == 'true'
+    environment: production
+    runs-on: [self-hosted, Linux, X64, qfj-phase15-deployer]
+    timeout-minutes: 10
+    steps:
+      - name: Enforce typed reconciliation phrase
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "RECONCILE_FAILED_JARVIS_BOOTSTRAP"
+
+      - name: Reconcile only the null-state failed bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x /usr/local/sbin/qfj-phase15-release
+          sudo -n /usr/local/sbin/qfj-phase15-release reconcile-bootstrap
+          sudo -n /usr/local/sbin/qfj-phase15-release status
