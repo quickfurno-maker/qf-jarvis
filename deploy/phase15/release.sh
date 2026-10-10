@@ -272,6 +272,31 @@ roll_worker_disabled(){
     echo "QFJ_PHASE15_CONSUMER_REFUSED: worker revision mismatch" >&2
     return 1
   }
+
+  local aos_observation_status="missing"
+  for _ in $(seq 1 30); do
+    if docker exec "$id" node -e '
+      const fs=require("node:fs");
+      const market=JSON.parse(fs.readFileSync("/var/run/qfj-observability/aos-market-capacity.json","utf8"));
+      if(market.protocol!=="qfj.aos.market-capacity-observation.v1")process.exit(2);
+      if(market.executionAuthority!=="NONE"||market.businessEffect!==false||market.productionMutation!==false)process.exit(3);
+      const attention=JSON.parse(fs.readFileSync("/var/run/qfj-observability/aos-owner-attention.json","utf8"));
+      if(attention.protocol!=="qfj.aos.owner-attention-observation.v1")process.exit(4);
+      if(attention.executionAuthority!=="NONE"||attention.businessEffect!==false||attention.outboundNotificationAuthorized!==false)process.exit(5);
+    ' >/dev/null 2>&1; then
+      aos_observation_status="ready"
+      break
+    fi
+    sleep 1
+  done
+  if [[ "$aos_observation_status" != "ready" ]]; then
+    echo "QFJ_PHASE15_AOS_SHADOW_NOT_READY" >&2
+    docker logs "$id" 2>&1 |
+      grep 'aos.market_capacity.cycle_failed' |
+      tail -n 1 >&2 || true
+    return 1
+  fi
+  echo "QFJ_PHASE15_AOS_SHADOW_READY source=$sha"
 }
 
 activate_worker(){

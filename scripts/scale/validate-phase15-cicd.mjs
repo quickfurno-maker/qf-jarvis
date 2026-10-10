@@ -161,6 +161,14 @@ add(
     workerActivate.includes('qfj-whatsapp-worker READY'),
 );
 add(
+  'Phase 15 refuses worker promotion without bounded AOS SHADOW observations',
+  controller.includes('QFJ_PHASE15_AOS_SHADOW_NOT_READY') &&
+    controller.includes('QFJ_PHASE15_AOS_SHADOW_READY') &&
+    controller.includes('/var/run/qfj-observability/aos-market-capacity.json') &&
+    controller.includes('/var/run/qfj-observability/aos-owner-attention.json') &&
+    controller.includes('aos.market_capacity.cycle_failed'),
+);
+add(
   'rollback restores previous exact manifest and reuses rolling compatibility',
   rollback.includes('ROLLBACK_TO_PREVIOUS_SIGNED_JARVIS_RELEASE') &&
     controller.includes('roll_gateway "$PREVIOUS_MANIFEST"') &&
