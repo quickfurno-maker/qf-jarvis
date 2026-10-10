@@ -30,41 +30,35 @@ jobs:
           set -euo pipefail
           test "$CONFIRMATION" = "DIAGNOSE_AOS_SHADOW_PHASE1"
 
-      - name: Inspect immutable revisions and observation mounts
+      - name: Inspect immutable release status through constrained controller
         shell: bash
         run: |
           set -euo pipefail
-          echo "=== containers ==="
-          docker ps --format '{{.Names}} {{.Image}}' | grep '^qf-jarvis-' | sort
+          test -x /usr/local/sbin/qfj-phase15-release
+          sudo -n /usr/local/sbin/qfj-phase15-release status
 
-          echo "=== worker revision ==="
-          WORKER="qf-jarvis-whatsapp-worker"
-          docker inspect "$WORKER" --format 'revision={{ index .Config.Labels "org.opencontainers.image.revision" }}'
-          docker inspect "$WORKER" --format '{{range .Mounts}}{{if eq .Destination "/var/run/qfj-observability"}}worker_observation_source={{.Source}} rw={{.RW}}{{end}}{{end}}'
-
-          echo "=== jarvis os observation env/mount ==="
-          OS="$(docker ps --format '{{.Names}}' | grep -E '^qf-jarvis-(blue|green)-jarvis-os-1$' | head -n1)"
-          test -n "$OS"
-          docker inspect "$OS" --format 'revision={{ index .Config.Labels "org.opencontainers.image.revision" }}'
-          docker inspect "$OS" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^QFJ_AOS_'
-          docker inspect "$OS" --format '{{range .Mounts}}{{if eq .Destination "/run/observability"}}jarvis_observation_source={{.Source}} rw={{.RW}}{{end}}{{end}}'
-
-      - name: Inspect safe AOS observation metadata
+      - name: Inspect safe host observation metadata
         shell: bash
         run: |
           set -euo pipefail
           ROOT="/srv/qf-jarvis/state/observability"
-          for file in aos-market-capacity.json aos-owner-attention.json whatsapp-worker.json; do
+          echo "OBSERVATION_ROOT readable=$([[ -r "$ROOT" ]] && echo true || echo false)"
+
+          for file in aos-market-capacity.json aos-owner-attention.json whatsapp-worker.json agent-flow-trace.json; do
             path="$ROOT/$file"
             if [[ -f "$path" ]]; then
-              echo "FILE $file present size=$(stat -c '%s' "$path") mtime=$(stat -c '%y' "$path")"
+              if [[ -r "$path" ]]; then
+                echo "FILE $file present readable=true size=$(stat -c '%s' "$path") mtime=$(stat -c '%y' "$path")"
+              else
+                echo "FILE $file present readable=false"
+              fi
             else
               echo "FILE $file missing"
             fi
           done
 
           MARKET="$ROOT/aos-market-capacity.json"
-          if [[ -f "$MARKET" ]]; then
+          if [[ -r "$MARKET" ]]; then
             jq '{
               protocol,
               observedAt,
@@ -74,12 +68,27 @@ jobs:
               cellsTruncated,
               stateCounts,
               recommendationCounts,
-              topCellsCount:(.topCells|length)
+              topCellsCount:(if (.topCells|type)=="array" then (.topCells|length) else 0 end)
             }' "$MARKET"
           fi
 
-      - name: Inspect recent safe AOS worker events
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker logs --since 90m qf-jarvis-whatsapp-worker 2>&1             | grep -E 'aos\.market_capacity\.(cycle_completed|cycle_failed)|qfj-whatsapp-worker READY'             | tail -n 80 || true
+          ATTENTION="$ROOT/aos-owner-attention.json"
+          if [[ -r "$ATTENTION" ]]; then
+            jq '{
+              protocol,
+              observedAt,
+              casesCount:(if (.cases|type)=="array" then (.cases|length) else 0 end),
+              recommendationsCount:(if (.recommendations|type)=="array" then (.recommendations|length) else 0 end)
+            }' "$ATTENTION"
+          fi
+
+          WORKER="$ROOT/whatsapp-worker.json"
+          if [[ -r "$WORKER" ]]; then
+            jq '{
+              protocol,
+              observedAt,
+              revision,
+              providerMode,
+              status
+            }' "$WORKER"
+          fi
