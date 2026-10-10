@@ -46,7 +46,7 @@ export function createFileAosOwnerAttentionObservationWriter(
       const directory = dirname(filePath);
       await mkdir(directory, { recursive: true, mode: 0o700 });
       const temporary = filePath + '.tmp';
-      await writeFile(temporary, JSON.stringify(snapshot), { encoding: 'utf8', mode: 0o600 });
+      await writeFile(temporary, JSON.stringify(snapshot), { encoding: 'utf8', mode: 0o640 });
       await rename(temporary, filePath);
     },
   });
