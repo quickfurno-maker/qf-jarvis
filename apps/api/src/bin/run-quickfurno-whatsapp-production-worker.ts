@@ -33,9 +33,7 @@ async function main(): Promise<void> {
   try {
     const options = optionsOf(process.argv.slice(2));
     const loadedConfig = loadQuickFurnoWhatsAppProductionWorkerConfig(options.configPath);
-    const config = options.enableAosShadow
-      ? enableCanonicalAosShadow(loadedConfig)
-      : loadedConfig;
+    const config = options.enableAosShadow ? enableCanonicalAosShadow(loadedConfig) : loadedConfig;
     observability = startObservability({
       serviceName: config.serviceId,
       serviceVersion: config.revision,
