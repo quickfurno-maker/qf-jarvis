@@ -10,6 +10,9 @@ import {
 export const AGNI_OWNER_SNAPSHOT_PATH = '/api/internal/agni/owner-snapshot' as const;
 export const AGNI_OWNER_SNAPSHOT_REQUEST_PROTOCOL = 'qfj.agni.owner-snapshot.v1' as const;
 export const AGNI_OWNER_SNAPSHOT_RESPONSE_PROTOCOL = 'qfj.agni.owner-snapshot.response.v1' as const;
+export const AGNI_PARENT_HEARTBEAT_REQUEST_PROTOCOL =
+  'qfj.agni.parent-heartbeat.request.v1' as const;
+export const AGNI_PARENT_HEARTBEAT_RESPONSE_PROTOCOL = 'qfj.agni.parent-heartbeat.v1' as const;
 export const AGNI_OWNER_ACTOR = 'qf-agni-operator-gateway' as const;
 
 const MAX_BODY_BYTES = 4096;
@@ -58,6 +61,25 @@ export function parseAgniOwnerSnapshot(rawBody: Uint8Array): boolean {
     );
   } catch {
     return false;
+  }
+}
+
+export function parseAgniParentHeartbeat(rawBody: Uint8Array): string | null {
+  if (rawBody.byteLength < 2 || rawBody.byteLength > MAX_BODY_BYTES) return null;
+  try {
+    const body = JSON.parse(Buffer.from(rawBody).toString('utf8')) as unknown;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+    const b = body as Record<string, unknown>;
+    if (
+      Object.keys(b).length !== 2 ||
+      b['protocol'] !== AGNI_PARENT_HEARTBEAT_REQUEST_PROTOCOL ||
+      typeof b['challenge'] !== 'string' ||
+      !/^[0-9a-f]{32}$/u.test(b['challenge'])
+    )
+      return null;
+    return b['challenge'];
+  } catch {
+    return null;
   }
 }
 

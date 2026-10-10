@@ -3,11 +3,14 @@ import { controlPlane } from '@/lib/control-plane';
 import {
   loadAgniOperatorIngressConfig,
   readAosMarketCapacityObservationPathFromEnvironment,
+  readReleaseShaFromEnvironment,
 } from '@/server/auth/config/loader';
 import {
   AGNI_OWNER_SNAPSHOT_RESPONSE_PROTOCOL,
+  AGNI_PARENT_HEARTBEAT_RESPONSE_PROTOCOL,
   agniOwnerSnapshotResponseHeaders,
   parseAgniOwnerSnapshot,
+  parseAgniParentHeartbeat,
   verifyAgniOwnerSnapshot,
 } from '@/server/operator/agni-owner-snapshot';
 import { readAosMarketCapacityObservation } from '@/server/control-plane/sources/aos-market-capacity-source';
@@ -59,7 +62,35 @@ export async function POST(request: Request): Promise<Response> {
     verificationKeys: config.verificationKeys,
   });
   if (!verified.ok) return reply(401, { error: 'authentication_failed' });
-  if (!parseAgniOwnerSnapshot(rawBody)) return reply(400, { error: 'invalid_request' });
+  const challenge = parseAgniParentHeartbeat(rawBody);
+  if (!parseAgniOwnerSnapshot(rawBody) && challenge === null)
+    return reply(400, { error: 'invalid_request' });
+  if (challenge !== null) {
+    let healthy: boolean;
+    try {
+      await controlPlane();
+      healthy = true;
+    } catch {
+      healthy = false;
+    }
+    const candidate = readReleaseShaFromEnvironment();
+    const revision = candidate && /^[0-9a-f]{40}$/u.test(candidate) ? candidate : null;
+    return reply(
+      200,
+      {
+        protocol: AGNI_PARENT_HEARTBEAT_RESPONSE_PROTOCOL,
+        sourceId: 'jarvis',
+        authority: 'READ_ONLY',
+        observedAt: new Date().toISOString(),
+        releaseRevision: revision,
+        challenge,
+        status: !revision ? 'UNKNOWN' : healthy ? 'HEALTHY' : 'UNHEALTHY',
+        scope: 'JARVIS_OS_HTTP_AND_CONTROL_PLANE_READ',
+        executionAuthority: 'NONE',
+      },
+      agniOwnerSnapshotResponseHeaders(verified.metadata),
+    );
+  }
 
   try {
     const [plane, marketplace] = await Promise.all([
