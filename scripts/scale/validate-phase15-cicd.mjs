@@ -8,6 +8,7 @@ const [
   supply,
   promote,
   rollback,
+  reconcile,
   controller,
   slot,
   switcher,
@@ -21,6 +22,7 @@ const [
   read('.github/workflows/scale-container-supply-chain.yml'),
   read('.github/workflows/phase15-promote.yml'),
   read('.github/workflows/phase15-rollback.yml'),
+  read('.github/workflows/phase15-reconcile-bootstrap.yml'),
   read('deploy/phase15/release.sh'),
   read('deploy/phase15/compose.jarvis-os-slot.yml'),
   read('deploy/phase15/qfj-phase15-switch'),
@@ -133,12 +135,32 @@ add(
     controller.includes('QFJ_PHASE15_BOOTSTRAP_RECONCILED route=legacy state=null'),
 );
 add(
+  'bootstrap reconciliation is human gated through the production deployer',
+  reconcile.includes('workflow_dispatch:') &&
+    reconcile.includes('RECONCILE_FAILED_JARVIS_BOOTSTRAP') &&
+    reconcile.includes('environment: production') &&
+    reconcile.includes('runs-on: [self-hosted, Linux, X64, qfj-phase15-deployer]') &&
+    reconcile.includes('sudo -n /usr/local/sbin/qfj-phase15-release reconcile-bootstrap') &&
+    reconcile.includes('group: qf-jarvis-phase15-production'),
+);
+add(
   'durable consumers are rolling, not dual-active blue/green',
   controller.includes(
     'Stateful/durable consumers deliberately do NOT run blue/green concurrently',
   ) &&
     controller.includes('roll_gateway "$STAGED_MANIFEST"') &&
     controller.includes('roll_worker_disabled "$STAGED_MANIFEST"'),
+);
+add(
+  'gateway database secrets are preflighted before container replacement',
+  controller.includes('preflight_gateway_database_secrets') &&
+    controller.includes('gateway database config source must be a non-empty regular file') &&
+    controller.includes('gateway database CA source must be a non-empty regular file') &&
+    controller.includes('gateway database config shape invalid') &&
+    controller.includes('value.maxConnections <= 3') &&
+    controller.includes('gateway database CA bundle invalid') &&
+    controller.indexOf('preflight_gateway_database_secrets || return 1') <
+      controller.indexOf('verify_image "$ref" "$sha" || return 1'),
 );
 add(
   'Phase 15 preserves Phase 14 observability on gateway and worker replacements',
