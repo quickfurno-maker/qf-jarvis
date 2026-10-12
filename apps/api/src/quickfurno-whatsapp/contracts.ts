@@ -421,3 +421,6 @@ export type QuickFurnoWhatsAppWorkerMaterial =
 
 export type QuickFurnoWhatsAppWorkerProposal =
   QuickFurnoWhatsAppReplyProposal | QuickFurnoQualificationProposal;
+
+/** Core-bound Anisha material alias; does not change runtime authority. */
+export type AnishaCoreTurnMaterialV2 = QuickFurnoWhatsAppTurnMaterialV2;

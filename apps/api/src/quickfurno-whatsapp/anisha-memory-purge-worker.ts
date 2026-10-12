@@ -1,4 +1,3 @@
-import { setTimeout as sleep } from 'node:timers/promises';
 import type { AnishaMemoryPurgeCore, AnishaMemoryPurgeTask } from './quickfurno-http.js';
 
 /**
@@ -17,6 +16,7 @@ export function createAnishaMemoryPurgeWorker(input: {
   readonly erase: (task: AnishaMemoryPurgeTask) => Promise<{ readonly deletedCount: number }>;
   /** Existing governed memory TTL sweep; independent of Core availability. */
   readonly purgeExpired?: () => Promise<unknown>;
+  readonly wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   readonly cadenceMs?: number;
 }): AnishaMemoryPurgeWorker {
   const cadence = input.cadenceMs ?? 30_000;
@@ -57,6 +57,7 @@ export function createAnishaMemoryPurgeWorker(input: {
       }
     },
     async run(signal: AbortSignal): Promise<void> {
+      if (!input.wait) throw new TypeError('anisha-memory-purge-wait-port-missing');
       while (!signal.aborted) {
         try {
           await this.runCycle();
@@ -65,7 +66,7 @@ export function createAnishaMemoryPurgeWorker(input: {
         }
         if (signal.aborted) break;
         try {
-          await sleep(cadence, undefined, { signal });
+          await input.wait(cadence, signal);
         } catch {
           break;
         }

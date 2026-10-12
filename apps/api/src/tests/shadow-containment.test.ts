@@ -330,6 +330,23 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/quickfurno-whatsapp/media-content-http.ts',
     'src/quickfurno-whatsapp/specialist-runtime.ts',
     'src/quickfurno-whatsapp/turn-processor.ts',
+
+    // AN-A2 source and contract tests: exactly these named files may
+    // *reference* the canonical WhatsApp turn-material TYPE. No outbound
+    // messaging, business execution, database pool, shell, or provider transport
+    // exception is granted: all other containment invariants still apply.
+    'src/quickfurno-whatsapp/anisha-memory-lifecycle.ts',
+    'src/quickfurno-whatsapp/anisha-memory-reenrollment.ts',
+    'src/quickfurno-whatsapp/anisha-vendor-memory.ts',
+    'src/quickfurno-whatsapp/anisha-vendor-preflight.ts',
+    'src/tests/anisha-core-context.test.ts',
+    'src/tests/anisha-explicit-preference.test.ts',
+    'src/tests/anisha-memory-consent-lifecycle.test.ts',
+    'src/tests/anisha-memory-purge.test.ts',
+    'src/tests/anisha-memory-reenrollment.test.ts',
+    'src/tests/anisha-vendor-memory.test.ts',
+    'src/tests/anisha-vendor-preflight.test.ts',
+    'src/tests/quickfurno-whatsapp-anisha-e2e.test.ts',
     'src/quickfurno-whatsapp/production-observation.ts',
     // JF-7 production worker: these named files are the reviewed private WhatsApp serving boundary.
     // Naming WhatsApp buys no provider-send authority: the worker emits only a signed proposal and

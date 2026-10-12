@@ -56,3 +56,6 @@ export function assessAnishaWhatsAppPreflight(
 
   return 'ANISHA_TURN_READY';
 }
+
+/** Channel-neutral alias for the pure Core context reader. */
+export { assessAnishaWhatsAppPreflight as assessAnishaCorePreflight };

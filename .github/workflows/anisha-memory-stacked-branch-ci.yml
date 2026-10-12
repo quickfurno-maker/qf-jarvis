@@ -58,7 +58,7 @@ jobs:
           pnpm exec vitest run \
             apps/api/src/tests/anisha-explicit-preference.test.ts \
             apps/api/src/tests/anisha-memory-reenrollment.test.ts \
-            apps/api/src/tests/anisha-memory-http-loopback-cert.test.ts \
+            apps/api/certification/anisha-memory-http-loopback-cert.test.ts \
             apps/api/src/tests/anisha-memory-consent-lifecycle.test.ts \
             apps/api/src/tests/anisha-memory-purge.test.ts \
             apps/api/src/tests/anisha-vendor-memory.test.ts \

@@ -1,5 +1,5 @@
-import type { QuickFurnoWhatsAppTurnMaterialV2 } from './contracts.js';
-import { assessAnishaWhatsAppPreflight } from './anisha-vendor-preflight.js';
+import type { AnishaCoreTurnMaterialV2 } from './contracts.js';
+import { assessAnishaCorePreflight } from './anisha-vendor-preflight.js';
 
 /**
  * AN-A3: only a signed, per-turn Core vendor context may support an
@@ -29,7 +29,7 @@ export interface AnishaCoreVendorSnapshot {
   readonly unreadNotificationCount: number;
 }
 export interface AnishaCoreVendorContextReader {
-  readForTurn(material: QuickFurnoWhatsAppTurnMaterialV2): Promise<AnishaCoreVendorSnapshot>;
+  readForTurn(material: AnishaCoreTurnMaterialV2): Promise<AnishaCoreVendorSnapshot>;
 }
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -182,11 +182,9 @@ export function composeAnishaCoreVendorFacts(
   return [heading, conversationInput.slice(-remaining), facts].join('\n');
 }
 
-export function isAuthorizedAnishaCoreContextTurn(
-  material: QuickFurnoWhatsAppTurnMaterialV2,
-): boolean {
+export function isAuthorizedAnishaCoreContextTurn(material: AnishaCoreTurnMaterialV2): boolean {
   return (
-    assessAnishaWhatsAppPreflight(material) === 'ANISHA_TURN_READY' &&
+    assessAnishaCorePreflight(material) === 'ANISHA_TURN_READY' &&
     typeof material.subjectRef === 'string' &&
     UUID.test(material.subjectRef)
   );

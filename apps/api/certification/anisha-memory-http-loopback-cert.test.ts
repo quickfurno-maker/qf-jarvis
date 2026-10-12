@@ -4,8 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   createQuickFurnoAnishaMemoryConsentReader,
   createQuickFurnoAnishaMemoryPurgeCore,
-} from '../quickfurno-whatsapp/quickfurno-http.js';
-import { createAnishaMemoryPurgeWorker } from '../quickfurno-whatsapp/anisha-memory-purge-worker.js';
+} from '../src/quickfurno-whatsapp/quickfurno-http.js';
+import { createAnishaMemoryPurgeWorker } from '../src/quickfurno-whatsapp/anisha-memory-purge-worker.js';
 
 const vendorId = '44444444-4444-4444-8444-444444444444';
 const conversationId = '22222222-2222-4222-8222-222222222222';

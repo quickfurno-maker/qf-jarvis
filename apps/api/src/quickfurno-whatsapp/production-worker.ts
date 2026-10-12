@@ -600,6 +600,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
             return createAnishaMemoryPurgeWorker({
               core: createQuickFurnoAnishaMemoryPurgeCore(httpConfig),
               erase: (task) => eraseAnishaVendorMemoryWithFence(pool, task),
+              wait: sleepUntilAosCycle,
               purgeExpired: () =>
                 purgeExpiredGovernedMemory(pool, {
                   asOf: new Date().toISOString(),
