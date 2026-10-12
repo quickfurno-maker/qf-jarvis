@@ -1,7 +1,11 @@
 import type { Pool } from 'pg';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createPostgresGovernedMemoryStore, purgeExpiredGovernedMemory } from '../store.js';
+import {
+  createPostgresGovernedMemoryStore,
+  purgeExpiredGovernedMemory,
+  eraseAnishaVendorMemoryWithFence,
+} from '../store.js';
 
 const record = {
   memoryRecordId: 'c2000004-0000-4000-8000-000000000004',
@@ -113,5 +117,77 @@ describe('postgres governed memory store', () => {
       }),
     ).rejects.toThrow('governed-memory-purge-invalid');
     expect(query).not.toHaveBeenCalled();
+  });
+});
+
+describe('transactional Anisha erasure + replay write fence', () => {
+  const vendorId = '44444444-4444-4444-8444-444444444444';
+  const purgeId = '11111111-1111-4111-8111-111111111111';
+  function fakePool(query: ReturnType<typeof vi.fn>) {
+    const release = vi.fn();
+    return {
+      pool: { connect: vi.fn(async () => ({ query, release })) } as unknown as Pool,
+      release,
+    };
+  }
+
+  it('locks subject, installs durable fence and physically deletes BEFORE COMMIT', async () => {
+    const query = vi.fn(async (sql: string) =>
+      sql.startsWith('DELETE ') ? { rowCount: 2 } : { rowCount: 1 },
+    );
+    const { pool, release } = fakePool(query);
+    await expect(eraseAnishaVendorMemoryWithFence(pool, { vendorId, purgeId })).resolves.toEqual({
+      deletedCount: 2,
+    });
+    expect(query.mock.calls.map((x) => String(x[0]).split(' ')[0])).toEqual([
+      'BEGIN',
+      'SELECT',
+      'INSERT',
+      'DELETE',
+      'COMMIT',
+    ]);
+    expect(String(query.mock.calls[1]?.[0])).toContain('pg_advisory_xact_lock');
+    expect(String(query.mock.calls[2]?.[0])).toContain('anisha_erasure_fence');
+    expect(String(query.mock.calls[3]?.[0])).toContain("owner_agent='anisha'");
+    expect(query.mock.calls[3]?.[1]).toEqual(['vendor|' + vendorId]);
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it('failure rolls transaction back, never claims successful erasure', async () => {
+    const query = vi.fn(async (sql: string) => {
+      if (sql.startsWith('DELETE ')) throw Error('DB failure');
+      return { rowCount: 1 };
+    });
+    const { pool, release } = fakePool(query);
+    await expect(eraseAnishaVendorMemoryWithFence(pool, { vendorId, purgeId })).rejects.toThrow(
+      'anisha-memory-purge-unavailable',
+    );
+    expect(query.mock.calls.map((x) => String(x[0]).split(' ')[0])).toEqual([
+      'BEGIN',
+      'SELECT',
+      'INSERT',
+      'DELETE',
+      'ROLLBACK',
+    ]);
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it('refuses invalid vendor or purge UUID before opening database connection', async () => {
+    const { pool } = fakePool(vi.fn());
+    await expect(
+      eraseAnishaVendorMemoryWithFence(pool, { vendorId: 'random', purgeId }),
+    ).rejects.toThrow('anisha-memory-purge-task-invalid');
+    expect(pool.connect).not.toHaveBeenCalled();
+  });
+
+  it('zero rows erased is a real successful committed deletion receipt', async () => {
+    const { pool } = fakePool(
+      vi.fn(async (sql: string) => ({
+        rowCount: sql.startsWith('DELETE ') ? 0 : 1,
+      })),
+    );
+    await expect(eraseAnishaVendorMemoryWithFence(pool, { vendorId, purgeId })).resolves.toEqual({
+      deletedCount: 0,
+    });
   });
 });

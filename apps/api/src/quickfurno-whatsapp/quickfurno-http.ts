@@ -2712,3 +2712,125 @@ export function createQuickFurnoAnishaMemoryConsentReader(
     },
   });
 }
+
+export interface AnishaMemoryPurgeTask {
+  readonly purgeId: string;
+  readonly vendorId: string;
+  readonly leaseToken: string;
+}
+export interface AnishaMemoryPurgeCore {
+  claim(maxItems: number): Promise<readonly AnishaMemoryPurgeTask[]>;
+  acknowledge(task: AnishaMemoryPurgeTask): Promise<void>;
+}
+export function createQuickFurnoAnishaMemoryPurgeCore(
+  config: QuickFurnoWhatsAppHttpConfig,
+): AnishaMemoryPurgeCore {
+  const { key, timeoutMs } = parsePrivateKey(config);
+  const protocol = 'qfj.anisha.memory-purge';
+  async function submit(
+    action: 'CLAIM' | 'ACK',
+    extra: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const requestId = config.requestId();
+    const issuedAt = config.clock();
+    if (!UUID.test(requestId) || !INSTANT.test(issuedAt))
+      throw new QuickFurnoWhatsAppHttpError('invalid-input');
+    const path = '/api/internal/jarvis/anisha-memory-purge-' + action.toLowerCase();
+    const domain = 'qfj.anisha.memory-purge.' + action.toLowerCase() + '.http.sig.v1';
+    const body = JSON.stringify({
+      protocol,
+      version: 1,
+      action,
+      caller: CALLER,
+      audience: AUDIENCE,
+      requestId,
+      issuedAt,
+      ...extra,
+    });
+    const response = await signedPost({
+      config,
+      key,
+      timeoutMs,
+      path,
+      domain,
+      requestId,
+      issuedAt,
+      body,
+    });
+    if (response.status !== 200) throw new QuickFurnoWhatsAppHttpError('request-failed');
+    const raw = await response.text();
+    if (Buffer.byteLength(raw, 'utf8') < 2 || Buffer.byteLength(raw, 'utf8') > 4096) {
+      throw new QuickFurnoWhatsAppHttpError('response-invalid');
+    }
+    let value: unknown;
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      throw new QuickFurnoWhatsAppHttpError('response-invalid');
+    }
+    if (
+      !isRecord(value) ||
+      value['protocol'] !== protocol ||
+      value['version'] !== 1 ||
+      value['action'] !== action ||
+      value['requestId'] !== requestId
+    )
+      throw new QuickFurnoWhatsAppHttpError('response-invalid');
+    return value;
+  }
+
+  return Object.freeze({
+    async claim(maxItems: number): Promise<readonly AnishaMemoryPurgeTask[]> {
+      if (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 10) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
+      const value = await submit('CLAIM', { maxItems });
+      if (
+        !onlyKeys(value, ['protocol', 'version', 'action', 'requestId', 'tasks']) ||
+        !Array.isArray(value['tasks']) ||
+        value['tasks'].length > maxItems
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      const tasks: AnishaMemoryPurgeTask[] = [];
+      const seen = new Set<string>();
+      for (const row of value['tasks'] as unknown[]) {
+        if (
+          !isRecord(row) ||
+          !onlyKeys(row, ['purgeId', 'vendorId', 'leaseToken']) ||
+          !UUID.test(String(row['purgeId'])) ||
+          !UUID.test(String(row['vendorId'])) ||
+          !UUID.test(String(row['leaseToken'])) ||
+          seen.has(String(row['purgeId']))
+        ) {
+          throw new QuickFurnoWhatsAppHttpError('response-invalid');
+        }
+        seen.add(String(row['purgeId']));
+        tasks.push(
+          Object.freeze({
+            purgeId: row['purgeId'] as string,
+            vendorId: row['vendorId'] as string,
+            leaseToken: row['leaseToken'] as string,
+          }),
+        );
+      }
+      return Object.freeze(tasks);
+    },
+    async acknowledge(task: AnishaMemoryPurgeTask): Promise<void> {
+      if (!UUID.test(task.purgeId) || !UUID.test(task.vendorId) || !UUID.test(task.leaseToken)) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
+      const value = await submit('ACK', {
+        purgeId: task.purgeId,
+        vendorId: task.vendorId,
+        leaseToken: task.leaseToken,
+      });
+      if (
+        !onlyKeys(value, ['protocol', 'version', 'action', 'requestId', 'acknowledged']) ||
+        value['acknowledged'] !== true
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+    },
+  });
+}

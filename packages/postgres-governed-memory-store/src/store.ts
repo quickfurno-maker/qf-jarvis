@@ -202,3 +202,52 @@ export async function purgeExpiredGovernedMemory(
     truncated: row.invalidated_count > sampled.length,
   });
 }
+
+/**
+ * Physically erase one vendor's Anisha memory and install a durable write
+ * fence IN THE SAME DB TRANSACTION. Both this operation and the A2c trigger
+ * take the same advisory lock to serialize any in-flight memory insert.
+ *
+ * Repeated calls are safe. Fence is intentionally retained after Core ack;
+ * explicit, separately-certified re-enrolment must authorize clearing it.
+ */
+export async function eraseAnishaVendorMemoryWithFence(
+  pool: Pool,
+  input: Readonly<{ vendorId: string; purgeId: string }>,
+): Promise<{ readonly deletedCount: number }> {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+  if (!uuid.test(input.vendorId) || !uuid.test(input.purgeId)) {
+    throw new TypeError('anisha-memory-purge-task-invalid');
+  }
+  const subjectKeyValue = subjectKey({ entityType: 'vendor', entityId: input.vendorId });
+  const client = await pool.connect();
+  let transactionOpen = false;
+  try {
+    await client.query('BEGIN');
+    transactionOpen = true;
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [subjectKeyValue]);
+    await client.query(
+      'INSERT INTO qf_jarvis_memory.anisha_erasure_fence(vendor_subject_key,purge_id) VALUES ($1,$2::uuid) ON CONFLICT (vendor_subject_key) DO NOTHING',
+      [subjectKeyValue, input.purgeId],
+    );
+    const removed = await client.query(
+      "DELETE FROM qf_jarvis_memory.agent_memory_record WHERE owner_agent='anisha' AND $1=ANY(subject_keys)",
+      [subjectKeyValue],
+    );
+    if (
+      !Number.isSafeInteger(removed.rowCount) ||
+      removed.rowCount === null ||
+      removed.rowCount < 0
+    ) {
+      throw new TypeError('anisha-memory-purge-result-invalid');
+    }
+    await client.query('COMMIT');
+    transactionOpen = false;
+    return Object.freeze({ deletedCount: removed.rowCount });
+  } catch {
+    if (transactionOpen) await client.query('ROLLBACK').catch(() => undefined);
+    throw new TypeError('anisha-memory-purge-unavailable');
+  } finally {
+    client.release();
+  }
+}

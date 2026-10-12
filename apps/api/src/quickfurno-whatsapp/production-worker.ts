@@ -53,7 +53,11 @@ import { createFileDurableTurnSpool } from '@qf-jarvis/quickfurno-gateway/durabl
 import { createPostgresDurableTurnSpool } from '@qf-jarvis/quickfurno-gateway/postgres-durable-turn-spool';
 import { createInMemoryPublicKnowledgeSemanticCache } from '@qf-jarvis/semantic-context-engine';
 import { createGovernedMemoryRuntime } from '@qf-jarvis/governed-memory-foundation';
-import { createPostgresGovernedMemoryStore } from '@qf-jarvis/postgres-governed-memory-store';
+import {
+  createPostgresGovernedMemoryStore,
+  eraseAnishaVendorMemoryWithFence,
+} from '@qf-jarvis/postgres-governed-memory-store';
+import { createAnishaMemoryPurgeWorker } from './anisha-memory-purge-worker.js';
 import { createAnishaVendorMemoryReader } from './anisha-vendor-memory.js';
 import { createJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
 import {
@@ -79,6 +83,7 @@ import {
   createQuickFurnoWhatsAppConversationContextReader,
   createQuickFurnoAnishaCoreVendorContextReader,
   createQuickFurnoAnishaMemoryConsentReader,
+  createQuickFurnoAnishaMemoryPurgeCore,
   createQuickFurnoWhatsAppMaterialReader,
   createQuickFurnoWhatsAppReplyWriter,
 } from './quickfurno-http.js';
@@ -586,6 +591,16 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       config.anishaCoreContextMode === 'STAGING_ONLY'
         ? createQuickFurnoAnishaCoreVendorContextReader(httpConfig)
         : undefined;
+    const anishaPurgeWorker =
+      config.anishaMemoryPurgeMode === 'STAGING_ONLY'
+        ? (() => {
+            if (pool === undefined) throw new Error('anisha-memory-purge-postgres-required');
+            return createAnishaMemoryPurgeWorker({
+              core: createQuickFurnoAnishaMemoryPurgeCore(httpConfig),
+              erase: (task) => eraseAnishaVendorMemoryWithFence(pool, task),
+            });
+          })()
+        : undefined;
     const anishaMemoryReader =
       config.anishaMemory.mode === 'STAGING_ONLY'
         ? (() => {
@@ -1030,6 +1045,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         await Promise.all([
           scheduler.run(signal),
           aosRuntime === undefined ? Promise.resolve() : aosRuntime.run(signal),
+          anishaPurgeWorker === undefined ? Promise.resolve() : anishaPurgeWorker.run(signal),
         ]);
       },
       async close(): Promise<void> {

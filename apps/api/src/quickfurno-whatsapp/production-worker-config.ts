@@ -211,6 +211,8 @@ const schema = z
     agentLanes: agentLanesSchema,
     // AN-A3: staged Core vendor facts are never production-enabled by default.
     anishaCoreContextMode: z.enum(['DISABLED', 'STAGING_ONLY']).default('DISABLED'),
+    // Delete processing can run even when preference reads are OFF.
+    anishaMemoryPurgeMode: z.enum(['DISABLED', 'STAGING_ONLY']).default('DISABLED'),
     anishaMemory: z
       .union([
         z.object({ mode: z.literal('DISABLED') }).strict(),
@@ -270,6 +272,18 @@ const schema = z
   })
   .strict()
   .superRefine((value, ctx) => {
+    if (
+      value.anishaMemoryPurgeMode === 'STAGING_ONLY' &&
+      (value.environment !== 'staging' ||
+        value.turnStore?.mode !== 'POSTGRES' ||
+        value.database === undefined)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['anishaMemoryPurgeMode'],
+        message: 'Memory erasure worker requires staging and PostgreSQL',
+      });
+    }
     if (value.anishaMemory.mode === 'STAGING_ONLY') {
       if (
         value.environment !== 'staging' ||
@@ -408,6 +422,7 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
   readonly deploymentMode: 'SINGLE_OWNER' | 'MULTI_REPLICA';
   readonly agentLanes: readonly ('RIYA' | 'ANISHA' | 'AAROHI')[];
   readonly anishaCoreContextMode: 'DISABLED' | 'STAGING_ONLY';
+  readonly anishaMemoryPurgeMode: 'DISABLED' | 'STAGING_ONLY';
   readonly anishaMemory:
     Readonly<{ mode: 'DISABLED' }> | Readonly<{ mode: 'STAGING_ONLY'; ownerApprovalRef: string }>;
 
@@ -698,6 +713,7 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
     deploymentMode: input.deploymentMode,
     agentLanes: Object.freeze([...input.agentLanes]),
     anishaCoreContextMode: input.anishaCoreContextMode,
+    anishaMemoryPurgeMode: input.anishaMemoryPurgeMode,
     anishaMemory: input.anishaMemory,
 
     modelProvider,

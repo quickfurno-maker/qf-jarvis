@@ -117,6 +117,40 @@ function validConfig(root: string) {
 }
 
 describe('QuickFurno WhatsApp production worker configuration', () => {
+  it('allows erasure independently of memory reads only in isolated Postgres staging', () => {
+    const root = tempRoot();
+    const file = join(root, 'purge-staging.json');
+    const base = { ...validConfig(root), spoolDirectory: undefined };
+    writeFileSync(
+      file,
+      JSON.stringify({
+        ...base,
+        environment: 'staging',
+        turnStore: { mode: 'POSTGRES' },
+        anishaMemoryPurgeMode: 'STAGING_ONLY',
+        anishaMemory: { mode: 'DISABLED' },
+      }),
+    );
+    expect(loadQuickFurnoWhatsAppProductionWorkerConfig(file).anishaMemoryPurgeMode).toBe(
+      'STAGING_ONLY',
+    );
+    for (const bad of [
+      { environment: 'production', turnStore: { mode: 'POSTGRES' } },
+      { environment: 'local', turnStore: { mode: 'POSTGRES' } },
+      { environment: 'staging', turnStore: { mode: 'FILE', directory: join(root, 'spool') } },
+    ]) {
+      writeFileSync(
+        file,
+        JSON.stringify({
+          ...base,
+          ...bad,
+          anishaMemoryPurgeMode: 'STAGING_ONLY',
+        }),
+      );
+      expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(file)).toThrow();
+    }
+  });
+
   it('staging A2b memory requires explicit owner approval and Postgres, never production', () => {
     const root = tempRoot();
     const file = join(root, 'memory-staging.json');
@@ -204,6 +238,7 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     expect(config.aosShadow).toEqual({ mode: 'DISABLED' });
     expect(config.anishaCoreContextMode).toBe('DISABLED');
     expect(config.anishaMemory).toEqual({ mode: 'DISABLED' });
+    expect(config.anishaMemoryPurgeMode).toBe('DISABLED');
   });
 
   it('enables only the canonical bounded AOS SHADOW deployment posture', () => {
