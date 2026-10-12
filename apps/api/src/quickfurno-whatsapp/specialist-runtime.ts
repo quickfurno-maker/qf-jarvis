@@ -19,6 +19,7 @@ import type {
 } from './contracts.js';
 import type { ServiceBlueprintRegistry } from '@qf-jarvis/client-intelligence';
 import { buildWhatsAppClientIntelligence } from './client-intelligence-adapter.js';
+import { assessAnishaWhatsAppPreflight } from './anisha-vendor-preflight.js';
 
 export interface QuickFurnoWhatsAppSpecialistObservation {
   readonly kind: 'MODEL_ROUTE_SELECTED';
@@ -329,6 +330,16 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
           return qualificationResult(material, undefined);
         }
       }
+
+      // Anisha must never spend a model token on an unidentified, paused, erased,
+      // cross-role or Core-disabled vendor. No fallback to Riya/Aarohi is permitted.
+      // Core identity resolution and the later authoritative runtime gate remain
+      // mandatory; this early check is not a replacement for either.
+      if (
+        material.assignedActor === 'ANISHA' &&
+        assessAnishaWhatsAppPreflight(material) !== 'ANISHA_TURN_READY'
+      )
+        return null;
 
       if (expectedSubjectByActor[material.assignedActor] !== material.subjectType) return null;
       if (material.dataClass !== 'HOSTED_ALLOWED' || material.normalizedText === undefined)
