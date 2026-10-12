@@ -1,3 +1,11 @@
+import {
+  CORE_VENDOR_CONTEXT_PATH,
+  CORE_VENDOR_CONTEXT_PROTOCOL,
+  CORE_VENDOR_CONTEXT_SIGNING_DOMAIN,
+  isAuthorizedAnishaCoreContextTurn,
+  parseBoundCoreVendorContextResponse,
+  type AnishaCoreVendorContextReader,
+} from './anisha-core-context.js';
 import { createHash, createPrivateKey, sign, type KeyObject } from 'node:crypto';
 import { executeQfjScaleRequest, type QfjScaleActor } from '@qf-jarvis/cross-system-scale-contract';
 import { parseCoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
@@ -2533,6 +2541,73 @@ export function createQuickFurnoWhatsAppReplyWriter(
         throw new QuickFurnoWhatsAppHttpError('response-invalid');
       }
       return 'queued';
+    },
+  });
+}
+
+/**
+ * Reuse the existing qfj.context.read v1 Core endpoint. All request signatures
+ * use the same signing/auth/transport boundary as WhatsApp turn material.
+ * The Core data source stays authoritative; this adapter neither persists
+ * vendor information nor supports any writes.
+ */
+export function createQuickFurnoAnishaCoreVendorContextReader(
+  config: QuickFurnoWhatsAppHttpConfig,
+): AnishaCoreVendorContextReader {
+  const { key, timeoutMs } = parsePrivateKey(config);
+  return Object.freeze({
+    async readForTurn(material: QuickFurnoWhatsAppTurnMaterialV2) {
+      if (!isAuthorizedAnishaCoreContextTurn(material) || !material.subjectRef) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
+      const requestId = config.requestId();
+      const issuedAt = config.clock();
+      if (
+        !UUID.test(requestId) ||
+        !INSTANT.test(issuedAt) ||
+        !Number.isFinite(Date.parse(issuedAt))
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
+      const vendorId = material.subjectRef;
+      const body = JSON.stringify({
+        protocol: CORE_VENDOR_CONTEXT_PROTOCOL,
+        version: 1,
+        caller: CALLER,
+        audience: AUDIENCE,
+        requestId,
+        issuedAt,
+        actor: 'ANISHA',
+        entityType: 'vendor',
+        entityId: vendorId,
+      });
+      const response = await signedPost({
+        config,
+        key,
+        timeoutMs,
+        path: CORE_VENDOR_CONTEXT_PATH,
+        domain: CORE_VENDOR_CONTEXT_SIGNING_DOMAIN,
+        requestId,
+        issuedAt,
+        body,
+      });
+      if (response.status !== 200) throw new QuickFurnoWhatsAppHttpError('request-failed');
+      const text = await response.text();
+      if (
+        Buffer.byteLength(text, 'utf8') < 2 ||
+        Buffer.byteLength(text, 'utf8') > MAX_RESPONSE_BYTES
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      const context = parseBoundCoreVendorContextResponse(parsed, requestId, vendorId);
+      if (!context) throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      return context;
     },
   });
 }

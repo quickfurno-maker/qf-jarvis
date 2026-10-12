@@ -19,6 +19,11 @@ import type {
 } from './contracts.js';
 import type { ServiceBlueprintRegistry } from '@qf-jarvis/client-intelligence';
 import { buildWhatsAppClientIntelligence } from './client-intelligence-adapter.js';
+import {
+  composeAnishaCoreVendorFacts,
+  needsAnishaCoreVendorContext,
+  type AnishaCoreVendorContextReader,
+} from './anisha-core-context.js';
 import { assessAnishaWhatsAppPreflight } from './anisha-vendor-preflight.js';
 import {
   composeAnishaVendorMemoryHint,
@@ -59,6 +64,8 @@ export interface QuickFurnoWhatsAppSpecialistRuntimeConfig {
    * The reader must be subject-scoped and backed by the existing governed store.
    */
   readonly anishaMemoryReader?: AnishaVendorMemoryReader;
+  /** AN-A3 optional signed Core vendor facts reader (unbound in production). */
+  readonly anishaCoreContextReader?: AnishaCoreVendorContextReader;
 }
 
 function isQualificationMaterial(
@@ -373,6 +380,16 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
           .readForTurn(material)
           .catch(() => ({ status: 'unavailable' as const }));
         modelInput = composeAnishaVendorMemoryHint(modelInput, memory);
+      }
+      if (
+        material.assignedActor === 'ANISHA' &&
+        config.anishaCoreContextReader !== undefined &&
+        needsAnishaCoreVendorContext(material.normalizedText)
+      ) {
+        // This reads a fresh Core-projected band/count, not historic memory,
+        // wallet truth or a second data store. Unknown response -> no claims.
+        const core = await config.anishaCoreContextReader.readForTurn(material).catch(() => null);
+        modelInput = composeAnishaCoreVendorFacts(modelInput, core);
       }
 
       const envelope = createInboundEnvelope({
