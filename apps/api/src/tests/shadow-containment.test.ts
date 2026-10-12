@@ -339,6 +339,7 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/quickfurno-whatsapp/anisha-memory-reenrollment.ts',
     'src/quickfurno-whatsapp/anisha-vendor-memory.ts',
     'src/quickfurno-whatsapp/anisha-vendor-preflight.ts',
+    'src/tests/anisha-core-response-clock-window.test.ts',
     'src/tests/anisha-core-context.test.ts',
     'src/tests/anisha-explicit-preference.test.ts',
     'src/tests/anisha-memory-consent-lifecycle.test.ts',
