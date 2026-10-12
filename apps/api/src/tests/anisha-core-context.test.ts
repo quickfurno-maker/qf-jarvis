@@ -89,6 +89,7 @@ function reply(overrides: Record<string, unknown> = {}) {
 function fixture(options: { status?: number; payload?: unknown } = {}) {
   const httpPost = vi.fn(
     async (url: string, init: { body: string; headers: Record<string, string> }) => {
+      await Promise.resolve();
       expect(url).toBe('https://quickfurno.example' + CORE_VENDOR_CONTEXT_PATH);
       const body = JSON.parse(init.body) as Record<string, unknown>;
       expect(body).toMatchObject({
@@ -122,12 +123,15 @@ function fixture(options: { status?: number; payload?: unknown } = {}) {
           null,
           Buffer.from(preimage, 'utf8'),
           keyPair.publicKey,
-          Buffer.from(signed!, 'base64url'),
+          Buffer.from(requireAnishaTestValue(signed), 'base64url'),
         ),
       ).toBe(true);
       return {
         status: options.status ?? 200,
-        text: async () => JSON.stringify(options.payload ?? reply()),
+        text: async () => {
+          await Promise.resolve();
+          return JSON.stringify(options.payload ?? reply());
+        },
       };
     },
   );
@@ -242,23 +246,26 @@ describe('Anisha A3 signed existing QuickFurno vendor context', () => {
 
   it('injects verified Core bands for account questions without enabling memory', async () => {
     const { reader } = fixture();
-    const model = vi.fn(async (_envelope: { normalizedText: string }) => ({
-      runtimeResult: {
-        outcome: 'MODEL_DRAFTED',
-        modelDrafted: true,
-        coreConsulted: false,
-        proposalId: 'a3',
-        boundRevision: 9,
-      },
-      proposedReply: {
-        version: 1,
-        proposalId: 'a3',
-        boundRevision: 9,
-        proposalKind: 'REPLY',
-        authorityStatus: 'PENDING_CORE_VALIDATION',
-        replyBody: 'Dashboard par status check karein.',
-      },
-    }));
+    const model = vi.fn(async (_envelope: { normalizedText: string }) => {
+      await Promise.resolve();
+      return {
+        runtimeResult: {
+          outcome: 'MODEL_DRAFTED',
+          modelDrafted: true,
+          coreConsulted: false,
+          proposalId: 'a3',
+          boundRevision: 9,
+        },
+        proposedReply: {
+          version: 1,
+          proposalId: 'a3',
+          boundRevision: 9,
+          proposalKind: 'REPLY',
+          authorityStatus: 'PENDING_CORE_VALIDATION',
+          replyBody: 'Dashboard par status check karein.',
+        },
+      };
+    });
     const runtime = createQuickFurnoWhatsAppSpecialistRuntime({
       runtimeId: 'anisha.a3.contract',
       jarvisRuntime: {
@@ -276,23 +283,26 @@ describe('Anisha A3 signed existing QuickFurno vendor context', () => {
 
   it('never silently falls back to chat memory for unavailable Core truth', async () => {
     const { reader } = fixture({ status: 503 });
-    const model = vi.fn(async (_envelope: { normalizedText: string }) => ({
-      runtimeResult: {
-        outcome: 'MODEL_DRAFTED',
-        modelDrafted: true,
-        coreConsulted: false,
-        proposalId: 'a3',
-        boundRevision: 9,
-      },
-      proposedReply: {
-        version: 1,
-        proposalId: 'a3',
-        boundRevision: 9,
-        proposalKind: 'REPLY',
-        authorityStatus: 'PENDING_CORE_VALIDATION',
-        replyBody: 'Core status verify karna hoga.',
-      },
-    }));
+    const model = vi.fn(async (_envelope: { normalizedText: string }) => {
+      await Promise.resolve();
+      return {
+        runtimeResult: {
+          outcome: 'MODEL_DRAFTED',
+          modelDrafted: true,
+          coreConsulted: false,
+          proposalId: 'a3',
+          boundRevision: 9,
+        },
+        proposedReply: {
+          version: 1,
+          proposalId: 'a3',
+          boundRevision: 9,
+          proposalKind: 'REPLY',
+          authorityStatus: 'PENDING_CORE_VALIDATION',
+          replyBody: 'Core status verify karna hoga.',
+        },
+      };
+    });
     const runtime = createQuickFurnoWhatsAppSpecialistRuntime({
       runtimeId: 'anisha.a3.failure',
       jarvisRuntime: {
@@ -315,23 +325,26 @@ describe('Anisha A3 signed existing QuickFurno vendor context', () => {
 
   it('skips live vendor Core fetch on a greeting and uses normal model path', async () => {
     const reader = { readForTurn: vi.fn() };
-    const model = vi.fn(async (_envelope: { normalizedText: string }) => ({
-      runtimeResult: {
-        outcome: 'MODEL_DRAFTED',
-        modelDrafted: true,
-        coreConsulted: false,
-        proposalId: 'hello',
-        boundRevision: 9,
-      },
-      proposedReply: {
-        version: 1,
-        proposalId: 'hello',
-        boundRevision: 9,
-        proposalKind: 'REPLY',
-        authorityStatus: 'PENDING_CORE_VALIDATION',
-        replyBody: 'Namaste!',
-      },
-    }));
+    const model = vi.fn(async (_envelope: { normalizedText: string }) => {
+      await Promise.resolve();
+      return {
+        runtimeResult: {
+          outcome: 'MODEL_DRAFTED',
+          modelDrafted: true,
+          coreConsulted: false,
+          proposalId: 'hello',
+          boundRevision: 9,
+        },
+        proposedReply: {
+          version: 1,
+          proposalId: 'hello',
+          boundRevision: 9,
+          proposalKind: 'REPLY',
+          authorityStatus: 'PENDING_CORE_VALIDATION',
+          replyBody: 'Namaste!',
+        },
+      };
+    });
     const runtime = createQuickFurnoWhatsAppSpecialistRuntime({
       runtimeId: 'anisha.a3.greeting',
       jarvisRuntime: {
@@ -369,3 +382,8 @@ describe('Anisha A3 signed existing QuickFurno vendor context', () => {
     expect(model).not.toHaveBeenCalled();
   });
 });
+
+function requireAnishaTestValue<T>(value: T | undefined | null): NonNullable<T> {
+  if (value === null || value === undefined) throw new TypeError('test-precondition-missing');
+  return value;
+}

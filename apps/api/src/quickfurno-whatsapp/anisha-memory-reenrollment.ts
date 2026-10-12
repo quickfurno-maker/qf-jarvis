@@ -51,14 +51,14 @@ export function createAnishaMemoryReenrollment(input: {
       )
         return 'blocked';
       try {
-        const proof = await input.consent!.read({
+        const proof = await requireAnishaPort(input.consent).read({
           tenantId: 'quickfurno',
           vendorId: material.subjectRef,
           conversationId: material.conversationId,
           expectedRevision: material.revision,
         });
         if (
-          proof.source !== 'QUICKFURNO_CORE' ||
+          !Object.is(proof.source, 'QUICKFURNO_CORE') ||
           proof.vendorId !== material.subjectRef ||
           proof.decision !== 'GRANTED' ||
           proof.erasurePending ||
@@ -67,12 +67,12 @@ export function createAnishaMemoryReenrollment(input: {
           Math.abs(Date.parse(now) - Date.parse(proof.observedAt)) > 30_000
         )
           return 'blocked';
-        const result = await input.rearm!({
+        const result = await requireAnishaPort(input.rearm)({
           vendorId: material.subjectRef,
           consentRevision: proof.consentRevision,
           consentUpdatedAt: proof.consentUpdatedAt,
           consentObservedAt: proof.observedAt,
-          ownerApprovalRef: input.ownerApprovalRef!,
+          ownerApprovalRef: requireAnishaPort(input.ownerApprovalRef),
           now,
         });
         return result.cleared ? 'cleared' : 'no-fence';
@@ -81,4 +81,11 @@ export function createAnishaMemoryReenrollment(input: {
       }
     },
   });
+}
+
+function requireAnishaPort<T>(value: T | undefined | null): NonNullable<T> {
+  if (value === undefined || value === null) {
+    throw new TypeError('anisha-required-gated-port-missing');
+  }
+  return value;
 }

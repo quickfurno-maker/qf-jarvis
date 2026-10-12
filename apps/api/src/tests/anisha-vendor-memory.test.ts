@@ -63,20 +63,28 @@ function record(overrides: Partial<AgentMemoryRecordV1> = {}): AgentMemoryRecord
   };
 }
 
-function approved(readActive = vi.fn(async () => [record()])) {
+function approved(
+  readActive = vi.fn(async () => {
+    await Promise.resolve();
+    return [record()];
+  }),
+) {
   const reader = createAnishaVendorMemoryReader({
     policy: { enabled: true, ownerApprovalRef: 'approved.anisha.read.v1', maxRecordAgeDays: 30 },
     memory: { readActive },
     consent: {
-      read: vi.fn(async () => ({
-        source: 'QUICKFURNO_CORE' as const,
-        vendorId,
-        decision: 'GRANTED' as const,
-        observedAt: now,
-        consentRevision: 4,
-        consentUpdatedAt: now,
-        erasurePending: false,
-      })),
+      read: vi.fn(async () => {
+        await Promise.resolve();
+        return {
+          source: 'QUICKFURNO_CORE' as const,
+          vendorId,
+          decision: 'GRANTED' as const,
+          observedAt: now,
+          consentRevision: 4,
+          consentUpdatedAt: now,
+          erasurePending: false,
+        };
+      }),
     },
     clock: () => now,
   });
@@ -147,15 +155,18 @@ describe('Anisha A2 governed vendor memory isolation', () => {
     'does not read governed memory on $label',
     async ({ decision, observedAt, subject, expected }) => {
       const readActive = vi.fn();
-      const consent = vi.fn(async () => ({
-        source: 'QUICKFURNO_CORE' as const,
-        vendorId: subject,
-        decision,
-        observedAt,
-        consentRevision: 4,
-        consentUpdatedAt: now,
-        erasurePending: false,
-      }));
+      const consent = vi.fn(async () => {
+        await Promise.resolve();
+        return {
+          source: 'QUICKFURNO_CORE' as const,
+          vendorId: subject,
+          decision,
+          observedAt,
+          consentRevision: 4,
+          consentUpdatedAt: now,
+          erasurePending: false,
+        };
+      });
       const reader = createAnishaVendorMemoryReader({
         policy: { enabled: true, ownerApprovalRef: 'approved.anisha.read.v1' },
         consent: { read: consent },
@@ -217,7 +228,12 @@ describe('Anisha A2 governed vendor memory isolation', () => {
         ],
       }),
     ];
-    const { reader } = approved(vi.fn(async () => records));
+    const { reader } = approved(
+      vi.fn(async () => {
+        await Promise.resolve();
+        return records;
+      }),
+    );
     await expect(reader.readForTurn(vendor())).resolves.toEqual({ status: 'empty' });
   });
 
@@ -227,7 +243,12 @@ describe('Anisha A2 governed vendor memory isolation', () => {
       record({ updatedAt: '2026-10-13T04:00:00.000Z' }),
       record({ updatedAt: '2026-08-01T04:00:00.000Z' }),
     ];
-    const { reader } = approved(vi.fn(async () => records));
+    const { reader } = approved(
+      vi.fn(async () => {
+        await Promise.resolve();
+        return records;
+      }),
+    );
     await expect(reader.readForTurn(vendor())).resolves.toEqual({ status: 'empty' });
   });
 
@@ -237,12 +258,18 @@ describe('Anisha A2 governed vendor memory isolation', () => {
       record({ derivedSummary: 'Contact vendor at 9876543210.' }),
       record({ derivedSummary: 'Vendor email x@example.com' }),
     ];
-    const { reader } = approved(vi.fn(async () => records));
+    const { reader } = approved(
+      vi.fn(async () => {
+        await Promise.resolve();
+        return records;
+      }),
+    );
     await expect(reader.readForTurn(vendor())).resolves.toEqual({ status: 'empty' });
   });
 
   it('fails closed on unavailable memory without aborting an authorized vendor turn', async () => {
     const readActive = vi.fn(async (): Promise<AgentMemoryRecordV1[]> => {
+      await Promise.resolve();
       throw new Error('db down');
     });
     const { reader } = approved(readActive);
@@ -255,23 +282,26 @@ describe('Anisha A2 governed vendor memory isolation', () => {
 
   it('injects only optional, non-authoritative preference hints to Anisha; never into Riya', async () => {
     const { reader } = approved();
-    const model = vi.fn(async (_envelope: { normalizedText: string; partyType: string }) => ({
-      runtimeResult: {
-        outcome: 'MODEL_DRAFTED',
-        modelDrafted: true,
-        coreConsulted: false,
-        proposalId: 'a2-proposal',
-        boundRevision: 9,
-      },
-      proposedReply: {
-        version: 1,
-        proposalId: 'a2-proposal',
-        boundRevision: 9,
-        proposalKind: 'REPLY',
-        authorityStatus: 'PENDING_CORE_VALIDATION',
-        replyBody: 'Hinglish mein aapko guide karungi.',
-      },
-    }));
+    const model = vi.fn(async (_envelope: { normalizedText: string; partyType: string }) => {
+      await Promise.resolve();
+      return {
+        runtimeResult: {
+          outcome: 'MODEL_DRAFTED',
+          modelDrafted: true,
+          coreConsulted: false,
+          proposalId: 'a2-proposal',
+          boundRevision: 9,
+        },
+        proposedReply: {
+          version: 1,
+          proposalId: 'a2-proposal',
+          boundRevision: 9,
+          proposalKind: 'REPLY',
+          authorityStatus: 'PENDING_CORE_VALIDATION',
+          replyBody: 'Hinglish mein aapko guide karungi.',
+        },
+      };
+    });
     const runtime = createQuickFurnoWhatsAppSpecialistRuntime({
       runtimeId: 'qfj.anisha.a2',
       jarvisRuntime: {
@@ -291,10 +321,13 @@ describe('Anisha A2 governed vendor memory isolation', () => {
 
   it('does not inject memory into the model if the turn is unauthorized', async () => {
     const reader = {
-      readForTurn: vi.fn(async () => ({
-        status: 'available' as const,
-        summary: 'Should never be seen',
-      })),
+      readForTurn: vi.fn(async () => {
+        await Promise.resolve();
+        return {
+          status: 'available' as const,
+          summary: 'Should never be seen',
+        };
+      }),
     };
     const model = vi.fn();
     const runtime = createQuickFurnoWhatsAppSpecialistRuntime({

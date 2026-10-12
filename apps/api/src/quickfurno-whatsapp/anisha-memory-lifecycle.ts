@@ -95,7 +95,7 @@ export function createAnishaVendorMemoryLifecycle(config: {
       )
         return 'blocked';
       try {
-        const check = await config.consent!.read({
+        const check = await requireAnishaPort(config.consent).read({
           tenantId: 'quickfurno',
           vendorId,
           conversationId: material.conversationId,
@@ -103,7 +103,7 @@ export function createAnishaVendorMemoryLifecycle(config: {
         });
         const consentAt = Date.parse(check.observedAt);
         if (
-          check.source !== 'QUICKFURNO_CORE' ||
+          !Object.is(check.source, 'QUICKFURNO_CORE') ||
           check.vendorId !== vendorId ||
           check.decision !== 'GRANTED' ||
           !Number.isFinite(consentAt) ||
@@ -130,7 +130,7 @@ export function createAnishaVendorMemoryLifecycle(config: {
           reasonCode: preference.kind === 'language' ? 'language-preference' : 'support-preference',
           correlationId: material.requestId,
         };
-        const write = await config.memory!.write(record);
+        const write = await requireAnishaPort(config.memory).write(record);
         return write.decision === 'ALLOW_DURABLE' ? 'stored' : 'blocked';
       } catch {
         return 'unavailable';
@@ -151,7 +151,7 @@ export function createAnishaVendorMemoryLifecycle(config: {
       if (Math.abs(Date.parse(now) - Date.parse(input.observedAt)) > 300000) {
         throw new TypeError('anisha-memory-erasure-task-stale');
       }
-      const result = await config.memory!.invalidate({
+      const result = await requireAnishaPort(config.memory).invalidate({
         memoryInvalidationRequestId: input.erasureRequestId,
         contractVersion: 1,
         scope: 'subject',
@@ -171,4 +171,11 @@ export function createAnishaVendorMemoryLifecycle(config: {
       return Object.freeze({ invalidatedCount: result.invalidatedCount });
     },
   });
+}
+
+function requireAnishaPort<T>(value: T | undefined | null): NonNullable<T> {
+  if (value === undefined || value === null) {
+    throw new TypeError('anisha-required-gated-port-missing');
+  }
+  return value;
 }

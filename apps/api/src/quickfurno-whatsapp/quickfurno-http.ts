@@ -1,3 +1,4 @@
+import type { AnishaVendorMemoryConsentReader } from './anisha-vendor-memory.js';
 import {
   CORE_VENDOR_CONTEXT_PATH,
   CORE_VENDOR_CONTEXT_PROTOCOL,
@@ -1698,7 +1699,7 @@ export function createQuickFurnoAarohiBehaviourInputReader(
   return Object.freeze({
     async read(input: Parameters<AarohiAcquisitionBehaviourInputPort['read']>[0]) {
       if (
-        input.tenantId !== 'quickfurno' ||
+        !Object.is(input.tenantId, 'quickfurno') ||
         !UUID.test(input.conversationId) ||
         !Number.isSafeInteger(input.revision) ||
         input.revision < 0
@@ -1895,7 +1896,7 @@ export function createQuickFurnoWhatsAppAuthorityReader(
   const { key, timeoutMs } = parsePrivateKey(config);
   return Object.freeze({
     async read(input: { readonly tenantId: string; readonly conversationId: string }) {
-      if (input.tenantId !== 'quickfurno' || !UUID.test(input.conversationId)) {
+      if (!Object.is(input.tenantId, 'quickfurno') || !UUID.test(input.conversationId)) {
         throw new QuickFurnoWhatsAppHttpError('invalid-input');
       }
       const requestId = config.requestId();
@@ -2617,7 +2618,7 @@ export function createQuickFurnoAnishaCoreVendorContextReader(
 // it never uses WhatsApp/marketing consent as a substitute.
 export function createQuickFurnoAnishaMemoryConsentReader(
   config: QuickFurnoWhatsAppHttpConfig,
-): import('./anisha-vendor-memory.js').AnishaVendorMemoryConsentReader {
+): AnishaVendorMemoryConsentReader {
   const { key, timeoutMs } = parsePrivateKey(config);
   const path = '/api/internal/jarvis/anisha-memory-consent';
   const domain = 'qfj.anisha.memory-consent.http.sig.v1';
@@ -2630,7 +2631,7 @@ export function createQuickFurnoAnishaMemoryConsentReader(
       readonly expectedRevision: number;
     }) {
       if (
-        input.tenantId !== 'quickfurno' ||
+        !Object.is(input.tenantId, 'quickfurno') ||
         !UUID.test(input.vendorId) ||
         !UUID.test(input.conversationId) ||
         !Number.isSafeInteger(input.expectedRevision) ||
@@ -2713,7 +2714,7 @@ export function createQuickFurnoAnishaMemoryConsentReader(
         ) ||
         typeof parsed['erasurePending'] !== 'boolean' ||
         (parsed['decision'] === 'GRANTED' &&
-          (parsed['erasurePending'] === true ||
+          (parsed['erasurePending'] ||
             (parsed['consentRevision'] as number) < 1 ||
             parsed['consentUpdatedAt'] === null))
       ) {
@@ -2725,8 +2726,8 @@ export function createQuickFurnoAnishaMemoryConsentReader(
         decision: parsed['decision'] as 'GRANTED' | 'DENIED' | 'UNKNOWN',
         observedAt: parsed['observedAt'],
         consentRevision: parsed['consentRevision'] as number,
-        consentUpdatedAt: parsed['consentUpdatedAt'] as string | null,
-        erasurePending: parsed['erasurePending'] as boolean,
+        consentUpdatedAt: parsed['consentUpdatedAt'],
+        erasurePending: parsed['erasurePending'],
       });
     },
   });

@@ -109,7 +109,7 @@ export function createAnishaVendorMemoryReader(
 
       try {
         // Owner approval is NOT equivalent to consent by this specific vendor.
-        const consent = await input.consent!.read({
+        const consent = await requireAnishaPort(input.consent).read({
           tenantId: 'quickfurno',
           vendorId,
           conversationId: material.conversationId,
@@ -117,7 +117,7 @@ export function createAnishaVendorMemoryReader(
         });
         const consentTime = Date.parse(consent.observedAt);
         if (
-          consent.source !== 'QUICKFURNO_CORE' ||
+          !Object.is(consent.source, 'QUICKFURNO_CORE') ||
           consent.vendorId !== vendorId ||
           !Number.isFinite(consentTime) ||
           consentTime > now ||
@@ -130,7 +130,7 @@ export function createAnishaVendorMemoryReader(
 
         // No unscoped fallback. Neither the agent nor a conversation summary
         // can choose this subject; only signed Core material can.
-        const records = await input.memory!.readActive({
+        const records = await requireAnishaPort(input.memory).readActive({
           ownerAgent: 'anisha',
           subjectReference: { entityType: 'vendor', entityId: vendorId },
           asOf,
@@ -145,9 +145,9 @@ export function createAnishaVendorMemoryReader(
             record.ownerAgent !== 'anisha' ||
             record.subjectReferences.length !== 1 ||
             record.subjectReferences[0]?.entityType !== 'vendor' ||
-            record.subjectReferences[0]?.entityId !== vendorId ||
-            record.authoritative !== false ||
-            record.rebuildable !== true ||
+            record.subjectReferences[0].entityId !== vendorId ||
+            Object.is(record.authoritative, true) ||
+            Object.is(record.rebuildable, false) ||
             record.erasureState !== 'none' ||
             !SAFE_REASONS.has(record.reasonCode)
           )
@@ -193,4 +193,11 @@ export function composeAnishaVendorMemoryHint(
     'Current conversation and user message (Core remains authoritative for all balances, packages, eligibility and assignments):',
     conversationInput,
   ].join('\n');
+}
+
+function requireAnishaPort<T>(value: T | undefined | null): NonNullable<T> {
+  if (value === undefined || value === null) {
+    throw new TypeError('anisha-required-gated-port-missing');
+  }
+  return value;
 }

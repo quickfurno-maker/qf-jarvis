@@ -20,6 +20,7 @@ const privateKeyPem = kp.privateKey.export({ type: 'pkcs8', format: 'pem' }).toS
 function signedFixture(input: { crossVendor?: boolean; badAck?: boolean } = {}) {
   const httpPost = vi.fn(
     async (url: string, init: { body: string; headers: Record<string, string> }) => {
+      await Promise.resolve();
       const request = JSON.parse(init.body) as Record<string, unknown>;
       const action = request['action'];
       expect(action).toMatch(/^(CLAIM|ACK)$/);
@@ -46,27 +47,30 @@ function signedFixture(input: { crossVendor?: boolean; badAck?: boolean } = {}) 
           null,
           Buffer.from(signingInput),
           kp.publicKey,
-          Buffer.from(init.headers['x-qfj-signature']!, 'base64url'),
+          Buffer.from(requireAnishaTestValue(init.headers['x-qfj-signature']), 'base64url'),
         ),
       ).toBe(true);
       if (action === 'ACK') {
         expect(request).toMatchObject(task);
         return {
           status: 200,
-          text: async () =>
-            JSON.stringify({
+          text: async () => {
+            await Promise.resolve();
+            return JSON.stringify({
               protocol: 'qfj.anisha.memory-purge',
               version: 1,
               action,
               requestId,
               acknowledged: !input.badAck,
-            }),
+            });
+          },
         };
       }
       return {
         status: 200,
-        text: async () =>
-          JSON.stringify({
+        text: async () => {
+          await Promise.resolve();
+          return JSON.stringify({
             protocol: 'qfj.anisha.memory-purge',
             version: 1,
             action,
@@ -81,7 +85,8 @@ function signedFixture(input: { crossVendor?: boolean; badAck?: boolean } = {}) 
                   : {}),
               },
             ],
-          }),
+          });
+        },
       };
     },
   );
@@ -120,8 +125,14 @@ function mockedCore(): {
   readonly claim: ReturnType<typeof vi.fn>;
   readonly ack: ReturnType<typeof vi.fn>;
 } {
-  const claim = vi.fn(async () => [task]);
-  const ack = vi.fn(async (_task: AnishaMemoryPurgeTask) => undefined);
+  const claim = vi.fn(async () => {
+    await Promise.resolve();
+    return [task];
+  });
+  const ack = vi.fn(async (_task: AnishaMemoryPurgeTask) => {
+    await Promise.resolve();
+    return undefined;
+  });
   return { core: { claim, acknowledge: ack }, claim, ack };
 }
 describe('Anisha A2c physical-delete-before-ack protocol', () => {
@@ -137,6 +148,7 @@ describe('Anisha A2c physical-delete-before-ack protocol', () => {
         },
       },
       erase: async () => {
+        await Promise.resolve();
         events.push('erase');
         return { deletedCount: 3 };
       },
@@ -176,7 +188,10 @@ describe('Anisha A2c physical-delete-before-ack protocol', () => {
     const { core, ack } = mockedCore();
     const worker = createAnishaMemoryPurgeWorker({
       core,
-      erase: async () => ({ deletedCount: -1 }),
+      erase: async () => {
+        await Promise.resolve();
+        return { deletedCount: -1 };
+      },
     });
     expect((await worker.runCycle()).failed).toBe(1);
     expect(ack).not.toHaveBeenCalled();
@@ -199,7 +214,10 @@ describe('Anisha A2c physical-delete-before-ack protocol', () => {
     await expect(started).resolves.toMatchObject({ claimed: 0 });
   });
   it('runs physical TTL cleanup before a Core claim, even when Core is unavailable', async () => {
-    const purgeExpired = vi.fn(async () => ({ invalidatedCount: 2 }));
+    const purgeExpired = vi.fn(async () => {
+      await Promise.resolve();
+      return { invalidatedCount: 2 };
+    });
     const core = {
       claim: vi.fn().mockRejectedValueOnce(new Error('core offline')).mockResolvedValueOnce([]),
       acknowledge: vi.fn(),
@@ -215,3 +233,8 @@ describe('Anisha A2c physical-delete-before-ack protocol', () => {
     expect(purgeExpired).toHaveBeenCalledTimes(2);
   });
 });
+
+function requireAnishaTestValue<T>(value: T | undefined | null): NonNullable<T> {
+  if (value === null || value === undefined) throw new TypeError('test-precondition-missing');
+  return value;
+}

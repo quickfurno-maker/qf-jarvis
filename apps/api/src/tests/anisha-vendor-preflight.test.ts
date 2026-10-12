@@ -40,23 +40,26 @@ function vendor(
 
 function createSpyRuntime() {
   const processInboundForProposedReply = vi.fn(
-    async (envelope: { partyType: string; normalizedText: string }) => ({
-      runtimeResult: {
-        outcome: 'MODEL_DRAFTED',
-        coreConsulted: false,
-        modelDrafted: true,
-        proposalId: 'anisha.proposal.1',
-        boundRevision: 9,
-      },
-      proposedReply: {
-        version: 1 as const,
-        proposalId: 'anisha.proposal.1',
-        boundRevision: 9,
-        proposalKind: 'REPLY' as const,
-        authorityStatus: 'PENDING_CORE_VALIDATION' as const,
-        replyBody: envelope.partyType + ' informational reply',
-      },
-    }),
+    async (envelope: { partyType: string; normalizedText: string }) => {
+      await Promise.resolve();
+      return {
+        runtimeResult: {
+          outcome: 'MODEL_DRAFTED',
+          coreConsulted: false,
+          modelDrafted: true,
+          proposalId: 'anisha.proposal.1',
+          boundRevision: 9,
+        },
+        proposedReply: {
+          version: 1 as const,
+          proposalId: 'anisha.proposal.1',
+          boundRevision: 9,
+          proposalKind: 'REPLY' as const,
+          authorityStatus: 'PENDING_CORE_VALIDATION' as const,
+          replyBody: envelope.partyType + ' informational reply',
+        },
+      };
+    },
   );
   const runtime = createQuickFurnoWhatsAppSpecialistRuntime({
     runtimeId: 'qfj.anisha.a1.preflight',

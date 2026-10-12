@@ -32,22 +32,28 @@ const turn = (
   ...overrides,
 });
 function gate(override: Record<string, unknown> = {}) {
-  const rearm = vi.fn(async () => ({ cleared: true }));
-  const consent = vi.fn(async () => ({
-    source: 'QUICKFURNO_CORE' as const,
-    vendorId,
-    decision: 'GRANTED' as const,
-    observedAt: now,
-    consentRevision: 4,
-    consentUpdatedAt: now,
-    erasurePending: false,
-    ...override,
-  }));
+  const rearm = vi.fn(async () => {
+    await Promise.resolve();
+    return { cleared: true };
+  });
+  const consent = vi.fn(async () => {
+    await Promise.resolve();
+    return {
+      source: 'QUICKFURNO_CORE' as const,
+      vendorId,
+      decision: 'GRANTED' as const,
+      observedAt: now,
+      consentRevision: 4,
+      consentUpdatedAt: now,
+      erasurePending: false,
+      ...override,
+    };
+  });
   const system = createAnishaMemoryReenrollment({
     environment: 'staging',
     mode: 'STAGING_ONLY',
     ownerApprovalRef: 'owner.anisha.rearm.approved',
-    consent: { read: consent as never },
+    consent: { read: consent },
     rearm,
     clock: () => now,
   });

@@ -58,13 +58,14 @@ export function createAnishaMemoryPurgeWorker(input: {
     },
     async run(signal: AbortSignal): Promise<void> {
       if (!input.wait) throw new TypeError('anisha-memory-purge-wait-port-missing');
-      while (!signal.aborted) {
+      const isStopped = () => signal.aborted;
+      while (!isStopped()) {
         try {
           await this.runCycle();
         } catch {
           /* Core unavailable: retry next cycle */
         }
-        if (signal.aborted) break;
+        if (isStopped()) break;
         try {
           await input.wait(cadence, signal);
         } catch {

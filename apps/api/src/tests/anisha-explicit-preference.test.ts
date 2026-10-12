@@ -56,17 +56,23 @@ const base = {
   normalizedText: 'Please reply in Hinglish',
 } as const;
 it('staging recorder only captures explicitly requested preference after a valid Anisha model proposal', async () => {
-  const recorder = vi.fn(async () => 'stored' as const);
-  const model = vi.fn(async () => ({
-    proposedReply: {
-      version: 1,
-      proposalId: 'anisha.pref.1',
-      boundRevision: 9,
-      proposalKind: 'REPLY',
-      authorityStatus: 'PENDING_CORE_VALIDATION',
-      replyBody: 'Theek hai, Hinglish mein baat karenge.',
-    },
-  }));
+  const recorder = vi.fn(async () => {
+    await Promise.resolve();
+    return 'stored' as const;
+  });
+  const model = vi.fn(async () => {
+    await Promise.resolve();
+    return {
+      proposedReply: {
+        version: 1,
+        proposalId: 'anisha.pref.1',
+        boundRevision: 9,
+        proposalKind: 'REPLY',
+        authorityStatus: 'PENDING_CORE_VALIDATION',
+        replyBody: 'Theek hai, Hinglish mein baat karenge.',
+      },
+    };
+  });
   const service = createQuickFurnoWhatsAppSpecialistRuntime({
     runtimeId: 'anisha.preference.cert',
     jarvisRuntime: {
@@ -77,8 +83,8 @@ it('staging recorder only captures explicitly requested preference after a valid
   await expect(service.process(base as never)).resolves.toMatchObject({ actor: 'ANISHA' });
   expect(recorder).toHaveBeenCalledOnce();
   expect(recorder).toHaveBeenCalledWith(base, { kind: 'language', value: 'hinglish' });
-  await service.process({ ...base, normalizedText: 'My wallet has 123 credits' } as never);
+  await service.process({ ...base, normalizedText: 'My wallet has 123 credits' });
   expect(recorder).toHaveBeenCalledTimes(1);
-  await service.process({ ...base, humanTakeover: true } as never);
+  await service.process({ ...base, humanTakeover: true });
   expect(recorder).toHaveBeenCalledTimes(1);
 });

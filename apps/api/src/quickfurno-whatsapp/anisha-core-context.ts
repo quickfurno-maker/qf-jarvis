@@ -117,12 +117,12 @@ export function parseBoundCoreVendorContextResponse(
     vendorId,
     packageReadinessBand: value['packageReadinessBand'] as Readiness,
     packageExpiryBand: value['packageExpiryBand'] as Expiry,
-    vendorStatus: value['vendorStatus'] as string | null,
-    locationVerificationStatus: value['locationVerificationStatus'] as string | null,
-    isActive: value['isActive'] as boolean,
-    activeLeadCount: value['activeLeadCount'] as number,
-    pendingBadLeadReportCount: value['pendingBadLeadReportCount'] as number,
-    unreadNotificationCount: value['unreadNotificationCount'] as number,
+    vendorStatus: value['vendorStatus'],
+    locationVerificationStatus: value['locationVerificationStatus'],
+    isActive: value['isActive'],
+    activeLeadCount: value['activeLeadCount'],
+    pendingBadLeadReportCount: value['pendingBadLeadReportCount'],
+    unreadNotificationCount: value['unreadNotificationCount'],
   });
 }
 
@@ -167,9 +167,9 @@ export function composeAnishaCoreVendorFacts(
             LOCATION.has(snapshot.locationVerificationStatus.toLowerCase())
               ? snapshot.locationVerificationStatus.toLowerCase()
               : 'unknown'),
-          'Core-reported active lead count: ' + snapshot.activeLeadCount,
-          'Pending bad-lead reports: ' + snapshot.pendingBadLeadReportCount,
-          'Unread vendor notifications: ' + snapshot.unreadNotificationCount,
+          'Core-reported active lead count: ' + String(snapshot.activeLeadCount),
+          'Pending bad-lead reports: ' + String(snapshot.pendingBadLeadReportCount),
+          'Unread vendor notifications: ' + String(snapshot.unreadNotificationCount),
           'These are bounded Core-reported bands/counts, not wallet balance, a guaranteed new lead, delivery receipt or permission to charge/recharge. Do not invent exact prices, wallet credits, payment status or promise a refund. Direct uncertain claims to Core/dashboard/human.',
         ];
   // The agent inbound-envelope contract allows a bounded message, so trim

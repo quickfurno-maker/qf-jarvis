@@ -1,7 +1,6 @@
 import { createHash, generateKeyPairSync, verify } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { parseAgentMemoryRecord, type AgentMemoryRecordV1 } from '@qf-jarvis/contracts';
-import type { GovernedMemoryRuntime } from '@qf-jarvis/governed-memory-foundation';
 import type { QuickFurnoWhatsAppTurnMaterialV2 } from '../quickfurno-whatsapp/contracts.js';
 import { createQuickFurnoAnishaMemoryConsentReader } from '../quickfurno-whatsapp/quickfurno-http.js';
 import { createAnishaVendorMemoryLifecycle } from '../quickfurno-whatsapp/anisha-memory-lifecycle.js';
@@ -69,6 +68,7 @@ function signedConsentReader(response = consentResponse(), status = 200) {
         readonly headers: Readonly<Record<string, string>>;
       },
     ) => {
+      await Promise.resolve();
       expect(url).toBe('https://quickfurno.example' + path);
       const body = JSON.parse(init.body) as Record<string, unknown>;
       expect(body).toMatchObject({
@@ -96,10 +96,16 @@ function signedConsentReader(response = consentResponse(), status = 200) {
           null,
           Buffer.from(preimage),
           kp.publicKey,
-          Buffer.from(init.headers['x-qfj-signature']!, 'base64url'),
+          Buffer.from(requireAnishaTestValue(init.headers['x-qfj-signature']), 'base64url'),
         ),
       ).toBe(true);
-      return { status, text: async () => JSON.stringify(response) };
+      return {
+        status,
+        text: async () => {
+          await Promise.resolve();
+          return JSON.stringify(response);
+        },
+      };
     },
   );
   const reader = createQuickFurnoAnishaMemoryConsentReader({
@@ -173,6 +179,7 @@ describe('Anisha A2b Core-purpose consent transport', () => {
 function sandboxLifecycle(decision: 'GRANTED' | 'DENIED' | 'UNKNOWN' = 'GRANTED') {
   const records = new Map<string, AgentMemoryRecordV1>();
   const write = vi.fn(async (input: unknown) => {
+    await Promise.resolve();
     const record = input as AgentMemoryRecordV1;
     records.set(record.memoryRecordId, record);
     return {
@@ -182,6 +189,7 @@ function sandboxLifecycle(decision: 'GRANTED' | 'DENIED' | 'UNKNOWN' = 'GRANTED'
     };
   });
   const invalidate = vi.fn(async (input: unknown) => {
+    await Promise.resolve();
     const req = input as { subjectReference: { entityId: string } };
     let deleted = 0;
     for (const [id, record] of records) {
@@ -193,21 +201,24 @@ function sandboxLifecycle(decision: 'GRANTED' | 'DENIED' | 'UNKNOWN' = 'GRANTED'
     return { invalidatedCount: deleted, sampledMemoryRecordIds: [], truncated: false };
   });
   const consent = {
-    read: vi.fn(async () => ({
-      source: 'QUICKFURNO_CORE' as const,
-      vendorId,
-      decision,
-      observedAt: timestamp,
-      consentRevision: 4,
-      consentUpdatedAt: timestamp,
-      erasurePending: false,
-    })),
+    read: vi.fn(async () => {
+      await Promise.resolve();
+      return {
+        source: 'QUICKFURNO_CORE' as const,
+        vendorId,
+        decision,
+        observedAt: timestamp,
+        consentRevision: 4,
+        consentUpdatedAt: timestamp,
+        erasurePending: false,
+      };
+    }),
   };
   const life = createAnishaVendorMemoryLifecycle({
     mode: 'STAGING_ONLY',
     environment: 'staging',
     ownerApprovalRef: 'owner.anisha.30day.20261012',
-    memory: { write, invalidate } as Pick<GovernedMemoryRuntime, 'write' | 'invalidate'>,
+    memory: { write, invalidate },
     consent,
     clock: () => timestamp,
   });
@@ -219,7 +230,7 @@ describe('Anisha A2b governed preference lifecycle (isolated, no live DB)', () =
     const write = vi.fn();
     const life = createAnishaVendorMemoryLifecycle({
       environment: 'staging',
-      memory: { write, invalidate: vi.fn() } as never,
+      memory: { write, invalidate: vi.fn() },
     });
     await expect(
       life.recordExplicitPreference(turn(), { kind: 'language', value: 'hinglish' }),
@@ -240,7 +251,7 @@ describe('Anisha A2b governed preference lifecycle (isolated, no live DB)', () =
     await expect(life.recordExplicitPreference(turn(), pref)).resolves.toBe('stored');
     expect(write).toHaveBeenCalledTimes(2);
     expect(records.size).toBe(1);
-    const record = [...records.values()][0]!;
+    const record = requireAnishaTestValue([...records.values()][0]);
     expect(() => parseAgentMemoryRecord(record)).not.toThrow();
     expect(record).toMatchObject({
       ownerAgent: 'anisha',
@@ -315,3 +326,8 @@ describe('Anisha A2b governed preference lifecycle (isolated, no live DB)', () =
     });
   });
 });
+
+function requireAnishaTestValue<T>(value: T | undefined | null): NonNullable<T> {
+  if (value === null || value === undefined) throw new TypeError('test-precondition-missing');
+  return value;
+}

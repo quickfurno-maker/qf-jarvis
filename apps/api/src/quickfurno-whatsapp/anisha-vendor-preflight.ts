@@ -37,12 +37,7 @@ export function assessAnishaWhatsAppPreflight(
 
   if (material.conversationState !== 'OPEN') return 'ANISHA_CONVERSATION_INACTIVE';
 
-  if (
-    material.jarvisAllowed !== true ||
-    material.humanTakeover !== false ||
-    material.aiPaused !== false ||
-    material.cancelled !== false
-  )
+  if (!material.jarvisAllowed || material.humanTakeover || material.aiPaused || material.cancelled)
     return 'ANISHA_CORE_AUTHORITY_BLOCKED';
 
   if (material.subjectStatus !== 'clear') return 'ANISHA_PRIVACY_OR_ERASURE_BLOCKED';

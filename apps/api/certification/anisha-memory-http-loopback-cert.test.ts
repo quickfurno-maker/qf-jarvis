@@ -24,90 +24,108 @@ describe('AN-A2e signed Core/Jarvis wire certification (loopback, no deployed se
   let authentic = 0;
   let rejectCount = 0;
   let ackCount = 0;
-  const server = createServer(async (request, response) => {
-    const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(Buffer.from(chunk));
-    const body = Buffer.concat(chunks);
-    let value: Record<string, unknown>;
-    try {
-      value = JSON.parse(body.toString('utf8')) as Record<string, unknown>;
-    } catch {
-      response.writeHead(400).end();
-      return;
-    }
-    const pathname = request.url ?? '';
-    const action = pathname.endsWith('-claim')
-      ? 'CLAIM'
-      : pathname.endsWith('-ack')
-        ? 'ACK'
-        : pathname.endsWith('-consent')
-          ? 'CONSENT'
-          : 'UNKNOWN';
-    const domain =
-      action === 'CONSENT'
-        ? 'qfj.anisha.memory-consent.http.sig.v1'
-        : 'qfj.anisha.memory-purge.' + action.toLowerCase() + '.http.sig.v1';
-    const digest = createHash('sha256').update(body).digest('base64url');
-    const signInput = [
-      domain,
-      'POST',
-      pathname,
-      'qf-jarvis',
-      'quickfurno-core',
-      value['requestId'],
-      value['issuedAt'],
-      keyId,
-      digest,
-    ].join('\n');
-    const signature = Buffer.from(
-      (request.headers['x-qfj-signature'] as string) ?? '',
-      'base64url',
-    );
-    const authorized =
-      request.method === 'POST' &&
-      request.headers['x-qfj-key-id'] === keyId &&
-      signature.length === 64 &&
-      verify(null, Buffer.from(signInput), publicKey, signature) &&
-      Math.abs(Date.parse(now) - Date.parse(String(value['issuedAt']))) < 30_000;
-    if (!authorized) {
-      rejectCount++;
-      response.writeHead(401).end();
-      return;
-    }
-    authentic++;
-    const common = { version: 1, requestId: value['requestId'] };
-    let payload: unknown;
-    if (action === 'CONSENT')
-      payload = {
-        ...common,
-        protocol: 'qfj.anisha.memory-consent',
-        vendorId,
-        conversationId,
-        expectedRevision: 9,
-        source: 'QUICKFURNO_CORE',
-        decision: 'GRANTED',
-        observedAt: now,
-        consentRevision: 4,
-        consentUpdatedAt: now,
-        erasurePending: false,
-      };
-    else if (action === 'CLAIM')
-      payload = { ...common, protocol: 'qfj.anisha.memory-purge', action: 'CLAIM', tasks: [task] };
-    else if (action === 'ACK') {
-      ackCount++;
-      payload = {
-        ...common,
-        protocol: 'qfj.anisha.memory-purge',
-        action: 'ACK',
-        acknowledged: true,
-      };
-    } else {
-      response.writeHead(404).end();
-      return;
-    }
-    response
-      .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
-      .end(JSON.stringify(payload));
+  const server = createServer((request, response) => {
+    void (async () => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) {
+        if (Buffer.isBuffer(chunk)) chunks.push(chunk);
+        else if (typeof chunk === 'string') chunks.push(Buffer.from(chunk, 'utf8'));
+        else {
+          response.writeHead(400).end();
+          return;
+        }
+      }
+      const body = Buffer.concat(chunks);
+      let value: Record<string, unknown>;
+      try {
+        value = JSON.parse(body.toString('utf8')) as Record<string, unknown>;
+      } catch {
+        response.writeHead(400).end();
+        return;
+      }
+      const pathname = request.url ?? '';
+      const action = pathname.endsWith('-claim')
+        ? 'CLAIM'
+        : pathname.endsWith('-ack')
+          ? 'ACK'
+          : pathname.endsWith('-consent')
+            ? 'CONSENT'
+            : 'UNKNOWN';
+      const domain =
+        action === 'CONSENT'
+          ? 'qfj.anisha.memory-consent.http.sig.v1'
+          : 'qfj.anisha.memory-purge.' + action.toLowerCase() + '.http.sig.v1';
+      const digest = createHash('sha256').update(body).digest('base64url');
+      const signInput = [
+        domain,
+        'POST',
+        pathname,
+        'qf-jarvis',
+        'quickfurno-core',
+        value['requestId'],
+        value['issuedAt'],
+        keyId,
+        digest,
+      ].join('\n');
+      const signatureHeader = request.headers['x-qfj-signature'];
+      const signature = Buffer.from(
+        typeof signatureHeader === 'string' ? signatureHeader : '',
+        'base64url',
+      );
+      const authorized =
+        request.method === 'POST' &&
+        request.headers['x-qfj-key-id'] === keyId &&
+        signature.length === 64 &&
+        verify(null, Buffer.from(signInput), publicKey, signature) &&
+        Math.abs(Date.parse(now) - Date.parse(String(value['issuedAt']))) < 30_000;
+      if (!authorized) {
+        rejectCount++;
+        response.writeHead(401).end();
+        return;
+      }
+      authentic++;
+      const common = { version: 1, requestId: value['requestId'] };
+      let payload: unknown;
+      if (action === 'CONSENT')
+        payload = {
+          ...common,
+          protocol: 'qfj.anisha.memory-consent',
+          vendorId,
+          conversationId,
+          expectedRevision: 9,
+          source: 'QUICKFURNO_CORE',
+          decision: 'GRANTED',
+          observedAt: now,
+          consentRevision: 4,
+          consentUpdatedAt: now,
+          erasurePending: false,
+        };
+      else if (action === 'CLAIM')
+        payload = {
+          ...common,
+          protocol: 'qfj.anisha.memory-purge',
+          action: 'CLAIM',
+          tasks: [task],
+        };
+      else if (action === 'ACK') {
+        ackCount++;
+        payload = {
+          ...common,
+          protocol: 'qfj.anisha.memory-purge',
+          action: 'ACK',
+          acknowledged: true,
+        };
+      } else {
+        response.writeHead(404).end();
+        return;
+      }
+      response
+        .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+        .end(JSON.stringify(payload));
+    })().catch(() => {
+      if (!response.headersSent) response.writeHead(500);
+      response.end();
+    });
   });
   const httpPost = async (
     url: string,
@@ -132,14 +150,20 @@ describe('AN-A2e signed Core/Jarvis wire certification (loopback, no deployed se
   });
   beforeAll(async () => {
     await new Promise<void>((resolve) =>
-      server.listen({ port: 0, host: '127.0.0.1' }, () => resolve()),
+      server.listen({ port: 0, host: '127.0.0.1' }, () => {
+        resolve();
+      }),
     );
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('loopback-bind-failed');
-    baseUrl = 'http://127.0.0.1:' + address.port + '/';
+    baseUrl = 'http://127.0.0.1:' + String(address.port) + '/';
   });
   afterAll(async () => {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await new Promise<void>((resolve) =>
+      server.close(() => {
+        resolve();
+      }),
+    );
   });
   it('real TCP POST signs distinct Core consent, claim and ACK domains', async () => {
     const consent = createQuickFurnoAnishaMemoryConsentReader(cfg());
@@ -160,6 +184,7 @@ describe('AN-A2e signed Core/Jarvis wire certification (loopback, no deployed se
     const worker = createAnishaMemoryPurgeWorker({
       core,
       erase: async (job) => {
+        await Promise.resolve();
         erased.push(job.vendorId);
         return { deletedCount: 1 };
       },
