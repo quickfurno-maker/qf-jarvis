@@ -1,6 +1,6 @@
 # Anisha A2f — Isolated Supabase staging + branch CI closure
 
-Certification: **2026-10-12 IST**  
+Certification: **2026-10-12 IST**
 Status: **isolated database and code-level certification passed, live application deployment and provider activation NOT done**.
 
 ## Exact isolated environments
