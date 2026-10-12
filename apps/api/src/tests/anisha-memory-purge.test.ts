@@ -124,7 +124,7 @@ function mockedCore(): {
   const ack = vi.fn(async (_task: AnishaMemoryPurgeTask) => undefined);
   return { core: { claim, acknowledge: ack }, claim, ack };
 }
-describe('Anisha A2c physical-delete-before-ack workflow', () => {
+describe('Anisha A2c physical-delete-before-ack protocol', () => {
   it('acknowledges only after committed erasure with valid bounded count', async () => {
     const { core, ack } = mockedCore();
     const events: string[] = [];
