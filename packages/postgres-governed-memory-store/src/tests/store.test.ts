@@ -132,7 +132,7 @@ describe('transactional Anisha erasure + replay write fence', () => {
   }
 
   it('locks subject, installs durable fence and physically deletes BEFORE COMMIT', async () => {
-    const query = vi.fn(async (sql: string) =>
+    const query = vi.fn(async (sql: string, _params?: unknown[]) =>
       sql.startsWith('DELETE ') ? { rowCount: 2 } : { rowCount: 1 },
     );
     const { pool, release } = fakePool(query);
@@ -154,7 +154,7 @@ describe('transactional Anisha erasure + replay write fence', () => {
   });
 
   it('failure rolls transaction back, never claims successful erasure', async () => {
-    const query = vi.fn(async (sql: string) => {
+    const query = vi.fn(async (sql: string, _params?: unknown[]) => {
       if (sql.startsWith('DELETE ')) throw Error('DB failure');
       return { rowCount: 1 };
     });
