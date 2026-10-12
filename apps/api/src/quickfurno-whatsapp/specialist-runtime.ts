@@ -20,6 +20,10 @@ import type {
 import type { ServiceBlueprintRegistry } from '@qf-jarvis/client-intelligence';
 import { buildWhatsAppClientIntelligence } from './client-intelligence-adapter.js';
 import { assessAnishaWhatsAppPreflight } from './anisha-vendor-preflight.js';
+import {
+  composeAnishaVendorMemoryHint,
+  type AnishaVendorMemoryReader,
+} from './anisha-vendor-memory.js';
 
 export interface QuickFurnoWhatsAppSpecialistObservation {
   readonly kind: 'MODEL_ROUTE_SELECTED';
@@ -49,6 +53,12 @@ export interface QuickFurnoWhatsAppSpecialistRuntimeConfig {
   readonly jarvisRuntime: WhatsAppJarvisRuntime;
   /** Optional CI-05 registry. Absence preserves the current no-opportunity production behavior. */
   readonly serviceBlueprintRegistry?: ServiceBlueprintRegistry;
+  /**
+   * AN-A2 optional, owner-governed derived vendor preference reader.
+   * No binding is supplied by production, so durable reads remain OFF.
+   * The reader must be subject-scoped and backed by the existing governed store.
+   */
+  readonly anishaMemoryReader?: AnishaVendorMemoryReader;
 }
 
 function isQualificationMaterial(
@@ -345,6 +355,26 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
       if (material.dataClass !== 'HOSTED_ALLOWED' || material.normalizedText === undefined)
         return null;
 
+      const recentConversationInput =
+        material.assignedActor === 'RIYA' && material.clientJourney !== undefined
+          ? material.normalizedText
+          : conversationContext === undefined
+            ? material.normalizedText
+            : composeConversationAwareInput({
+                currentText: material.normalizedText,
+                summary: conversationContext,
+              });
+      let modelInput = recentConversationInput;
+      if (material.assignedActor === 'ANISHA' && config.anishaMemoryReader !== undefined) {
+        // Only a role-correct Core-identified vendor can reach this branch.
+        // An optional read failure must never turn into a model retry or a
+        // second source of business truth; use no memory on uncertainty.
+        const memory = await config.anishaMemoryReader
+          .readForTurn(material)
+          .catch(() => ({ status: 'unavailable' as const }));
+        modelInput = composeAnishaVendorMemoryHint(modelInput, memory);
+      }
+
       const envelope = createInboundEnvelope({
         runtimeId: config.runtimeId,
         conversationId: material.conversationId,
@@ -362,15 +392,7 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         providerMessageRef: `qf.inbound:${material.inboundMessageId}`,
         dataClass: material.dataClass,
         ...(material.subjectRef === undefined ? {} : { subjectRef: material.subjectRef }),
-        normalizedText:
-          material.assignedActor === 'RIYA' && material.clientJourney !== undefined
-            ? material.normalizedText
-            : conversationContext === undefined
-              ? material.normalizedText
-              : composeConversationAwareInput({
-                  currentText: material.normalizedText,
-                  summary: conversationContext,
-                }),
+        normalizedText: modelInput,
       });
 
       if (
