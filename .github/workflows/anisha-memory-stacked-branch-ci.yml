@@ -58,7 +58,6 @@ jobs:
           pnpm exec vitest run \
             apps/api/src/tests/anisha-explicit-preference.test.ts \
             apps/api/src/tests/anisha-memory-reenrollment.test.ts \
-            apps/api/certification/anisha-memory-http-loopback-cert.test.ts \
             apps/api/src/tests/anisha-memory-consent-lifecycle.test.ts \
             apps/api/src/tests/anisha-memory-purge.test.ts \
             apps/api/src/tests/anisha-vendor-memory.test.ts \
@@ -71,6 +70,8 @@ jobs:
             packages/governed-memory-foundation/src/tests/governed-memory.test.ts \
             packages/postgres-governed-memory-store/src/tests/store.test.ts \
             packages/postgres-governed-memory-store/src/tests/anisha-live-postgres-cert.test.ts
+      - name: AN-A2e real signed HTTP loopback certificate (disposable localhost only)
+        run: pnpm exec vitest run --config vitest.anisha-http.config.mjs
       - name: Exact package and API typechecks
         run: |
           pnpm exec tsc --noEmit -p packages/postgres-governed-memory-store/tsconfig.json --pretty false
