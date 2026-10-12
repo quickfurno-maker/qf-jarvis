@@ -73,6 +73,9 @@ function approved(readActive = vi.fn(async () => [record()])) {
         vendorId,
         decision: 'GRANTED' as const,
         observedAt: now,
+        consentRevision: 4,
+        consentUpdatedAt: now,
+        erasurePending: false,
       })),
     },
     clock: () => now,
@@ -149,6 +152,9 @@ describe('Anisha A2 governed vendor memory isolation', () => {
         vendorId: subject,
         decision,
         observedAt,
+        consentRevision: 4,
+        consentUpdatedAt: now,
+        erasurePending: false,
       }));
       const reader = createAnishaVendorMemoryReader({
         policy: { enabled: true, ownerApprovalRef: 'approved.anisha.read.v1' },

@@ -56,6 +56,7 @@ import { createGovernedMemoryRuntime } from '@qf-jarvis/governed-memory-foundati
 import {
   createPostgresGovernedMemoryStore,
   eraseAnishaVendorMemoryWithFence,
+  purgeExpiredGovernedMemory,
 } from '@qf-jarvis/postgres-governed-memory-store';
 import { createAnishaMemoryPurgeWorker } from './anisha-memory-purge-worker.js';
 import { createAnishaVendorMemoryReader } from './anisha-vendor-memory.js';
@@ -598,6 +599,11 @@ export async function createQuickFurnoWhatsAppProductionWorker(
             return createAnishaMemoryPurgeWorker({
               core: createQuickFurnoAnishaMemoryPurgeCore(httpConfig),
               erase: (task) => eraseAnishaVendorMemoryWithFence(pool, task),
+              purgeExpired: () =>
+                purgeExpiredGovernedMemory(pool, {
+                  asOf: new Date().toISOString(),
+                  limit: 100,
+                }),
             });
           })()
         : undefined;

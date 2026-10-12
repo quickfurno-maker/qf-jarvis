@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Pool } from 'pg';
 import { eraseAnishaVendorMemoryWithFence, purgeExpiredGovernedMemory } from '../store.js';
+import { rearmAnishaMemoryAfterFreshCoreGrant } from '../rearm-anisha-memory.js';
 
 const connection = process.env['ANISHA_MEMORY_CERT_DATABASE_URL'];
 const cert = connection ? new URL(connection) : null;
@@ -37,7 +38,14 @@ testSuite('AN-A2c actual isolated PostgreSQL 17 physical deletion certification'
     );
     await pool.query(
       'DELETE FROM qf_jarvis_memory.anisha_erasure_fence WHERE vendor_subject_key = ANY($1::text[])',
-      [[vendorA, vendorB, '99999999-9999-4999-8999-999999999999'].map((v) => 'vendor|' + v)],
+      [
+        [
+          vendorA,
+          vendorB,
+          '99999999-9999-4999-8999-999999999999',
+          'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        ].map((v) => 'vendor|' + v),
+      ],
     );
   });
   afterAll(async () => {
@@ -183,6 +191,51 @@ testSuite('AN-A2c actual isolated PostgreSQL 17 physical deletion certification'
       await count(
         `SELECT count(*)::text AS count FROM qf_jarvis_memory.agent_memory_record WHERE memory_record_id=$1`,
         currentId,
+      ),
+    ).toBe(1);
+  });
+  it('requires a fresh Core grant after the fence, then allows a new preference', async () => {
+    const vendorD = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const purgeD = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    await insert('cert-rearm-old', vendorD);
+    await expect(
+      eraseAnishaVendorMemoryWithFence(pool, { vendorId: vendorD, purgeId: purgeD }),
+    ).resolves.toEqual({ deletedCount: 1 });
+    const common = {
+      vendorId: vendorD,
+      consentRevision: 4,
+      ownerApprovalRef: 'owner.approved.rearm.v1',
+    };
+    const now = new Date().toISOString();
+    await expect(
+      rearmAnishaMemoryAfterFreshCoreGrant(pool, {
+        ...common,
+        consentUpdatedAt: new Date(Date.now() - 3600000).toISOString(),
+        consentObservedAt: now,
+        now,
+      }),
+    ).rejects.toThrow('anisha-memory-rearm-unavailable');
+    expect(
+      await count(
+        'SELECT count(*)::text AS count FROM qf_jarvis_memory.anisha_erasure_fence WHERE vendor_subject_key=$1',
+        'vendor|' + vendorD,
+      ),
+    ).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const fresh = new Date().toISOString();
+    await expect(
+      rearmAnishaMemoryAfterFreshCoreGrant(pool, {
+        ...common,
+        consentUpdatedAt: fresh,
+        consentObservedAt: fresh,
+        now: fresh,
+      }),
+    ).resolves.toEqual({ cleared: true });
+    await insert('cert-rearm-new', vendorD);
+    expect(
+      await count(
+        'SELECT count(*)::text AS count FROM qf_jarvis_memory.agent_memory_record WHERE memory_record_id=$1',
+        'cert-rearm-new',
       ),
     ).toBe(1);
   });

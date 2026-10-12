@@ -198,4 +198,20 @@ describe('Anisha A2c physical-delete-before-ack workflow', () => {
     pending.resolve?.([]);
     await expect(started).resolves.toMatchObject({ claimed: 0 });
   });
+  it('runs physical TTL cleanup before a Core claim, even when Core is unavailable', async () => {
+    const purgeExpired = vi.fn(async () => ({ invalidatedCount: 2 }));
+    const core = {
+      claim: vi.fn().mockRejectedValueOnce(new Error('core offline')).mockResolvedValueOnce([]),
+      acknowledge: vi.fn(),
+    };
+    const worker = createAnishaMemoryPurgeWorker({
+      core,
+      erase: vi.fn(),
+      purgeExpired,
+    });
+    await expect(worker.runCycle()).rejects.toThrow('core offline');
+    expect(purgeExpired).toHaveBeenCalledOnce();
+    await expect(worker.runCycle()).resolves.toMatchObject({ claimed: 0 });
+    expect(purgeExpired).toHaveBeenCalledTimes(2);
+  });
 });

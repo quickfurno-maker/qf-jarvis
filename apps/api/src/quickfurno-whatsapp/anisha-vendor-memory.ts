@@ -40,6 +40,9 @@ export interface AnishaVendorMemoryConsentReader {
     readonly vendorId: string;
     readonly decision: 'GRANTED' | 'DENIED' | 'UNKNOWN';
     readonly observedAt: string;
+    readonly consentRevision: number;
+    readonly consentUpdatedAt: string | null;
+    readonly erasurePending: boolean;
   }>;
 }
 
@@ -121,7 +124,7 @@ export function createAnishaVendorMemoryReader(
           now - consentTime > 5 * 60_000
         )
           return Object.freeze({ status: 'unavailable' as const });
-        if (consent.decision !== 'GRANTED') {
+        if (consent.decision !== 'GRANTED' || consent.erasurePending) {
           return Object.freeze({ status: 'blocked' as const });
         }
 

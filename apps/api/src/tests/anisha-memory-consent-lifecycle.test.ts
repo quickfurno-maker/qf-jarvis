@@ -54,6 +54,9 @@ function consentResponse(changes: Record<string, unknown> = {}) {
     source: 'QUICKFURNO_CORE',
     decision: 'GRANTED',
     observedAt: timestamp,
+    consentRevision: 4,
+    consentUpdatedAt: timestamp,
+    erasurePending: false,
     ...changes,
   };
 }
@@ -125,6 +128,9 @@ describe('Anisha A2b Core-purpose consent transport', () => {
       vendorId,
       decision: 'GRANTED',
       observedAt: timestamp,
+      consentRevision: 4,
+      consentUpdatedAt: timestamp,
+      erasurePending: false,
     });
     expect(httpPost).toHaveBeenCalledOnce();
   });
@@ -192,6 +198,9 @@ function sandboxLifecycle(decision: 'GRANTED' | 'DENIED' | 'UNKNOWN' = 'GRANTED'
       vendorId,
       decision,
       observedAt: timestamp,
+      consentRevision: 4,
+      consentUpdatedAt: timestamp,
+      erasurePending: false,
     })),
   };
   const life = createAnishaVendorMemoryLifecycle({

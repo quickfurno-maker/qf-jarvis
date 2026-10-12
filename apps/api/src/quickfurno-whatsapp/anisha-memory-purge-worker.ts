@@ -15,6 +15,8 @@ export interface AnishaMemoryPurgeWorker {
 export function createAnishaMemoryPurgeWorker(input: {
   readonly core: AnishaMemoryPurgeCore;
   readonly erase: (task: AnishaMemoryPurgeTask) => Promise<{ readonly deletedCount: number }>;
+  /** Existing governed memory TTL sweep; independent of Core availability. */
+  readonly purgeExpired?: () => Promise<unknown>;
   readonly cadenceMs?: number;
 }): AnishaMemoryPurgeWorker {
   const cadence = input.cadenceMs ?? 30_000;
@@ -27,6 +29,9 @@ export function createAnishaMemoryPurgeWorker(input: {
       if (running) throw new TypeError('anisha-memory-purge-cycle-overlap');
       running = true;
       try {
+        // Routine preference expiry cleanup runs even if Core is offline.
+        // Existing bounded Postgres sweeper physically deletes expired rows.
+        if (input.purgeExpired) await input.purgeExpired().catch(() => undefined);
         const tasks = await input.core.claim(5);
         let deleted = 0;
         let acknowledged = 0;

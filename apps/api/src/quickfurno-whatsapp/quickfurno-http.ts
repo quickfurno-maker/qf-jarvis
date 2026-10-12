@@ -2687,8 +2687,11 @@ export function createQuickFurnoAnishaMemoryConsentReader(
           'source',
           'decision',
           'observedAt',
+          'consentRevision',
+          'consentUpdatedAt',
+          'erasurePending',
         ]) ||
-        Object.keys(parsed).length !== 9 ||
+        Object.keys(parsed).length !== 12 ||
         parsed['protocol'] !== protocol ||
         parsed['version'] !== 1 ||
         parsed['requestId'] !== requestId ||
@@ -2699,7 +2702,20 @@ export function createQuickFurnoAnishaMemoryConsentReader(
         !['GRANTED', 'DENIED', 'UNKNOWN'].includes(String(parsed['decision'])) ||
         typeof parsed['observedAt'] !== 'string' ||
         !INSTANT.test(parsed['observedAt']) ||
-        !Number.isFinite(Date.parse(parsed['observedAt']))
+        !Number.isFinite(Date.parse(parsed['observedAt'])) ||
+        !Number.isSafeInteger(parsed['consentRevision']) ||
+        (parsed['consentRevision'] as number) < 0 ||
+        !(
+          parsed['consentUpdatedAt'] === null ||
+          (typeof parsed['consentUpdatedAt'] === 'string' &&
+            INSTANT.test(parsed['consentUpdatedAt']) &&
+            Number.isFinite(Date.parse(parsed['consentUpdatedAt'])))
+        ) ||
+        typeof parsed['erasurePending'] !== 'boolean' ||
+        (parsed['decision'] === 'GRANTED' &&
+          (parsed['erasurePending'] === true ||
+            (parsed['consentRevision'] as number) < 1 ||
+            parsed['consentUpdatedAt'] === null))
       ) {
         throw new QuickFurnoWhatsAppHttpError('response-invalid');
       }
@@ -2708,6 +2724,9 @@ export function createQuickFurnoAnishaMemoryConsentReader(
         vendorId: input.vendorId,
         decision: parsed['decision'] as 'GRANTED' | 'DENIED' | 'UNKNOWN',
         observedAt: parsed['observedAt'],
+        consentRevision: parsed['consentRevision'] as number,
+        consentUpdatedAt: parsed['consentUpdatedAt'] as string | null,
+        erasurePending: parsed['erasurePending'] as boolean,
       });
     },
   });
