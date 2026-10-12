@@ -36,7 +36,7 @@
 
 ## Outstanding mandatory certification (no shortcut)
 
-- **Core purge outbox consumer and authenticated acknowledgement are not connected yet.** A pending purge task is *not* a deletion receipt. Staging activation must remain OFF until each durable task can be delivered, physically erased in Jarvis PostgreSQL and acknowledged in Core with retry/dead-letter behavior.
+- **Core purge outbox consumer and authenticated acknowledgement are not connected yet.** A pending purge task is _not_ a deletion receipt. Staging activation must remain OFF until each durable task can be delivered, physically erased in Jarvis PostgreSQL and acknowledged in Core with retry/dead-letter behavior.
 - Apply Core consent migration and existing Jarvis Postgres governed memory schema in **isolated staging only** after migration review and backups. Test actual signed Core vendor grant/revoke, reader, idempotent DB write, erasure and expiry sweeper, concurrency race, and strict no-cross-vendor disclosures.
 - Obtain approved vendor-facing privacy notices, policy revision, owner sign-off and explicit vendor grants. Consent POST route exists; vendor-facing UI/disclosure is **not yet built/certified**.
 - No production memory, WhatsApp sending, provider registration, wallet actions or payments were changed.

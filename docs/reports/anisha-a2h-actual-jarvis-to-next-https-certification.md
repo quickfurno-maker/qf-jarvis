@@ -7,6 +7,7 @@ This certifies more than the previous A2g Core-only signing test: an A2h transpo
 Source entrypoint: `apps/api/src/quickfurno-whatsapp/anisha-a2h-staging-client.ts`. The build strips TS and packages only the actual signed HTTP consent reader, leased purge client and independent physical-erasure worker, avoiding a handwritten request imitation.
 
 Recipe on an authorized developer machine (no production credentials):
+
 1. Build the one-off Jarvis ESM bundle with esbuild (`--bundle --platform=node --format=esm --target=node20`) from the current feature branch.
 2. Build the Core feature-branch image using `ops/anisha-a2g/Dockerfile.cert` and its locked npm dependencies.
 3. Run the Core image with `--network none`, no port publishing, memory/CPU limits and the generated bundle bind-mounted read-only at `/tmp/a2h-jarvis-client.mjs`. Set only `ANISHA_CERT_JARVIS_BUNDLE=/tmp/a2h-jarvis-client.mjs`.
@@ -14,6 +15,7 @@ Recipe on an authorized developer machine (no production credentials):
 5. Expected output: `ANISHA_REAL_NEXT_HTTPS_STAGE_CERT_PASS 12/12` exit 0; automatically remove container and temporary certificates.
 
 Checks:
+
 1. Real Next route over HTTPS
 2. Incorrect Core claim signature rejected
 3. Unsigned claim rejected

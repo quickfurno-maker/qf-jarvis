@@ -4,12 +4,14 @@ Certification: **2026-10-12 IST**
 Status: **isolated database and code-level certification passed, live application deployment and provider activation NOT done**.
 
 ## Exact isolated environments
+
 - Core parent: QuickFurno Staging `uckafzuochmbvtiodmcl`; temporary isolated no-data preview branch `wtbldjkqlbweikgestka`.
 - Jarvis parent: QF-Jarvis shared `coilipywdvxklewquqvv`; temporary isolated no-data preview branch `ikfasehnptqkuqpxhzqe`.
 - Both created after the tool's explicit cost confirmation, at quoted **US$0.01344 per branch-hour** (other usage charged separately). They were **deleted after certification**, verified only default main branches remain. No lingering preview branch compute by request of cost control. See Supabase usage/invoice for actual charge.
 - The two parent projects remained untouched; post-certification read-only probe confirms absence of ANISHA memory/consent schema on both parents.
 
 ## Schema, security and hosted synthetic-data results
+
 - All four reviewed Core/Jarvis migration sources applied successfully via managed migration tool, **only** to preview branches:
   - Core purpose consent + outbox `20261012080000`
   - Core lease/ACK `20261012100000`
@@ -23,6 +25,7 @@ Status: **isolated database and code-level certification passed, live applicatio
 - This is a **hosted separate-database protocol drill orchestrated by admin tools**, not proof that deployed application HTTP routes performed the whole flow.
 
 ## Build / regression certification
+
 - Added standalone, no-secrets GitHub workflows restricted to the two feature branches. Both remote workflow runs completed **SUCCESS**:
   - Jarvis: https://github.com/quickfurno-maker/qf-jarvis/actions/runs/38218300519
   - Core: https://github.com/quickfurno-maker/quickfurno-marketplace/actions/runs/38218308140
@@ -31,6 +34,7 @@ Status: **isolated database and code-level certification passed, live applicatio
 - Existing A1 identity, Core signing, human takeover, no provider sends, max-three assignments and Riya/Aarohi role boundaries retained.
 
 ## Still requires controlled external approval/deployment
+
 1. **Approved vendor privacy notice and owner sign-off.** UI copy is prepared but is a draft. Marketing/WhatsApp opt-in is not derived-memory consent.
 2. **Actual isolated deployed Next.js Core + Jarvis worker service-to-service signed HTTPS** certification with agreed stage hosts, secret references, network policies and provider-send disabled; localhost crypto and database drills do not substitute.
 3. Stacked PR merge/release management: Core #182→#183, Jarvis #319→#320→#321→#322, exact CI rebuild, human security review and rollback record. Do not auto-merge drafts into main.
