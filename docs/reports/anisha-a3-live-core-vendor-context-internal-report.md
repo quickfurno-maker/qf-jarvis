@@ -33,7 +33,7 @@ Jarvis uses existing `quickfurno-http.ts` signed Post transport, the existing Wh
 
 ## What is NOT verified or enabled
 
-- **No production/staging runtime binding** was added. `anishaCoreContextReader` is an optional specialist dependency and real production worker composition still does not pass it. This preserves existing behavior until a signed staging integration is certified and owner authorizes activation.
+- **Production-safe staging binding added but DISABLED by default.** The worker configuration supports a DISABLED / STAGING_ONLY switch; the default is DISABLED. An isolated staging worker can explicitly opt in for certification. STAGING_ONLY in local or production config is rejected. No deployed configuration was changed and there is no production activation path.
 - Actual Core staging endpoint response with a provisioned vendor, separate Jarvis worker deployment, rollout/feature flags, latency, real model grounding and real Meta delivery/receipt **remain unverified**.
 - The existing hybrid knowledge infrastructure may help general policy answers, but a versioned, vendor-approved price/package knowledge source and stale-content invalidation require further A3 rollout work. Do not infer current prices from this snapshot.
 - Governed long-term Anisha memory remains OFF pending Core vendor consent, owner retention/erasure policies and staging drills (A2). This A3 connection does not require durable memory.

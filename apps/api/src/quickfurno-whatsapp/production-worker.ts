@@ -74,6 +74,7 @@ import {
   createQuickFurnoAarohiProjectionWriter,
   createQuickFurnoWhatsAppAuthorityReader,
   createQuickFurnoWhatsAppConversationContextReader,
+  createQuickFurnoAnishaCoreVendorContextReader,
   createQuickFurnoWhatsAppMaterialReader,
   createQuickFurnoWhatsAppReplyWriter,
 } from './quickfurno-http.js';
@@ -577,6 +578,10 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       timeoutMs: config.quickfurno.timeoutMs,
     };
 
+    const anishaCoreContextReader =
+      config.anishaCoreContextMode === 'STAGING_ONLY'
+        ? createQuickFurnoAnishaCoreVendorContextReader(httpConfig)
+        : undefined;
     const aosShadowConfig = config.aosShadow.mode === 'SHADOW' ? config.aosShadow : undefined;
     const aosRuntime =
       aosShadowConfig === undefined
@@ -784,6 +789,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       const genericSpecialist = createQuickFurnoWhatsAppSpecialistRuntime({
         runtimeId: config.runtimeId,
         jarvisRuntime: genericRuntime,
+        ...(anishaCoreContextReader === undefined ? {} : { anishaCoreContextReader }),
       });
       const riyaSpecialist = createQuickFurnoWhatsAppSpecialistRuntime({
         runtimeId: config.runtimeId,

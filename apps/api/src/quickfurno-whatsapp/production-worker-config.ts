@@ -209,6 +209,8 @@ const schema = z
     revision: z.string().regex(SHA40),
     deploymentMode: z.enum(['SINGLE_OWNER', 'MULTI_REPLICA']),
     agentLanes: agentLanesSchema,
+    // AN-A3: staged Core vendor facts are never production-enabled by default.
+    anishaCoreContextMode: z.enum(['DISABLED', 'STAGING_ONLY']).default('DISABLED'),
     sealFile: absolutePath.optional(),
     groqCredentialReference: z.string().regex(REF).optional(),
     groqCredentialFile: absolutePath.optional(),
@@ -256,6 +258,13 @@ const schema = z
   })
   .strict()
   .superRefine((value, ctx) => {
+    if (value.anishaCoreContextMode === 'STAGING_ONLY' && value.environment !== 'staging') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['anishaCoreContextMode'],
+        message: 'Anisha Core vendor-context read requires isolated staging certification',
+      });
+    }
     try {
       const url = new URL(value.quickfurno.baseUrl);
       const loopback = ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(url.hostname);
@@ -372,6 +381,7 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
   readonly revision: string;
   readonly deploymentMode: 'SINGLE_OWNER' | 'MULTI_REPLICA';
   readonly agentLanes: readonly ('RIYA' | 'ANISHA' | 'AAROHI')[];
+  readonly anishaCoreContextMode: 'DISABLED' | 'STAGING_ONLY';
   readonly modelProvider:
     | Readonly<{
         mode: 'GROQ_ONLY';
@@ -658,6 +668,7 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
     revision: input.revision,
     deploymentMode: input.deploymentMode,
     agentLanes: Object.freeze([...input.agentLanes]),
+    anishaCoreContextMode: input.anishaCoreContextMode,
     modelProvider,
     ...(database === undefined ? {} : { database }),
     quickfurno: Object.freeze({
