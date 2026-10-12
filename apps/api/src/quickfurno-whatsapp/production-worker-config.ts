@@ -209,6 +209,22 @@ const schema = z
     revision: z.string().regex(SHA40),
     deploymentMode: z.enum(['SINGLE_OWNER', 'MULTI_REPLICA']),
     agentLanes: agentLanesSchema,
+    // AN-A3: staged Core vendor facts are never production-enabled by default.
+    anishaCoreContextMode: z.enum(['DISABLED', 'STAGING_ONLY']).default('DISABLED'),
+    // Delete processing can run even when preference reads are OFF.
+    anishaMemoryPurgeMode: z.enum(['DISABLED', 'STAGING_ONLY']).default('DISABLED'),
+    anishaMemory: z
+      .union([
+        z.object({ mode: z.literal('DISABLED') }).strict(),
+        z
+          .object({
+            mode: z.literal('STAGING_ONLY'),
+            ownerApprovalRef: z.string().regex(REF),
+          })
+          .strict(),
+      ])
+      .default({ mode: 'DISABLED' }),
+
     sealFile: absolutePath.optional(),
     groqCredentialReference: z.string().regex(REF).optional(),
     groqCredentialFile: absolutePath.optional(),
@@ -256,6 +272,48 @@ const schema = z
   })
   .strict()
   .superRefine((value, ctx) => {
+    if (
+      value.anishaMemoryPurgeMode === 'STAGING_ONLY' &&
+      (value.environment !== 'staging' ||
+        value.turnStore?.mode !== 'POSTGRES' ||
+        value.database === undefined)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['anishaMemoryPurgeMode'],
+        message: 'Memory erasure worker requires staging and PostgreSQL',
+      });
+    }
+    if (value.anishaMemory.mode === 'STAGING_ONLY') {
+      // Never retain newly written memory while the physical erasure and TTL
+      // worker has been disabled. Purge may operate alone; reads/writes may not.
+      if (value.anishaMemoryPurgeMode !== 'STAGING_ONLY') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['anishaMemoryPurgeMode'],
+          message: 'Enabled Anisha memory requires active stage erasure and TTL worker',
+        });
+      }
+      if (
+        value.environment !== 'staging' ||
+        value.turnStore?.mode !== 'POSTGRES' ||
+        value.database === undefined
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['anishaMemory'],
+          message:
+            'Anisha long-term memory requires isolated staging + a configured Postgres store',
+        });
+      }
+    }
+    if (value.anishaCoreContextMode === 'STAGING_ONLY' && value.environment !== 'staging') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['anishaCoreContextMode'],
+        message: 'Anisha Core vendor-context read requires isolated staging certification',
+      });
+    }
     try {
       const url = new URL(value.quickfurno.baseUrl);
       const loopback = ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(url.hostname);
@@ -372,6 +430,11 @@ export interface QuickFurnoWhatsAppProductionWorkerConfig {
   readonly revision: string;
   readonly deploymentMode: 'SINGLE_OWNER' | 'MULTI_REPLICA';
   readonly agentLanes: readonly ('RIYA' | 'ANISHA' | 'AAROHI')[];
+  readonly anishaCoreContextMode: 'DISABLED' | 'STAGING_ONLY';
+  readonly anishaMemoryPurgeMode: 'DISABLED' | 'STAGING_ONLY';
+  readonly anishaMemory:
+    Readonly<{ mode: 'DISABLED' }> | Readonly<{ mode: 'STAGING_ONLY'; ownerApprovalRef: string }>;
+
   readonly modelProvider:
     | Readonly<{
         mode: 'GROQ_ONLY';
@@ -658,6 +721,10 @@ export function loadQuickFurnoWhatsAppProductionWorkerConfig(
     revision: input.revision,
     deploymentMode: input.deploymentMode,
     agentLanes: Object.freeze([...input.agentLanes]),
+    anishaCoreContextMode: input.anishaCoreContextMode,
+    anishaMemoryPurgeMode: input.anishaMemoryPurgeMode,
+    anishaMemory: input.anishaMemory,
+
     modelProvider,
     ...(database === undefined ? {} : { database }),
     quickfurno: Object.freeze({

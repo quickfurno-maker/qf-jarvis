@@ -286,7 +286,7 @@ describe('QuickFurno WhatsApp specialist runtime', () => {
   it('routes a verified vendor through Anisha with a canonical VENDOR envelope', async () => {
     const r = runtime();
     const reply = await r.service.process(
-      material({ assignedActor: 'ANISHA', subjectType: 'vendor' }),
+      material({ assignedActor: 'ANISHA', subjectType: 'vendor', partyType: 'VENDOR' }),
     );
     expect(reply).toMatchObject({
       actor: 'ANISHA',

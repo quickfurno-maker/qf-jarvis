@@ -19,6 +19,18 @@ import type {
 } from './contracts.js';
 import type { ServiceBlueprintRegistry } from '@qf-jarvis/client-intelligence';
 import { buildWhatsAppClientIntelligence } from './client-intelligence-adapter.js';
+import {
+  composeAnishaCoreVendorFacts,
+  needsAnishaCoreVendorContext,
+  type AnishaCoreVendorContextReader,
+} from './anisha-core-context.js';
+import { assessAnishaWhatsAppPreflight } from './anisha-vendor-preflight.js';
+import { parseExplicitAnishaPreference } from './anisha-explicit-preference.js';
+import type { AnishaVendorMemoryLifecycle } from './anisha-memory-lifecycle.js';
+import {
+  composeAnishaVendorMemoryHint,
+  type AnishaVendorMemoryReader,
+} from './anisha-vendor-memory.js';
 
 export interface QuickFurnoWhatsAppSpecialistObservation {
   readonly kind: 'MODEL_ROUTE_SELECTED';
@@ -48,6 +60,16 @@ export interface QuickFurnoWhatsAppSpecialistRuntimeConfig {
   readonly jarvisRuntime: WhatsAppJarvisRuntime;
   /** Optional CI-05 registry. Absence preserves the current no-opportunity production behavior. */
   readonly serviceBlueprintRegistry?: ServiceBlueprintRegistry;
+  /**
+   * AN-A2 optional, owner-governed derived vendor preference reader.
+   * No binding is supplied by production, so durable reads remain OFF.
+   * The reader must be subject-scoped and backed by the existing governed store.
+   */
+  readonly anishaMemoryReader?: AnishaVendorMemoryReader;
+  /** Optional staging-only allowlisted explicit vendor preference writer. */
+  readonly anishaPreferenceRecorder?: Pick<AnishaVendorMemoryLifecycle, 'recordExplicitPreference'>;
+  /** AN-A3 optional signed Core vendor facts reader (unbound in production). */
+  readonly anishaCoreContextReader?: AnishaCoreVendorContextReader;
 }
 
 function isQualificationMaterial(
@@ -330,9 +352,49 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         }
       }
 
+      // Anisha must never spend a model token on an unidentified, paused, erased,
+      // cross-role or Core-disabled vendor. No fallback to Riya/Aarohi is permitted.
+      // Core identity resolution and the later authoritative runtime gate remain
+      // mandatory; this early check is not a replacement for either.
+      if (
+        material.assignedActor === 'ANISHA' &&
+        assessAnishaWhatsAppPreflight(material) !== 'ANISHA_TURN_READY'
+      )
+        return null;
+
       if (expectedSubjectByActor[material.assignedActor] !== material.subjectType) return null;
       if (material.dataClass !== 'HOSTED_ALLOWED' || material.normalizedText === undefined)
         return null;
+
+      const recentConversationInput =
+        material.assignedActor === 'RIYA' && material.clientJourney !== undefined
+          ? material.normalizedText
+          : conversationContext === undefined
+            ? material.normalizedText
+            : composeConversationAwareInput({
+                currentText: material.normalizedText,
+                summary: conversationContext,
+              });
+      let modelInput = recentConversationInput;
+      if (material.assignedActor === 'ANISHA' && config.anishaMemoryReader !== undefined) {
+        // Only a role-correct Core-identified vendor can reach this branch.
+        // An optional read failure must never turn into a model retry or a
+        // second source of business truth; use no memory on uncertainty.
+        const memory = await config.anishaMemoryReader
+          .readForTurn(material)
+          .catch(() => ({ status: 'unavailable' as const }));
+        modelInput = composeAnishaVendorMemoryHint(modelInput, memory);
+      }
+      if (
+        material.assignedActor === 'ANISHA' &&
+        config.anishaCoreContextReader !== undefined &&
+        needsAnishaCoreVendorContext(material.normalizedText)
+      ) {
+        // This reads a fresh Core-projected band/count, not historic memory,
+        // wallet truth or a second data store. Unknown response -> no claims.
+        const core = await config.anishaCoreContextReader.readForTurn(material).catch(() => null);
+        modelInput = composeAnishaCoreVendorFacts(modelInput, core);
+      }
 
       const envelope = createInboundEnvelope({
         runtimeId: config.runtimeId,
@@ -351,15 +413,7 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         providerMessageRef: `qf.inbound:${material.inboundMessageId}`,
         dataClass: material.dataClass,
         ...(material.subjectRef === undefined ? {} : { subjectRef: material.subjectRef }),
-        normalizedText:
-          material.assignedActor === 'RIYA' && material.clientJourney !== undefined
-            ? material.normalizedText
-            : conversationContext === undefined
-              ? material.normalizedText
-              : composeConversationAwareInput({
-                  currentText: material.normalizedText,
-                  summary: conversationContext,
-                }),
+        normalizedText: modelInput,
       });
 
       if (
@@ -407,7 +461,23 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         'WHATSAPP',
         {},
       );
-      return conversationProposal(material, result.proposedReply);
+      const proposal = conversationProposal(material, result.proposedReply);
+      if (
+        material.assignedActor === 'ANISHA' &&
+        proposal !== null &&
+        config.anishaPreferenceRecorder !== undefined
+      ) {
+        const preference = parseExplicitAnishaPreference(material.normalizedText);
+        if (preference) {
+          // A best-effort separate derived-personal-memory write. Core purpose
+          // consent is rechecked by the lifecycle, which uses a deterministic
+          // source-event ID and a 30-day expiry. Never block a reply for memory.
+          await config.anishaPreferenceRecorder
+            .recordExplicitPreference(material, preference)
+            .catch(() => 'unavailable');
+        }
+      }
+      return proposal;
     },
   });
 }

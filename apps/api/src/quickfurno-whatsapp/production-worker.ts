@@ -52,6 +52,15 @@ import { createPromptRegistry } from '@qf-jarvis/prompt-registry';
 import { createFileDurableTurnSpool } from '@qf-jarvis/quickfurno-gateway/durable-turn-spool';
 import { createPostgresDurableTurnSpool } from '@qf-jarvis/quickfurno-gateway/postgres-durable-turn-spool';
 import { createInMemoryPublicKnowledgeSemanticCache } from '@qf-jarvis/semantic-context-engine';
+import { createGovernedMemoryRuntime } from '@qf-jarvis/governed-memory-foundation';
+import {
+  createPostgresGovernedMemoryStore,
+  eraseAnishaVendorMemoryWithFence,
+  purgeExpiredGovernedMemory,
+} from '@qf-jarvis/postgres-governed-memory-store';
+import { createAnishaMemoryPurgeWorker } from './anisha-memory-purge-worker.js';
+import { createAnishaVendorMemoryReader } from './anisha-vendor-memory.js';
+import { createAnishaVendorMemoryLifecycle } from './anisha-memory-lifecycle.js';
 import { createJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
 import {
   RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1,
@@ -74,6 +83,9 @@ import {
   createQuickFurnoAarohiProjectionWriter,
   createQuickFurnoWhatsAppAuthorityReader,
   createQuickFurnoWhatsAppConversationContextReader,
+  createQuickFurnoAnishaCoreVendorContextReader,
+  createQuickFurnoAnishaMemoryConsentReader,
+  createQuickFurnoAnishaMemoryPurgeCore,
   createQuickFurnoWhatsAppMaterialReader,
   createQuickFurnoWhatsAppReplyWriter,
 } from './quickfurno-http.js';
@@ -577,6 +589,62 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       timeoutMs: config.quickfurno.timeoutMs,
     };
 
+    const anishaCoreContextReader =
+      config.anishaCoreContextMode === 'STAGING_ONLY'
+        ? createQuickFurnoAnishaCoreVendorContextReader(httpConfig)
+        : undefined;
+    const anishaPurgeWorker =
+      config.anishaMemoryPurgeMode === 'STAGING_ONLY'
+        ? (() => {
+            if (pool === undefined) throw new Error('anisha-memory-purge-postgres-required');
+            return createAnishaMemoryPurgeWorker({
+              core: createQuickFurnoAnishaMemoryPurgeCore(httpConfig),
+              erase: (task) => eraseAnishaVendorMemoryWithFence(pool, task),
+              wait: sleepUntilAosCycle,
+              purgeExpired: () =>
+                purgeExpiredGovernedMemory(pool, {
+                  asOf: new Date().toISOString(),
+                  limit: 100,
+                }),
+            });
+          })()
+        : undefined;
+    const anishaMemoryComponents =
+      config.anishaMemory.mode === 'STAGING_ONLY'
+        ? (() => {
+            if (pool === undefined) throw new Error('anisha-memory-postgres-required');
+            const governed = createGovernedMemoryRuntime({
+              policy: {
+                policyRef: 'anisha.vendor.memory.staging.v1',
+                durableMemoryEnabled: true,
+                ownerApprovalRef: config.anishaMemory.ownerApprovalRef,
+                retentionPolicyRef: 'anisha.preference.30day.staging.v1',
+                erasurePolicyRef: 'anisha.core.revocation.purge.staging.v1',
+                maxDurableRetentionDays: 30,
+              },
+              store: createPostgresGovernedMemoryStore(pool),
+            });
+            const consent = createQuickFurnoAnishaMemoryConsentReader(httpConfig);
+            return {
+              reader: createAnishaVendorMemoryReader({
+                policy: {
+                  enabled: true,
+                  ownerApprovalRef: config.anishaMemory.ownerApprovalRef,
+                  maxRecordAgeDays: 30,
+                },
+                memory: governed,
+                consent,
+              }),
+              preferenceRecorder: createAnishaVendorMemoryLifecycle({
+                mode: 'STAGING_ONLY',
+                environment: 'staging',
+                ownerApprovalRef: config.anishaMemory.ownerApprovalRef,
+                memory: governed,
+                consent,
+              }),
+            };
+          })()
+        : undefined;
     const aosShadowConfig = config.aosShadow.mode === 'SHADOW' ? config.aosShadow : undefined;
     const aosRuntime =
       aosShadowConfig === undefined
@@ -784,6 +852,13 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       const genericSpecialist = createQuickFurnoWhatsAppSpecialistRuntime({
         runtimeId: config.runtimeId,
         jarvisRuntime: genericRuntime,
+        ...(anishaCoreContextReader === undefined ? {} : { anishaCoreContextReader }),
+        ...(anishaMemoryComponents === undefined
+          ? {}
+          : {
+              anishaMemoryReader: anishaMemoryComponents.reader,
+              anishaPreferenceRecorder: anishaMemoryComponents.preferenceRecorder,
+            }),
       });
       const riyaSpecialist = createQuickFurnoWhatsAppSpecialistRuntime({
         runtimeId: config.runtimeId,
@@ -993,6 +1068,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         await Promise.all([
           scheduler.run(signal),
           aosRuntime === undefined ? Promise.resolve() : aosRuntime.run(signal),
+          anishaPurgeWorker === undefined ? Promise.resolve() : anishaPurgeWorker.run(signal),
         ]);
       },
       async close(): Promise<void> {

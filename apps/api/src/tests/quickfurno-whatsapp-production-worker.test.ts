@@ -117,6 +117,100 @@ function validConfig(root: string) {
 }
 
 describe('QuickFurno WhatsApp production worker configuration', () => {
+  it('allows erasure independently of memory reads only in isolated Postgres staging', () => {
+    const root = tempRoot();
+    const file = join(root, 'purge-staging.json');
+    const base = { ...validConfig(root), spoolDirectory: undefined };
+    writeFileSync(
+      file,
+      JSON.stringify({
+        ...base,
+        environment: 'staging',
+        turnStore: { mode: 'POSTGRES' },
+        anishaMemoryPurgeMode: 'STAGING_ONLY',
+        anishaMemory: { mode: 'DISABLED' },
+      }),
+    );
+    expect(loadQuickFurnoWhatsAppProductionWorkerConfig(file).anishaMemoryPurgeMode).toBe(
+      'STAGING_ONLY',
+    );
+    for (const bad of [
+      { environment: 'production', turnStore: { mode: 'POSTGRES' } },
+      { environment: 'local', turnStore: { mode: 'POSTGRES' } },
+      { environment: 'staging', turnStore: { mode: 'FILE', directory: join(root, 'spool') } },
+    ]) {
+      writeFileSync(
+        file,
+        JSON.stringify({
+          ...base,
+          ...bad,
+          anishaMemoryPurgeMode: 'STAGING_ONLY',
+        }),
+      );
+      expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(file)).toThrow();
+    }
+  });
+
+  it('staging A2b memory requires explicit owner approval and Postgres, never production', () => {
+    const root = tempRoot();
+    const file = join(root, 'memory-staging.json');
+    const base = { ...validConfig(root), spoolDirectory: undefined };
+    const memory = { mode: 'STAGING_ONLY', ownerApprovalRef: 'owner.anisha.20261012' };
+    const postgres = { mode: 'POSTGRES' };
+    writeFileSync(
+      file,
+      JSON.stringify({
+        ...base,
+        environment: 'staging',
+        turnStore: postgres,
+        anishaMemory: memory,
+        anishaMemoryPurgeMode: 'STAGING_ONLY',
+      }),
+    );
+    expect(loadQuickFurnoWhatsAppProductionWorkerConfig(file).anishaMemory).toEqual(memory);
+    for (const bad of [
+      { environment: 'production', turnStore: postgres, anishaMemory: memory },
+      { environment: 'local', turnStore: postgres, anishaMemory: memory },
+      {
+        environment: 'staging',
+        turnStore: { mode: 'FILE', directory: join(root, 'spool') },
+        anishaMemory: memory,
+      },
+      { environment: 'staging', turnStore: postgres, anishaMemory: { mode: 'STAGING_ONLY' } },
+    ]) {
+      writeFileSync(file, JSON.stringify({ ...base, ...bad }));
+      expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(file)).toThrow();
+    }
+  });
+
+  it('allows A3 Core vendor facts in staging only, never production or local', () => {
+    const root = tempRoot();
+    const configPath = join(root, 'vendor-staging.json');
+    const base = validConfig(root);
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        ...base,
+        environment: 'staging',
+        anishaCoreContextMode: 'STAGING_ONLY',
+      }),
+    );
+    expect(loadQuickFurnoWhatsAppProductionWorkerConfig(configPath).anishaCoreContextMode).toBe(
+      'STAGING_ONLY',
+    );
+    for (const environment of ['production', 'local'] as const) {
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          ...base,
+          environment,
+          anishaCoreContextMode: 'STAGING_ONLY',
+        }),
+      );
+      expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(configPath)).toThrow();
+    }
+  });
+
   it('loads only an absolute bounded config and validates database policy', () => {
     const root = tempRoot();
     const path = join(root, 'worker.json');
@@ -143,6 +237,9 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
       credentialReference: 'groq.qfj.production.v1',
     });
     expect(config.aosShadow).toEqual({ mode: 'DISABLED' });
+    expect(config.anishaCoreContextMode).toBe('DISABLED');
+    expect(config.anishaMemory).toEqual({ mode: 'DISABLED' });
+    expect(config.anishaMemoryPurgeMode).toBe('DISABLED');
   });
 
   it('enables only the canonical bounded AOS SHADOW deployment posture', () => {
