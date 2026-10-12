@@ -60,6 +60,7 @@ import {
 } from '@qf-jarvis/postgres-governed-memory-store';
 import { createAnishaMemoryPurgeWorker } from './anisha-memory-purge-worker.js';
 import { createAnishaVendorMemoryReader } from './anisha-vendor-memory.js';
+import { createAnishaVendorMemoryLifecycle } from './anisha-memory-lifecycle.js';
 import { createJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
 import {
   RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1,
@@ -607,7 +608,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
             });
           })()
         : undefined;
-    const anishaMemoryReader =
+    const anishaMemoryComponents =
       config.anishaMemory.mode === 'STAGING_ONLY'
         ? (() => {
             if (pool === undefined) throw new Error('anisha-memory-postgres-required');
@@ -622,15 +623,25 @@ export async function createQuickFurnoWhatsAppProductionWorker(
               },
               store: createPostgresGovernedMemoryStore(pool),
             });
-            return createAnishaVendorMemoryReader({
-              policy: {
-                enabled: true,
+            const consent = createQuickFurnoAnishaMemoryConsentReader(httpConfig);
+            return {
+              reader: createAnishaVendorMemoryReader({
+                policy: {
+                  enabled: true,
+                  ownerApprovalRef: config.anishaMemory.ownerApprovalRef,
+                  maxRecordAgeDays: 30,
+                },
+                memory: governed,
+                consent,
+              }),
+              preferenceRecorder: createAnishaVendorMemoryLifecycle({
+                mode: 'STAGING_ONLY',
+                environment: 'staging',
                 ownerApprovalRef: config.anishaMemory.ownerApprovalRef,
-                maxRecordAgeDays: 30,
-              },
-              memory: governed,
-              consent: createQuickFurnoAnishaMemoryConsentReader(httpConfig),
-            });
+                memory: governed,
+                consent,
+              }),
+            };
           })()
         : undefined;
     const aosShadowConfig = config.aosShadow.mode === 'SHADOW' ? config.aosShadow : undefined;
@@ -841,7 +852,12 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         runtimeId: config.runtimeId,
         jarvisRuntime: genericRuntime,
         ...(anishaCoreContextReader === undefined ? {} : { anishaCoreContextReader }),
-        ...(anishaMemoryReader === undefined ? {} : { anishaMemoryReader }),
+        ...(anishaMemoryComponents === undefined
+          ? {}
+          : {
+              anishaMemoryReader: anishaMemoryComponents.reader,
+              anishaPreferenceRecorder: anishaMemoryComponents.preferenceRecorder,
+            }),
       });
       const riyaSpecialist = createQuickFurnoWhatsAppSpecialistRuntime({
         runtimeId: config.runtimeId,

@@ -1,0 +1,87 @@
+name: Anisha Memory Stacked Branch CI
+
+on:
+  push:
+    branches:
+      - feat/anisha-a2b-memory-consent
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anisha-memory-jarvis-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  memory-cert:
+    name: Anisha memory cert
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg17-trixie@sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6
+        env:
+          POSTGRES_DB: anisha_memory_cert
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: anisha_ci_only
+        ports:
+          - 55439:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d anisha_memory_cert"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGPASSWORD: anisha_ci_only
+      ANISHA_MEMORY_CERT_DATABASE_URL: postgresql://postgres:anisha_ci_only@127.0.0.1:55439/anisha_memory_cert
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build exact workspace packages
+        run: pnpm build
+      - name: Create disposable local schema
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 55439 -U postgres -d anisha_memory_cert -f packages/postgres-governed-memory-store/src/migrations/0001_governed_agent_memory.sql
+          psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 55439 -U postgres -d anisha_memory_cert -f packages/postgres-governed-memory-store/src/migrations/0002_anisha_erasure_fence.sql
+      - name: Anisha memory and existing WA regression with real disposable Postgres
+        run: |
+          pnpm exec vitest run \
+            apps/api/src/tests/anisha-explicit-preference.test.ts \
+            apps/api/src/tests/anisha-memory-reenrollment.test.ts \
+            apps/api/src/tests/anisha-memory-http-loopback-cert.test.ts \
+            apps/api/src/tests/anisha-memory-consent-lifecycle.test.ts \
+            apps/api/src/tests/anisha-memory-purge.test.ts \
+            apps/api/src/tests/anisha-vendor-memory.test.ts \
+            apps/api/src/tests/anisha-vendor-preflight.test.ts \
+            apps/api/src/tests/anisha-core-context.test.ts \
+            apps/api/src/tests/quickfurno-whatsapp-production-worker.test.ts \
+            apps/api/src/tests/quickfurno-whatsapp-anisha-e2e.test.ts \
+            apps/api/src/tests/quickfurno-whatsapp-specialist-runtime.test.ts \
+            apps/api/src/tests/quickfurno-whatsapp-turn-processor.test.ts \
+            packages/governed-memory-foundation/src/tests/governed-memory.test.ts \
+            packages/postgres-governed-memory-store/src/tests/store.test.ts \
+            packages/postgres-governed-memory-store/src/tests/anisha-live-postgres-cert.test.ts
+      - name: Exact package and API typechecks
+        run: |
+          pnpm exec tsc --noEmit -p packages/postgres-governed-memory-store/tsconfig.json --pretty false
+          pnpm exec tsc --noEmit -p apps/api/tsconfig.json --pretty false
+      - name: Check staged memory source formatting
+        run: |
+          pnpm exec prettier --check \
+            apps/api/src/quickfurno-whatsapp/anisha-explicit-preference.ts \
+            apps/api/src/quickfurno-whatsapp/anisha-memory-lifecycle.ts \
+            apps/api/src/quickfurno-whatsapp/anisha-memory-reenrollment.ts \
+            apps/api/src/quickfurno-whatsapp/anisha-memory-purge-worker.ts \
+            apps/api/src/quickfurno-whatsapp/anisha-vendor-memory.ts \
+            apps/api/src/tests/anisha-explicit-preference.test.ts \
+            apps/api/src/tests/anisha-memory-reenrollment.test.ts

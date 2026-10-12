@@ -25,6 +25,8 @@ import {
   type AnishaCoreVendorContextReader,
 } from './anisha-core-context.js';
 import { assessAnishaWhatsAppPreflight } from './anisha-vendor-preflight.js';
+import { parseExplicitAnishaPreference } from './anisha-explicit-preference.js';
+import type { AnishaVendorMemoryLifecycle } from './anisha-memory-lifecycle.js';
 import {
   composeAnishaVendorMemoryHint,
   type AnishaVendorMemoryReader,
@@ -64,6 +66,8 @@ export interface QuickFurnoWhatsAppSpecialistRuntimeConfig {
    * The reader must be subject-scoped and backed by the existing governed store.
    */
   readonly anishaMemoryReader?: AnishaVendorMemoryReader;
+  /** Optional staging-only allowlisted explicit vendor preference writer. */
+  readonly anishaPreferenceRecorder?: Pick<AnishaVendorMemoryLifecycle, 'recordExplicitPreference'>;
   /** AN-A3 optional signed Core vendor facts reader (unbound in production). */
   readonly anishaCoreContextReader?: AnishaCoreVendorContextReader;
 }
@@ -457,7 +461,23 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         'WHATSAPP',
         {},
       );
-      return conversationProposal(material, result.proposedReply);
+      const proposal = conversationProposal(material, result.proposedReply);
+      if (
+        material.assignedActor === 'ANISHA' &&
+        proposal !== null &&
+        config.anishaPreferenceRecorder !== undefined
+      ) {
+        const preference = parseExplicitAnishaPreference(material.normalizedText);
+        if (preference) {
+          // A best-effort separate derived-personal-memory write. Core purpose
+          // consent is rechecked by the lifecycle, which uses a deterministic
+          // source-event ID and a 30-day expiry. Never block a reply for memory.
+          await config.anishaPreferenceRecorder
+            .recordExplicitPreference(material, preference)
+            .catch(() => 'unavailable');
+        }
+      }
+      return proposal;
     },
   });
 }
