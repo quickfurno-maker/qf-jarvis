@@ -89,12 +89,13 @@ testSuite('AN-A2c actual isolated PostgreSQL 17 physical deletion certification'
       connect: async () => {
         const client = await pool.connect();
         return {
-          query: async (...args: Parameters<typeof client.query>) => {
-            if (String(args[0]).startsWith('DELETE '))
-              throw new Error('injected-db-delete-failure');
-            return client.query(...args);
+          query: async (sql: string, params?: unknown[]) => {
+            if (sql.startsWith('DELETE ')) throw new Error('injected-db-delete-failure');
+            return await client.query(sql, params);
           },
-          release: () => client.release(),
+          release: () => {
+            client.release();
+          },
         };
       },
     } as unknown as Pool;

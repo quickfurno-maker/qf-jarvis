@@ -125,21 +125,27 @@ describe('transactional Anisha erasure + replay write fence', () => {
   const purgeId = '11111111-1111-4111-8111-111111111111';
   function fakePool(query: ReturnType<typeof vi.fn>) {
     const release = vi.fn();
+    const connect = vi.fn(async () => {
+      await Promise.resolve();
+      return { query, release };
+    });
     return {
-      pool: { connect: vi.fn(async () => ({ query, release })) } as unknown as Pool,
+      pool: { connect } as unknown as Pool,
+      connect,
       release,
     };
   }
 
   it('locks subject, installs durable fence and physically deletes BEFORE COMMIT', async () => {
-    const query = vi.fn(async (sql: string, _params?: unknown[]) =>
-      sql.startsWith('DELETE ') ? { rowCount: 2 } : { rowCount: 1 },
-    );
+    const query = vi.fn(async (sql: string, _params?: unknown[]) => {
+      await Promise.resolve();
+      return sql.startsWith('DELETE ') ? { rowCount: 2 } : { rowCount: 1 };
+    });
     const { pool, release } = fakePool(query);
     await expect(eraseAnishaVendorMemoryWithFence(pool, { vendorId, purgeId })).resolves.toEqual({
       deletedCount: 2,
     });
-    expect(query.mock.calls.map((x) => String(x[0]).split(' ')[0])).toEqual([
+    expect(query.mock.calls.map((x) => x[0].split(' ')[0])).toEqual([
       'BEGIN',
       'SELECT',
       'INSERT',
@@ -155,6 +161,7 @@ describe('transactional Anisha erasure + replay write fence', () => {
 
   it('failure rolls transaction back, never claims successful erasure', async () => {
     const query = vi.fn(async (sql: string, _params?: unknown[]) => {
+      await Promise.resolve();
       if (sql.startsWith('DELETE ')) throw Error('DB failure');
       return { rowCount: 1 };
     });
@@ -162,7 +169,7 @@ describe('transactional Anisha erasure + replay write fence', () => {
     await expect(eraseAnishaVendorMemoryWithFence(pool, { vendorId, purgeId })).rejects.toThrow(
       'anisha-memory-purge-unavailable',
     );
-    expect(query.mock.calls.map((x) => String(x[0]).split(' ')[0])).toEqual([
+    expect(query.mock.calls.map((x) => x[0].split(' ')[0])).toEqual([
       'BEGIN',
       'SELECT',
       'INSERT',
@@ -173,18 +180,19 @@ describe('transactional Anisha erasure + replay write fence', () => {
   });
 
   it('refuses invalid vendor or purge UUID before opening database connection', async () => {
-    const { pool } = fakePool(vi.fn());
+    const { pool, connect } = fakePool(vi.fn());
     await expect(
       eraseAnishaVendorMemoryWithFence(pool, { vendorId: 'random', purgeId }),
     ).rejects.toThrow('anisha-memory-purge-task-invalid');
-    expect(pool.connect).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
   });
 
   it('zero rows erased is a real successful committed deletion receipt', async () => {
     const { pool } = fakePool(
-      vi.fn(async (sql: string) => ({
-        rowCount: sql.startsWith('DELETE ') ? 0 : 1,
-      })),
+      vi.fn(async (sql: string) => {
+        await Promise.resolve();
+        return { rowCount: sql.startsWith('DELETE ') ? 0 : 1 };
+      }),
     );
     await expect(eraseAnishaVendorMemoryWithFence(pool, { vendorId, purgeId })).resolves.toEqual({
       deletedCount: 0,
