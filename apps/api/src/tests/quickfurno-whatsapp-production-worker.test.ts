@@ -164,6 +164,7 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
         environment: 'staging',
         turnStore: postgres,
         anishaMemory: memory,
+        anishaMemoryPurgeMode: 'STAGING_ONLY',
       }),
     );
     expect(loadQuickFurnoWhatsAppProductionWorkerConfig(file).anishaMemory).toEqual(memory);

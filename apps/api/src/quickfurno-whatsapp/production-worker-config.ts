@@ -285,6 +285,15 @@ const schema = z
       });
     }
     if (value.anishaMemory.mode === 'STAGING_ONLY') {
+      // Never retain newly written memory while the physical erasure and TTL
+      // worker has been disabled. Purge may operate alone; reads/writes may not.
+      if (value.anishaMemoryPurgeMode !== 'STAGING_ONLY') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['anishaMemoryPurgeMode'],
+          message: 'Enabled Anisha memory requires active stage erasure and TTL worker',
+        });
+      }
       if (
         value.environment !== 'staging' ||
         value.turnStore?.mode !== 'POSTGRES' ||
