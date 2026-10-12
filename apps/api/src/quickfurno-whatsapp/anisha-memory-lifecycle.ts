@@ -27,6 +27,9 @@ export interface AnishaVendorMemoryLifecycle {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const RETENTION_DAYS = 30;
+// Signed Core authority is observed after the local turn clock is sampled.
+// Accept bounded network/clock skew, never an unbounded future-dated grant.
+const SIGNED_CORE_RESPONSE_FUTURE_SKEW_MS = 30_000;
 const MS_DAY = 86400000;
 const DESCRIPTION: Record<string, string> = Object.freeze({
   'language:en': 'Vendor prefers English communication.',
@@ -107,7 +110,7 @@ export function createAnishaVendorMemoryLifecycle(config: {
           check.vendorId !== vendorId ||
           check.decision !== 'GRANTED' ||
           !Number.isFinite(consentAt) ||
-          consentAt > now ||
+          consentAt > now + SIGNED_CORE_RESPONSE_FUTURE_SKEW_MS ||
           now - consentAt > 300000
         )
           return 'blocked';

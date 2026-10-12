@@ -48,6 +48,9 @@ export interface AnishaVendorMemoryConsentReader {
 
 const APPROVAL_REF = /^[A-Za-z0-9._:-]{1,128}$/u;
 const MAX_RECORDS = 3;
+// Signed Core authority is observed after the local turn clock is sampled.
+// Accept bounded network/clock skew, never an unbounded future-dated grant.
+const SIGNED_CORE_RESPONSE_FUTURE_SKEW_MS = 30_000;
 const MAX_SUMMARY_CHARS = 180;
 const MAX_CONTEXT_CHARS = 650;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -120,7 +123,7 @@ export function createAnishaVendorMemoryReader(
           !Object.is(consent.source, 'QUICKFURNO_CORE') ||
           consent.vendorId !== vendorId ||
           !Number.isFinite(consentTime) ||
-          consentTime > now ||
+          consentTime > now + SIGNED_CORE_RESPONSE_FUTURE_SKEW_MS ||
           now - consentTime > 5 * 60_000
         )
           return Object.freeze({ status: 'unavailable' as const });
