@@ -34,6 +34,7 @@ export interface AnishaVendorMemoryConsentReader {
     readonly tenantId: 'quickfurno';
     readonly vendorId: string;
     readonly conversationId: string;
+    readonly expectedRevision: number;
   }): Promise<{
     readonly source: 'QUICKFURNO_CORE';
     readonly vendorId: string;
@@ -109,6 +110,7 @@ export function createAnishaVendorMemoryReader(
           tenantId: 'quickfurno',
           vendorId,
           conversationId: material.conversationId,
+          expectedRevision: material.revision,
         });
         const consentTime = Date.parse(consent.observedAt);
         if (

@@ -52,6 +52,9 @@ import { createPromptRegistry } from '@qf-jarvis/prompt-registry';
 import { createFileDurableTurnSpool } from '@qf-jarvis/quickfurno-gateway/durable-turn-spool';
 import { createPostgresDurableTurnSpool } from '@qf-jarvis/quickfurno-gateway/postgres-durable-turn-spool';
 import { createInMemoryPublicKnowledgeSemanticCache } from '@qf-jarvis/semantic-context-engine';
+import { createGovernedMemoryRuntime } from '@qf-jarvis/governed-memory-foundation';
+import { createPostgresGovernedMemoryStore } from '@qf-jarvis/postgres-governed-memory-store';
+import { createAnishaVendorMemoryReader } from './anisha-vendor-memory.js';
 import { createJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
 import {
   RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1,
@@ -75,6 +78,7 @@ import {
   createQuickFurnoWhatsAppAuthorityReader,
   createQuickFurnoWhatsAppConversationContextReader,
   createQuickFurnoAnishaCoreVendorContextReader,
+  createQuickFurnoAnishaMemoryConsentReader,
   createQuickFurnoWhatsAppMaterialReader,
   createQuickFurnoWhatsAppReplyWriter,
 } from './quickfurno-http.js';
@@ -582,6 +586,32 @@ export async function createQuickFurnoWhatsAppProductionWorker(
       config.anishaCoreContextMode === 'STAGING_ONLY'
         ? createQuickFurnoAnishaCoreVendorContextReader(httpConfig)
         : undefined;
+    const anishaMemoryReader =
+      config.anishaMemory.mode === 'STAGING_ONLY'
+        ? (() => {
+            if (pool === undefined) throw new Error('anisha-memory-postgres-required');
+            const governed = createGovernedMemoryRuntime({
+              policy: {
+                policyRef: 'anisha.vendor.memory.staging.v1',
+                durableMemoryEnabled: true,
+                ownerApprovalRef: config.anishaMemory.ownerApprovalRef,
+                retentionPolicyRef: 'anisha.preference.30day.staging.v1',
+                erasurePolicyRef: 'anisha.core.revocation.purge.staging.v1',
+                maxDurableRetentionDays: 30,
+              },
+              store: createPostgresGovernedMemoryStore(pool),
+            });
+            return createAnishaVendorMemoryReader({
+              policy: {
+                enabled: true,
+                ownerApprovalRef: config.anishaMemory.ownerApprovalRef,
+                maxRecordAgeDays: 30,
+              },
+              memory: governed,
+              consent: createQuickFurnoAnishaMemoryConsentReader(httpConfig),
+            });
+          })()
+        : undefined;
     const aosShadowConfig = config.aosShadow.mode === 'SHADOW' ? config.aosShadow : undefined;
     const aosRuntime =
       aosShadowConfig === undefined
@@ -790,6 +820,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         runtimeId: config.runtimeId,
         jarvisRuntime: genericRuntime,
         ...(anishaCoreContextReader === undefined ? {} : { anishaCoreContextReader }),
+        ...(anishaMemoryReader === undefined ? {} : { anishaMemoryReader }),
       });
       const riyaSpecialist = createQuickFurnoWhatsAppSpecialistRuntime({
         runtimeId: config.runtimeId,

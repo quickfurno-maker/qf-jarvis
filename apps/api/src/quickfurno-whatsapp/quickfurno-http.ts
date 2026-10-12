@@ -2611,3 +2611,104 @@ export function createQuickFurnoAnishaCoreVendorContextReader(
     },
   });
 }
+
+// AN-A2b: same cryptographic signer/transport as the existing vendor-context
+// reader. This Core read requires its own explicit, purpose-specific consent;
+// it never uses WhatsApp/marketing consent as a substitute.
+export function createQuickFurnoAnishaMemoryConsentReader(
+  config: QuickFurnoWhatsAppHttpConfig,
+): import('./anisha-vendor-memory.js').AnishaVendorMemoryConsentReader {
+  const { key, timeoutMs } = parsePrivateKey(config);
+  const path = '/api/internal/jarvis/anisha-memory-consent';
+  const domain = 'qfj.anisha.memory-consent.http.sig.v1';
+  const protocol = 'qfj.anisha.memory-consent';
+  return Object.freeze({
+    async read(input: {
+      readonly tenantId: 'quickfurno';
+      readonly vendorId: string;
+      readonly conversationId: string;
+      readonly expectedRevision: number;
+    }) {
+      if (
+        input.tenantId !== 'quickfurno' ||
+        !UUID.test(input.vendorId) ||
+        !UUID.test(input.conversationId) ||
+        !Number.isSafeInteger(input.expectedRevision) ||
+        input.expectedRevision < 0
+      )
+        throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      const requestId = config.requestId();
+      const issuedAt = config.clock();
+      if (!UUID.test(requestId) || !INSTANT.test(issuedAt)) {
+        throw new QuickFurnoWhatsAppHttpError('invalid-input');
+      }
+      const body = JSON.stringify({
+        protocol,
+        version: 1,
+        caller: CALLER,
+        audience: AUDIENCE,
+        requestId,
+        issuedAt,
+        tenantId: 'quickfurno',
+        vendorId: input.vendorId,
+        conversationId: input.conversationId,
+        expectedRevision: input.expectedRevision,
+      });
+      const response = await signedPost({
+        config,
+        key,
+        timeoutMs,
+        path,
+        domain,
+        requestId,
+        issuedAt,
+        body,
+      });
+      if (response.status !== 200) throw new QuickFurnoWhatsAppHttpError('request-failed');
+      const text = await response.text();
+      if (Buffer.byteLength(text, 'utf8') < 2 || Buffer.byteLength(text, 'utf8') > 2048) {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      if (
+        !isRecord(parsed) ||
+        !onlyKeys(parsed, [
+          'protocol',
+          'version',
+          'requestId',
+          'vendorId',
+          'conversationId',
+          'expectedRevision',
+          'source',
+          'decision',
+          'observedAt',
+        ]) ||
+        Object.keys(parsed).length !== 9 ||
+        parsed['protocol'] !== protocol ||
+        parsed['version'] !== 1 ||
+        parsed['requestId'] !== requestId ||
+        parsed['vendorId'] !== input.vendorId ||
+        parsed['conversationId'] !== input.conversationId ||
+        parsed['expectedRevision'] !== input.expectedRevision ||
+        parsed['source'] !== 'QUICKFURNO_CORE' ||
+        !['GRANTED', 'DENIED', 'UNKNOWN'].includes(String(parsed['decision'])) ||
+        typeof parsed['observedAt'] !== 'string' ||
+        !INSTANT.test(parsed['observedAt']) ||
+        !Number.isFinite(Date.parse(parsed['observedAt']))
+      ) {
+        throw new QuickFurnoWhatsAppHttpError('response-invalid');
+      }
+      return Object.freeze({
+        source: 'QUICKFURNO_CORE' as const,
+        vendorId: input.vendorId,
+        decision: parsed['decision'] as 'GRANTED' | 'DENIED' | 'UNKNOWN',
+        observedAt: parsed['observedAt'],
+      });
+    },
+  });
+}

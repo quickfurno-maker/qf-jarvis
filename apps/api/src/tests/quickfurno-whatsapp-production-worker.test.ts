@@ -117,6 +117,37 @@ function validConfig(root: string) {
 }
 
 describe('QuickFurno WhatsApp production worker configuration', () => {
+  it('staging A2b memory requires explicit owner approval and Postgres, never production', () => {
+    const root = tempRoot();
+    const file = join(root, 'memory-staging.json');
+    const base = { ...validConfig(root), spoolDirectory: undefined };
+    const memory = { mode: 'STAGING_ONLY', ownerApprovalRef: 'owner.anisha.20261012' };
+    const postgres = { mode: 'POSTGRES' };
+    writeFileSync(
+      file,
+      JSON.stringify({
+        ...base,
+        environment: 'staging',
+        turnStore: postgres,
+        anishaMemory: memory,
+      }),
+    );
+    expect(loadQuickFurnoWhatsAppProductionWorkerConfig(file).anishaMemory).toEqual(memory);
+    for (const bad of [
+      { environment: 'production', turnStore: postgres, anishaMemory: memory },
+      { environment: 'local', turnStore: postgres, anishaMemory: memory },
+      {
+        environment: 'staging',
+        turnStore: { mode: 'FILE', directory: join(root, 'spool') },
+        anishaMemory: memory,
+      },
+      { environment: 'staging', turnStore: postgres, anishaMemory: { mode: 'STAGING_ONLY' } },
+    ]) {
+      writeFileSync(file, JSON.stringify({ ...base, ...bad }));
+      expect(() => loadQuickFurnoWhatsAppProductionWorkerConfig(file)).toThrow();
+    }
+  });
+
   it('allows A3 Core vendor facts in staging only, never production or local', () => {
     const root = tempRoot();
     const configPath = join(root, 'vendor-staging.json');
@@ -172,6 +203,7 @@ describe('QuickFurno WhatsApp production worker configuration', () => {
     });
     expect(config.aosShadow).toEqual({ mode: 'DISABLED' });
     expect(config.anishaCoreContextMode).toBe('DISABLED');
+    expect(config.anishaMemory).toEqual({ mode: 'DISABLED' });
   });
 
   it('enables only the canonical bounded AOS SHADOW deployment posture', () => {
