@@ -32,12 +32,12 @@ const ALLOWED_KEYS = new Set([
   'humanTakeover',
   'lastEvent',
 ]);
-const hex = (x) => typeof x === 'string' && /^[0-9a-f]{32,}$/i.test(x);
 const sign = (body, secret) => createHmac('sha256', secret).update(body).digest('base64url');
 const safe = (x, max) =>
   typeof x === 'string'
-    ? x
-        .replace(/[\x00-\x1f]/g, ' ')
+    ? [...x]
+        .map((c) => (c.charCodeAt(0) < 32 ? ' ' : c))
+        .join('')
         .trim()
         .slice(0, max)
     : '';
