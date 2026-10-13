@@ -1,0 +1,5 @@
+# VOX-05 — Jarvis advisory authenticity, one-time consumption, and Core handoff fence
+
+Additional source-only module `verifyOnce.mjs` requires HMAC signature verification via existing `qf.vox.agent.view.v1` and a caller-provided **atomic durable** `store.claimOnce(issuer:jti, expiresAt)` ledger. Signer HMAC itself does not prevent replay. The runtime must use a durable shared Valkey/Postgres atomic unique claim in one transaction, never a process-local Map. No credentials, operational API, Meta send or memory store is created here. Read-only result excludes internal nonce. Core attestation (verified active vendor + consumed registration intent) is mandatory before any Aarohi→Anisha handoff. Agent "WON" text, phone matches and signed agent view alone never activate a vendor.
+
+Tests are source-level; simulated Map store exists **only in test harness** and is not certified for distributed deployments. Live signed Core↔Jarvis producer/consumer, rotated secret custody, persistent anti-replay ledger and real human/consent workflow remain future release gates. No raw messages, prompt, phone or long-term memory in exposed shape.
