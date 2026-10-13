@@ -6,10 +6,12 @@ export const VOX_JARVIS_CONTRACT="qf.vox.agent.view.v1";
 export const VOX_AGENT_CHANNELS=Object.freeze({AAROHI:"ACQUISITION",ANISHA:"VENDOR_SERVICE"});
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MSTATUS=Object.freeze(["DISABLED","CONSENTED","PENDING_CONSENT","PAUSED","ERASE_PENDING","UNKNOWN"]);
+const ALLOWED_KEYS=new Set(["schema","iss","aud","agent","channel","subjectType","subjectId","jti","revision","iat","exp","memoryStatus","humanTakeover","lastEvent"]);
 const hex=(x)=>typeof x==="string"&&/^[0-9a-f]{32,}$/i.test(x);
 const sign=(body,secret)=>createHmac("sha256",secret).update(body).digest("base64url");
 const safe=(x,max)=>typeof x==="string"?x.replace(/[\x00-\x1f]/g," ").trim().slice(0,max):"";
 function validateEvent(e) {
+  if (!e || typeof e!=="object" || Array.isArray(e) || Object.keys(e).some(k=>!ALLOWED_KEYS.has(k))) return false;
   if (!e || e.schema!==VOX_JARVIS_CONTRACT || e.iss!=="qf-jarvis" || e.aud!=="vox-web" ||
       !Object.hasOwn(VOX_AGENT_CHANNELS,e.agent) || e.channel!==VOX_AGENT_CHANNELS[e.agent] ||
       !UUID.test(String(e.subjectId)) || !UUID.test(String(e.jti)) ||
