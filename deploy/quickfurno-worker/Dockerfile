@@ -13,6 +13,9 @@ COPY apps/api ./apps/api
 COPY apps/proactive-worker ./apps/proactive-worker
 COPY apps/worker ./apps/worker
 COPY apps/quickfurno-gateway ./apps/quickfurno-gateway
+# Gateway is built transitively by @qf-jarvis/api; preserve VOX contract types
+# and server-only signed/replay reader at the identical relative import path.
+COPY contracts/vox ./contracts/vox
 
 RUN pnpm install --frozen-lockfile --filter @qf-jarvis/api... --filter @qf-jarvis/quickfurno-gateway... --filter .
 RUN pnpm --filter @qf-jarvis/api... build
@@ -41,6 +44,7 @@ COPY --from=builder --chown=10003:10002 /build/apps/api ./apps/api
 COPY --from=builder --chown=10003:10002 /build/apps/proactive-worker ./apps/proactive-worker
 COPY --from=builder --chown=10003:10002 /build/apps/worker ./apps/worker
 COPY --from=builder --chown=10003:10002 /build/apps/quickfurno-gateway ./apps/quickfurno-gateway
+COPY --from=builder --chown=10003:10002 /build/contracts/vox ./contracts/vox
 
 USER 10003:10002
 CMD ["node", "apps/api/dist/bin/run-quickfurno-whatsapp-production-worker.js", "--config", "/run/secrets/qf-jarvis-whatsapp-worker.json", "--enable-aos-shadow"]
