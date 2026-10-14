@@ -63,6 +63,23 @@ describe('VOX-16E private Jarvis HTTP gateway (actual loopback socket)',()=>{
   const url=await endpoint({verifyForStaff:async()=>({...proof,permissions:['SEND_MESSAGE']})});
   expect((await send(url)).status).toBe(403);
  });
+ it('denies poisoned scope fields from an injected read verifier',async()=>{
+  process.env['QFJ_VOX_ADVISORY_ENABLED']='staging';
+  const poisoned=[
+   {...proof,humanTakeover:false},
+   {...proof,agent:'ANISHA',channel:'ACQUISITION',subjectType:'prospect'},
+   {...proof,memoryStatus:'UNVERIFIED_RAW_MEMORY'},
+   {...proof,lastEvent:{phone:'PRIVATE'}},
+   {...proof,lastEvent:'x'.repeat(121)},
+   {...proof,revision:-1}
+  ];
+  for(const candidate of poisoned){
+   const url=await endpoint({verifyForStaff:async()=>candidate});
+   const response=await send(url);
+   expect(response.status).toBe(403);
+   expect(JSON.stringify(await response.json())).not.toContain('PRIVATE');
+  }
+ });
  it('denies invalid body fields',async()=>{
   process.env['QFJ_VOX_ADVISORY_ENABLED']='staging';
   const url=await endpoint({verifyForStaff:async()=>proof});

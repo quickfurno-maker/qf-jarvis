@@ -1,0 +1,5 @@
+# VOX-18 Jarvis private signed-read output hardening
+
+The private HTTP gateway previously verified that the injected reader returned `READ_ONLY` and a UUID, but accepted mismatched agent/channel/subject, non-HUMAN state, arbitrary memory status, unchecked `lastEvent` and negative revision. It then mirrored those fields into its private HTTP projection. Tighten this final defense-in-depth boundary to the signed agent's canonical subject/channel mapping, `humanTakeover=true`, allowlisted memory status, bounded printable lastEvent string and nonnegative revision. The reader still enforces HMAC and live Core authorization in production; these checks prevent unsafe output if a trusted dependency becomes malformed.
+
+New actual node HTTP loopback negative test submits six poisoned reader results; each must return 403 without reflecting hidden data. Existing signed tests still verify genuine scoped 200. **Not live:** no Jarvis private ingress, Core staging AAL2, PG receipt migration or WhatsApp effects enabled.
