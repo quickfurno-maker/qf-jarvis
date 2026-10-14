@@ -1,0 +1,27 @@
+name: VOX-16D signed Jarvis gateway bundle
+on:
+  pull_request:
+    paths:
+      - 'deploy/quickfurno-gateway/Dockerfile'
+      - 'scripts/vox/validate-vox-16d-image.mjs'
+      - '.github/workflows/vox-16d-image.yml'
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  dependency-path:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with: {node-version: '24.18.0'}
+      - run: node scripts/vox/validate-vox-16d-image.mjs
+  image-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Build image with default flags OFF
+        run: docker build -f deploy/quickfurno-gateway/Dockerfile -t qfj-vox16d-gateway:qa .
+      - name: Test packaged trusted modules as nonroot
+        run: |
+          docker run --rm --entrypoint node qfj-vox16d-gateway:qa --input-type=module -e "await import('/app/contracts/vox/scopedAdvisoryReader.mjs');await import('/app/contracts/vox/coreSubjectAuthorizer.mjs');console.log('VOX16D_PACKAGED_CONTRACTS_PASS')"
