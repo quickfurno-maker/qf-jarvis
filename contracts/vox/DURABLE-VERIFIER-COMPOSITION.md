@@ -1,0 +1,5 @@
+# VOX-10C — Signed agent advisory verification composed with existing Jarvis Postgres pool
+
+The existing signed Jarvis advisory `qf.vox.agent.view.v1` and `verifyOnceAgentView` are now composed with the new PostgreSQL `createPostgresReplayStore` adapter behind one injected `createDatabaseBackedVoxAgentVerifier({pool,secret,clock})`. This **reuses a caller-owned existing Jarvis pool** (does NOT open another pool), verifies signature/audience/time first, and consumes the jti through an atomic unique PostgreSQL claim before exposing the already sanitized READ_ONLY view. Invalid signature, replay, expired view and DB failure fail closed.
+
+It is a source module, **not yet a production gateway or signed Jarvis→Core VOX HTTP endpoint**. No provider communication, agent memory read, credential distribution, new cloud service or API route. Secure transport/rate, signing-key provisioning/rotation, trusted counterpart integration, consent authorization, actual Core subject/city attestation, and connected multi-instance Staging remain P0 gates. The permanent replay ledger DDL is unapplied on the live Jarvis database. 
