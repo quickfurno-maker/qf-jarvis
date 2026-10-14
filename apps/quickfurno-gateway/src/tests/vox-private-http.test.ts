@@ -42,12 +42,19 @@ const proof = {
   phone: 'PRIVATE',
   wallet: 4500,
 };
-const servers: Array<ReturnType<typeof createGatewayServer>> = [];
+const servers: ReturnType<typeof createGatewayServer>[] = [];
 const old = process.env['QFJ_VOX_ADVISORY_ENABLED'];
 afterEach(async () => {
   process.env['QFJ_VOX_ADVISORY_ENABLED'] = old;
   await Promise.all(
-    servers.splice(0).map((s) => new Promise<void>((resolve) => s.close(() => resolve()))),
+    servers.splice(0).map(
+      (s) =>
+        new Promise<void>((resolve) => {
+          s.close(() => {
+            resolve();
+          });
+        }),
+    ),
   );
 });
 async function endpoint(reader?: {
@@ -60,7 +67,7 @@ async function endpoint(reader?: {
   servers.push(s);
   await new Promise<void>((resolve) => s.listen(0, '127.0.0.1', resolve));
   const info = s.address() as AddressInfo;
-  return 'http://127.0.0.1:' + info.port + '/internal/vox/v1/agent-view';
+  return 'http://127.0.0.1:' + String(info.port) + '/internal/vox/v1/agent-view';
 }
 function send(url: string, options: RequestInit = {}) {
   return fetch(url, {
@@ -73,7 +80,12 @@ function send(url: string, options: RequestInit = {}) {
 describe('VOX-16E private Jarvis HTTP gateway (actual loopback socket)', () => {
   it('default disabled even with reader', async () => {
     delete process.env['QFJ_VOX_ADVISORY_ENABLED'];
-    const url = await endpoint({ verifyForStaff: async () => proof });
+    const url = await endpoint({
+      verifyForStaff: async () => {
+        await Promise.resolve();
+        return proof;
+      },
+    });
     const r = await send(url);
     expect(r.status).toBe(503);
     expect(await r.json()).toMatchObject({ error: 'service_unavailable' });
@@ -88,6 +100,7 @@ describe('VOX-16E private Jarvis HTTP gateway (actual loopback socket)', () => {
     let n = 0;
     const url = await endpoint({
       verifyForStaff: async ({ agentViewToken, requesterBearer }) => {
+        await Promise.resolve();
         n++;
         expect(agentViewToken).toBe(payload.agentViewToken);
         expect(requesterBearer).toBe(bearer);
@@ -112,6 +125,7 @@ describe('VOX-16E private Jarvis HTTP gateway (actual loopback socket)', () => {
     process.env['QFJ_VOX_ADVISORY_ENABLED'] = 'staging';
     const url = await endpoint({
       verifyForStaff: async () => {
+        await Promise.resolve();
         throw Error('CURRENT_CORE_DENIED');
       },
     });
@@ -122,7 +136,10 @@ describe('VOX-16E private Jarvis HTTP gateway (actual loopback socket)', () => {
   it('denies provider action permissions even from injected reader', async () => {
     process.env['QFJ_VOX_ADVISORY_ENABLED'] = 'staging';
     const url = await endpoint({
-      verifyForStaff: async () => ({ ...proof, permissions: ['SEND_MESSAGE'] }),
+      verifyForStaff: async () => {
+        await Promise.resolve();
+        return { ...proof, permissions: ['SEND_MESSAGE'] };
+      },
     });
     expect((await send(url)).status).toBe(403);
   });
@@ -137,7 +154,12 @@ describe('VOX-16E private Jarvis HTTP gateway (actual loopback socket)', () => {
       { ...proof, revision: -1 },
     ];
     for (const candidate of poisoned) {
-      const url = await endpoint({ verifyForStaff: async () => candidate });
+      const url = await endpoint({
+        verifyForStaff: async () => {
+          await Promise.resolve();
+          return candidate;
+        },
+      });
       const response = await send(url);
       expect(response.status).toBe(403);
       expect(JSON.stringify(await response.json())).not.toContain('PRIVATE');
@@ -145,13 +167,23 @@ describe('VOX-16E private Jarvis HTTP gateway (actual loopback socket)', () => {
   });
   it('denies invalid body fields', async () => {
     process.env['QFJ_VOX_ADVISORY_ENABLED'] = 'staging';
-    const url = await endpoint({ verifyForStaff: async () => proof });
+    const url = await endpoint({
+      verifyForStaff: async () => {
+        await Promise.resolve();
+        return proof;
+      },
+    });
     const r = await send(url, { body: JSON.stringify({ ...payload, cityId: 'spoofed' }) });
     expect(r.status).toBe(400);
   });
   it('denies untrusted staff bearer', async () => {
     process.env['QFJ_VOX_ADVISORY_ENABLED'] = 'staging';
-    const url = await endpoint({ verifyForStaff: async () => proof });
+    const url = await endpoint({
+      verifyForStaff: async () => {
+        await Promise.resolve();
+        return proof;
+      },
+    });
     expect(
       (
         await send(url, {
@@ -165,6 +197,7 @@ describe('VOX-16E private Jarvis HTTP gateway (actual loopback socket)', () => {
     let n = 0;
     const url = await endpoint({
       verifyForStaff: async () => {
+        await Promise.resolve();
         n++;
         return proof;
       },

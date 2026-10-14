@@ -33,12 +33,19 @@ const config: GatewayConfig = {
   replayMaxEntries: 100,
 };
 const old = process.env['QFJ_VOX_ADVISORY_ENABLED'];
-const servers: Array<ReturnType<typeof createGatewayServer>> = [];
+const servers: ReturnType<typeof createGatewayServer>[] = [];
 afterEach(async () => {
   if (old === undefined) delete process.env['QFJ_VOX_ADVISORY_ENABLED'];
   else process.env['QFJ_VOX_ADVISORY_ENABLED'] = old;
   await Promise.all(
-    servers.splice(0).map((s) => new Promise<void>((resolve) => s.close(() => resolve()))),
+    servers.splice(0).map(
+      (s) =>
+        new Promise<void>((resolve) => {
+          s.close(() => {
+            resolve();
+          });
+        }),
+    ),
   );
 });
 function signed(jti: number) {
@@ -70,15 +77,13 @@ async function serve(opts: { coreAllowed: boolean; failDb?: boolean }) {
     coreOrigin: 'https://staging-core.quickfurno.in',
     fetchImpl: async (url, request) => {
       coreReads++;
+      await Promise.resolve();
       expect(url).toBe('https://staging-core.quickfurno.in/api/vox/v1/agent-subject-access');
       expect(request?.headers).toMatchObject({ authorization: 'Bearer ' + bearer });
       if (!opts.coreAllowed)
-        return { ok: false, status: 403, headers: { get: () => 'application/json' } };
-      return {
-        ok: true,
-        status: 200,
-        headers: { get: () => 'application/json' },
-        json: async () => ({
+        return new Response(null, { status: 403, headers: { 'content-type': 'application/json' } });
+      return Response.json(
+        {
           ok: true,
           schema: 'qf.vox.agent.subject.access.v1',
           allowed: true,
@@ -92,13 +97,15 @@ async function serve(opts: { coreAllowed: boolean; failDb?: boolean }) {
           cityScopeActive: true,
           humanTakeoverAllowed: true,
           permissions: ['READ_ONLY'],
-        }),
-      };
+        },
+        { status: 200 },
+      );
     },
   });
   const pool = {
-    query: async (_sql: unknown, params: unknown[]) => {
+    query: async (_sql: string, params: unknown[] = []) => {
       dbClaims++;
+      await Promise.resolve();
       if (opts.failDb) throw Error('PRIVATE_POSTGRES_DOWN');
       const key = String(params[0]);
       if (seen.has(key)) return { rows: [] };
@@ -116,7 +123,9 @@ async function serve(opts: { coreAllowed: boolean; failDb?: boolean }) {
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const url =
-    'http://127.0.0.1:' + (server.address() as AddressInfo).port + '/internal/vox/v1/agent-view';
+    'http://127.0.0.1:' +
+    String((server.address() as AddressInfo).port) +
+    '/internal/vox/v1/agent-view';
   return { url, reads: () => coreReads, claims: () => dbClaims };
 }
 function send(url: string, token: string, staff = bearer) {

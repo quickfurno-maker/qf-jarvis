@@ -17,7 +17,7 @@ t('signed Core authority injected', () => assert.match(src, /createVoxCoreSubjec
 t('durable agent verifier injected', () => assert.match(src, /createScopedVoxAdvisoryReader/));
 t('private Core https origin', () => assert.match(src, /https:\/\/staging-core.quickfurno.in/));
 t('passed into existing gateway', () =>
-  assert.match(src, /createGatewayServer\(\{config,turnSpool,/),
+  assert.match(src, /createGatewayServer\(\{\s*config,\s*turnSpool,/),
 );
 t('legacy gateway behavior unchanged', () =>
   assert.match(src, /createPostgresDurableTurnSpool\(databasePool\)/),

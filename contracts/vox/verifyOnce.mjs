@@ -20,7 +20,9 @@ export async function verifyOnceAgentView(
   const key = 'qf.vox.agent.view.v1:qf-jarvis:' + view.jti;
   const claimed = await store.claimOnce(key, view.expiresAt);
   if (claimed !== true) throw new Error('REPLAY_OR_STORE_UNAVAILABLE');
-  const { jti, replayCheckRequired, ...safe } = view;
+  const safe = { ...view };
+  delete safe.jti;
+  delete safe.replayCheckRequired;
   return Object.freeze({ ...safe, proofConsumed: true, permissions: Object.freeze(['READ_ONLY']) });
 }
 export function requiresCoreAttestationForHandoff(view, attestation) {
