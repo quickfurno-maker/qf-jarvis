@@ -11,6 +11,9 @@ WORKDIR /build
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json tsconfig.json ./
 COPY packages ./packages
 COPY apps/quickfurno-gateway ./apps/quickfurno-gateway
+# VOX signed/replay reader is dynamically imported from compiled dist/index.js.
+# Keep shared source contracts at the identical ../../../contracts/vox path.
+COPY contracts/vox ./contracts/vox
 RUN pnpm install --frozen-lockfile --filter @qf-jarvis/quickfurno-gateway... --filter .
 RUN pnpm --filter @qf-jarvis/quickfurno-gateway... build
 
@@ -34,6 +37,7 @@ WORKDIR /app
 COPY --from=builder --chown=10002:10002 /build/node_modules ./node_modules
 COPY --from=builder --chown=10002:10002 /build/packages ./packages
 COPY --from=builder --chown=10002:10002 /build/apps/quickfurno-gateway ./apps/quickfurno-gateway
+COPY --from=builder --chown=10002:10002 /build/contracts/vox ./contracts/vox
 USER 10002:10002
 EXPOSE 3100
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
