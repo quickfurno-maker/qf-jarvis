@@ -1,0 +1,23 @@
+name: VOX-10C Durable Agent View Composition
+on:
+  pull_request:
+    paths:
+      - 'contracts/vox/durableAgentVerifier.mjs'
+      - 'scripts/vox/validate-vox-10c-composition.mjs'
+      - '.github/workflows/vox-10c-durable-composition.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  signed-status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '20.20.2'
+      - run: node scripts/vox/validate-agent-view.mjs
+      - run: node scripts/vox/validate-vox-05-observer.mjs
+      - run: node scripts/vox/validate-vox-10b-postgres-replay.mjs
+      - run: node scripts/vox/validate-vox-10c-composition.mjs
