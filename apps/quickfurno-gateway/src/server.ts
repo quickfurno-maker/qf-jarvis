@@ -269,7 +269,15 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
                   !['prospect','vendor'].includes(String(v.subjectType)) ||
                   typeof v.subjectId !== 'string' ||
                   !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v.subjectId) ||
-                  typeof v.revision !== 'number' || !Number.isSafeInteger(v.revision))
+                  typeof v.revision !== 'number' || !Number.isSafeInteger(v.revision) ||
+                  v.revision < 0 || v.revision > 2147483647 ||
+                  (v.agent === 'AAROHI' && (v.channel !== 'ACQUISITION' || v.subjectType !== 'prospect')) ||
+                  (v.agent === 'ANISHA' && (v.channel !== 'VENDOR_SERVICE' || v.subjectType !== 'vendor')) ||
+                  v.humanTakeover !== true ||
+                  !['DISABLED','CONSENTED','PENDING_CONSENT','PAUSED','ERASE_PENDING','UNKNOWN'].includes(String(v.memoryStatus)) ||
+                  (v.lastEvent !== undefined && v.lastEvent !== null &&
+                    (typeof v.lastEvent !== 'string' || v.lastEvent.length > 120 ||
+                     !/^[a-zA-Z0-9 _.-]*$/.test(v.lastEvent))))
                 throw Error('INVALID_READ_ONLY_SCOPE');
               // Fresh projection; never echo caller or privileged verifier fields.
               writeJson(response, 200, {
