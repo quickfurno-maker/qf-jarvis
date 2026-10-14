@@ -1,0 +1,20 @@
+name: VOX-22 Jarvis Worker Image Contract Closure
+on:
+  pull_request:
+    paths:
+      - 'deploy/quickfurno-worker/Dockerfile'
+      - 'scripts/vox/validate-vox22-worker-image-contracts.mjs'
+      - '.github/workflows/vox-22-worker-contracts.yml'
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  worker-supply-chain-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with: { node-version: '24.18.0' }
+      - run: |
+          node scripts/vox/validate-vox22-worker-image-contracts.mjs
+          node scripts/vox/validate-vox-16d-image.mjs

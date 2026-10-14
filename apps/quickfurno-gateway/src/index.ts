@@ -78,7 +78,42 @@ const observability = startObservability({
   migrationHead: migrationHead === undefined || migrationHead === '' ? 'unknown' : migrationHead,
   configSchemaVersion: String(config.schemaVersion),
 });
-const server = createGatewayServer({ config, turnSpool });
+// One dormant, private read-only path. Never enable via a browser request.
+let voxAdvisoryReader:
+  | Readonly<{
+      verifyForStaff(args: { agentViewToken: string; requesterBearer: string }): Promise<unknown>;
+    }>
+  | undefined;
+if (process.env['QFJ_VOX_ADVISORY_ENABLED'] === 'staging') {
+  if (
+    config.environment !== 'staging' ||
+    turnStoreMode !== 'POSTGRES' ||
+    databasePool === undefined
+  )
+    throw new Error('vox_private_stage_postgres_required');
+  const secret = process.env['QFJ_VOX_VIEW_SECRET'];
+  if (typeof secret !== 'string' || secret.length < 32)
+    throw new Error('vox_signing_secret_required');
+  const [{ createScopedVoxAdvisoryReader }, { createVoxCoreSubjectAuthorizer }] = await Promise.all(
+    [
+      import('../../../contracts/vox/scopedAdvisoryReader.mjs'),
+      import('../../../contracts/vox/coreSubjectAuthorizer.mjs'),
+    ],
+  );
+  voxAdvisoryReader = createScopedVoxAdvisoryReader({
+    pool: databasePool,
+    secret,
+    authorizeCoreSubject: createVoxCoreSubjectAuthorizer({
+      coreOrigin: 'https://staging-core.quickfurno.in',
+      timeoutMs: 2500,
+    }),
+  });
+}
+const server = createGatewayServer({
+  config,
+  turnSpool,
+  ...(voxAdvisoryReader === undefined ? {} : { voxAdvisoryReader }),
+});
 
 server.listen(PORT, HOST, () => {
   process.stdout.write(`qf-jarvis-gateway listening turnStore=${turnStoreMode}\n`);

@@ -1,0 +1,5 @@
+# VOX-16F — Signed Anisha staff-view HTTP flow with Core and one-time Jarvis DB
+
+Builds on prior Jarvis VOX-16E actual HTTP socket tests. New integration tests use **real signed agent-view HMAC**, the production CoreSubjectAuthorizer contract with a deliberately synthetic Core HTTPS fetch substitute, the exact current-owner AAL2/HUMAN/city/subject/role confirmation schema, the actual scoped signed reader and simulated atomic PostgreSQL receipt outcomes. Same signed view token first passes sanitized READ_ONLY HTTP 200, then denies 403 on replay. Revoked Core staff denies **before** one-time DB receipt; PostgreSQL down denies 403; bogus JWT denies without reading Core or DB. Synthetic keys and no production secrets.
+
+This is not a deployment: Core HTTPS is injected fake, DB query is deterministic in-memory, no actual staff MFA, Jarvis replay migration or private network ingress live. Remain default-OFF. Complete actual staging integration only after separate managed DB recovery, migrations and signing key installation.

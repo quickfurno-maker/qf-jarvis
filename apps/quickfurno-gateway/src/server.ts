@@ -40,6 +40,7 @@ import {
 } from './whatsapp-turn-protocol.js';
 
 const MAX_BODY_BYTES = 8_192;
+const VOX_AGENT_HTTP_PATH = '/internal/vox/v1/agent-view';
 const JSON_TYPE = 'application/json; charset=utf-8';
 
 function recordSecurityFailure(kind: 'authentication' | 'contract' | 'signature'): void {
@@ -158,6 +159,12 @@ export interface GatewayServerDependencies {
   readonly config: GatewayConfig;
   readonly replayGuard?: ReplayGuard;
   readonly turnSpool?: DurableTurnSpool;
+  /** Inject an existing, authorized, signed & PostgreSQL replay-backed reader. */
+  readonly voxAdvisoryReader?: Readonly<{
+    verifyForStaff(
+      args: Readonly<{ agentViewToken: string; requesterBearer: string }>,
+    ): Promise<unknown>;
+  }>;
   readonly now?: () => Date;
 }
 
@@ -177,13 +184,15 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
       }
     })();
     const metricRoute =
-      pathname === WHATSAPP_TURN_PATH
-        ? 'whatsapp-turn'
-        : pathname === HANDSHAKE_PATH
-          ? 'handshake'
-          : pathname === '/healthz'
-            ? 'healthz'
-            : 'other';
+      pathname === VOX_AGENT_HTTP_PATH
+        ? 'vox-private-advisory'
+        : pathname === WHATSAPP_TURN_PATH
+          ? 'whatsapp-turn'
+          : pathname === HANDSHAKE_PATH
+            ? 'handshake'
+            : pathname === '/healthz'
+              ? 'healthz'
+              : 'other';
     const parent = extractRemoteContext(request.headers);
     void withSpan(
       'jarvis.gateway',
@@ -202,6 +211,138 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
 
           if (request.method === 'GET' && url.pathname === '/healthz') {
             writeJson(response, 200, { status: 'ok', service: 'qf-jarvis-gateway', version: 1 });
+            return;
+          }
+
+          // Off by default. No reader wired at runtime => never enables itself.
+          // The caller must inject Core-authorized durable replay and keep this
+          // machine ingress on a private network. No provider sends here.
+          if (url.pathname === VOX_AGENT_HTTP_PATH) {
+            if (request.method !== 'POST') {
+              writeJson(response, 405, { error: 'method_denied' });
+              return;
+            }
+            if (
+              process.env['QFJ_VOX_ADVISORY_ENABLED'] !== 'staging' ||
+              dependencies.voxAdvisoryReader === undefined
+            ) {
+              writeJson(response, 503, { error: 'service_unavailable' });
+              return;
+            }
+            if (!contentTypeAllowed(request)) {
+              writeJson(response, 415, { error: 'invalid_request' });
+              return;
+            }
+            const auth = singleHeader(request, 'authorization');
+            if (
+              auth === null ||
+              !auth.startsWith('Bearer ') ||
+              auth.length < 108 ||
+              auth.length > 8200 ||
+              auth.slice(7).split('.').length !== 3 ||
+              !auth
+                .slice(7)
+                .split('.')
+                .every((part) => part.length > 0 && /^[A-Za-z0-9_-]+$/.test(part))
+            ) {
+              writeJson(response, 401, { error: 'authentication_failed' });
+              return;
+            }
+            const bytes = await readBoundedBody(request);
+            if (bytes === null) {
+              writeJson(response, 413, { error: 'invalid_request' });
+              return;
+            }
+            let payload: unknown;
+            try {
+              payload = JSON.parse(Buffer.from(bytes).toString('utf8'));
+            } catch {
+              writeJson(response, 400, { error: 'invalid_request' });
+              return;
+            }
+            if (
+              !payload ||
+              typeof payload !== 'object' ||
+              Array.isArray(payload) ||
+              Object.keys(payload).length !== 1 ||
+              !Object.hasOwn(payload, 'agentViewToken') ||
+              typeof (payload as { agentViewToken?: unknown }).agentViewToken !== 'string' ||
+              (payload as { agentViewToken: string }).agentViewToken.length < 64 ||
+              (payload as { agentViewToken: string }).agentViewToken.length > 6000
+            ) {
+              writeJson(response, 400, { error: 'invalid_request' });
+              return;
+            }
+            try {
+              const trusted = await dependencies.voxAdvisoryReader.verifyForStaff({
+                agentViewToken: (payload as { agentViewToken: string }).agentViewToken,
+                requesterBearer: auth.slice(7),
+              });
+              if (!trusted || typeof trusted !== 'object') throw Error('INVALID_SCOPE');
+              const v = trusted as {
+                proofConsumed?: unknown;
+                permissions?: unknown;
+                agent?: unknown;
+                subjectType?: unknown;
+                subjectId?: unknown;
+                revision?: unknown;
+                channel?: unknown;
+                memoryStatus?: unknown;
+                humanTakeover?: unknown;
+                lastEvent?: unknown;
+              };
+              if (
+                v.proofConsumed !== true ||
+                !Array.isArray(v.permissions) ||
+                v.permissions.length !== 1 ||
+                v.permissions[0] !== 'READ_ONLY' ||
+                !['AAROHI', 'ANISHA'].includes(String(v.agent)) ||
+                !['prospect', 'vendor'].includes(String(v.subjectType)) ||
+                typeof v.subjectId !== 'string' ||
+                !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                  v.subjectId,
+                ) ||
+                typeof v.revision !== 'number' ||
+                !Number.isSafeInteger(v.revision) ||
+                v.revision < 0 ||
+                v.revision > 2147483647 ||
+                (v.agent === 'AAROHI' &&
+                  (v.channel !== 'ACQUISITION' || v.subjectType !== 'prospect')) ||
+                (v.agent === 'ANISHA' &&
+                  (v.channel !== 'VENDOR_SERVICE' || v.subjectType !== 'vendor')) ||
+                v.humanTakeover !== true ||
+                ![
+                  'DISABLED',
+                  'CONSENTED',
+                  'PENDING_CONSENT',
+                  'PAUSED',
+                  'ERASE_PENDING',
+                  'UNKNOWN',
+                ].includes(String(v.memoryStatus)) ||
+                (v.lastEvent !== undefined &&
+                  v.lastEvent !== null &&
+                  (typeof v.lastEvent !== 'string' ||
+                    v.lastEvent.length > 120 ||
+                    !/^[a-zA-Z0-9 _.-]*$/.test(v.lastEvent)))
+              )
+                throw Error('INVALID_READ_ONLY_SCOPE');
+              // Fresh projection; never echo caller or privileged verifier fields.
+              writeJson(response, 200, {
+                schema: 'qf.vox.agent.view.v1',
+                agent: v.agent,
+                channel: v.channel,
+                subjectType: v.subjectType,
+                subjectId: v.subjectId,
+                revision: v.revision,
+                memoryStatus: v.memoryStatus,
+                humanTakeover: v.humanTakeover,
+                lastEvent: v.lastEvent,
+                proofConsumed: true,
+                permissions: ['READ_ONLY'],
+              });
+            } catch {
+              writeJson(response, 403, { error: 'scope_or_replay_denied' });
+            }
             return;
           }
 
