@@ -1,0 +1,7 @@
+# VOX-10B — Durable replay-claim ledger for signed Jarvis→VOX advisory
+
+This builds on the existing Jarvis signed `qf.vox.agent.view.v1` and `verifyOnceAgentView()` contracts. The previous version required an injected shared atomic claim and explicitly had no production persistence. This adds a real **PostgreSQL adapter** with a unique SHA256-hashed nonce key and `INSERT ... ON CONFLICT DO NOTHING RETURNING`, suitable for cross-instance atomic single consumption.
+
+`createPostgresReplayStore({query})` expects an already-authenticated **Jarvis backend** PostgreSQL driver; it never opens a client connection, obtains secrets, sends provider messages or modifies Core. SQL migration `contracts/vox/sql/0001_vox_agent_replay_receipts.sql` is **unapplied** and for the Jarvis backend, not Core Supabase. Table grants are not published to PUBLIC/browser; the deployer must use a least-privileged worker DB role, review default grants, and run migration/backup/rollback. Token validation still precedes claim; DB errors and duplicates fail closed.
+
+The hashed nonce is retained until retention cleanup; even if old rows are deleted, expired signed views cannot be accepted because the verifier rejects token expiry. Runtime wiring to production agent gateway, expiry cleanup, secret rotation, actual PostgreSQL concurrency certification and signed Jarvis/VOX transport remain explicit release gates. This source adapter alone does not authorize human takeover or agent memory access.
