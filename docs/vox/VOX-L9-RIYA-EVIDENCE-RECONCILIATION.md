@@ -1,0 +1,4 @@
+# VOX-L9 first source increment: Riya signed evidence reconciliation
+Add a **read-only, default-deny** reconciliation contract between current Core conversation/client/project/revision, current Jarvis read-only state and channel-specific consent. All current trusted signer/replay and object-grant verifiers are required, including revocation recheck. Verifiers are injected from existing infrastructure; a test callback does NOT constitute live signature or real consent evidence.
+This contract does **not** execute an actual signed Jarvis pause acknowledgement, approve takeover, send an outbound message or activate any new Jarvis endpoint. Human action and provider send remain disabled. It complements the existing VOX-10B reader, without cloning Jarvis runtime or client CRM.
+Requires later live signed Core↔Jarvis wiring, owner/consent verification, human-review and protected staging E2E.
