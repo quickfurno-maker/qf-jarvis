@@ -1,0 +1,4 @@
+# L9 Riya signed pause ACK review contract
+This increment defines a separate, strict, short-lived Jarvis pause acknowledgment verification boundary and one-use replay consumption order. It requires trusted Jarvis signature verification, durable paused-state proof, current Core object grant, current client consent and durable nonce consumption.
+The module does not send a pause command or implement those adapters. Passing mocked callbacks is not actual network proof or signed independent human authority. Even a verified receipt is eligible only for a **separate Core-governed approval request**; no takeover is executed and no WhatsApp/provider message can be sent.
+Still missing: actual signed Jarvis endpoint plus DB backed durable pause, Core approval/replay store, real Auth AAL2 staging and verified consent, production governance. Keep all flags off.
