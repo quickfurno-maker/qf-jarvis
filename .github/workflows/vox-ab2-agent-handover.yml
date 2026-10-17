@@ -18,4 +18,7 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: '24.18.0'
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter '@qf-jarvis/quickfurno-gateway...' run build
       - run: node --test contracts/vox/*.test.mjs
