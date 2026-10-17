@@ -41,6 +41,7 @@ import {
 
 const MAX_BODY_BYTES = 8_192;
 const VOX_AGENT_HTTP_PATH = '/internal/vox/v1/agent-view';
+const VOX_RIYA_PAUSE_PRIVATE_PATH = '/internal/vox/v1/riya/pause';
 const JSON_TYPE = 'application/json; charset=utf-8';
 
 function recordSecurityFailure(kind: 'authentication' | 'contract' | 'signature'): void {
@@ -160,6 +161,11 @@ export interface GatewayServerDependencies {
   readonly replayGuard?: ReplayGuard;
   readonly turnSpool?: DurableTurnSpool;
   /** Inject an existing, authorized, signed & PostgreSQL replay-backed reader. */
+  /** Optional private signed Core Riya pause transport. NOT wired in index.ts. */
+  readonly voxRiyaPausePrivateHandler?: Readonly<{
+    verifyPrivateIngress(request: IncomingMessage): Promise<boolean>;
+    handle(request: IncomingMessage, response: ServerResponse): Promise<void>;
+  }>;
   readonly voxAdvisoryReader?: Readonly<{
     verifyForStaff(
       args: Readonly<{ agentViewToken: string; requesterBearer: string }>,
@@ -184,15 +190,17 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
       }
     })();
     const metricRoute =
-      pathname === VOX_AGENT_HTTP_PATH
-        ? 'vox-private-advisory'
-        : pathname === WHATSAPP_TURN_PATH
-          ? 'whatsapp-turn'
-          : pathname === HANDSHAKE_PATH
-            ? 'handshake'
-            : pathname === '/healthz'
-              ? 'healthz'
-              : 'other';
+      pathname === VOX_RIYA_PAUSE_PRIVATE_PATH
+        ? 'vox-private-riya-pause'
+        : pathname === VOX_AGENT_HTTP_PATH
+          ? 'vox-private-advisory'
+          : pathname === WHATSAPP_TURN_PATH
+            ? 'whatsapp-turn'
+            : pathname === HANDSHAKE_PATH
+              ? 'handshake'
+              : pathname === '/healthz'
+                ? 'healthz'
+                : 'other';
     const parent = extractRemoteContext(request.headers);
     void withSpan(
       'jarvis.gateway',
@@ -211,6 +219,44 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
 
           if (request.method === 'GET' && url.pathname === '/healthz') {
             writeJson(response, 200, { status: 'ok', service: 'qf-jarvis-gateway', version: 1 });
+            return;
+          }
+
+          // Private pause endpoint is OFF by default. It cannot be activated
+          // by flags alone: a trusted private ingress + signed Core handler
+          // must be separately registered by the approved Jarvis bootstrap.
+          if (url.pathname === VOX_RIYA_PAUSE_PRIVATE_PATH) {
+            if (request.method !== 'POST') {
+              writeJson(response, 405, { error: 'method_denied' });
+              return;
+            }
+            if (
+              process.env['QFJ_VOX_RIYA_PAUSE_PRIVATE_ENABLED'] !== 'staging' ||
+              dependencies.config.environment !== 'staging' ||
+              dependencies.voxRiyaPausePrivateHandler === undefined
+            ) {
+              writeJson(response, 503, { error: 'service_unavailable' });
+              return;
+            }
+            if (!contentTypeAllowed(request)) {
+              writeJson(response, 415, { error: 'invalid_request' });
+              return;
+            }
+            let privateIngress = false;
+            try {
+              privateIngress =
+                (await dependencies.voxRiyaPausePrivateHandler.verifyPrivateIngress(request)) ===
+                true;
+            } catch {
+              privateIngress = false;
+            }
+            if (!privateIngress) {
+              writeJson(response, 403, { error: 'private_origin_denied' });
+              return;
+            }
+            // Handler must use existing QFJ m2m Ed25519 signatures, Core
+            // grant+consent rechecks and durable nonce SQL transaction.
+            await dependencies.voxRiyaPausePrivateHandler.handle(request, response);
             return;
           }
 
