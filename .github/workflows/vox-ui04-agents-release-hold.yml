@@ -1,0 +1,22 @@
+name: VOX UI-04 Agent Bridge (Private Only / Release HOLD)
+on:
+  pull_request:
+    paths:
+      - 'contracts/vox/ui04*'
+      - '.github/workflows/vox-ui04-agents-release-hold.yml'
+permissions:
+  contents: read
+jobs:
+  existing-jarvis-agent-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '20.20.2'
+      - run: node --test contracts/vox/*.test.mjs
+      - name: Jarvis isolated PG17 signed Riya pause / replay check
+        run: pwsh -NoProfile -File contracts/vox/test-riyaF1AtomicPauseCandidate.ps1
