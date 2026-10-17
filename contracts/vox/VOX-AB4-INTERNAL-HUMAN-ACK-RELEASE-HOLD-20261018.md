@@ -1,0 +1,5 @@
+# VOX AB-4 Jarvis governed internal human acknowledgment — RELEASE HOLD
+
+Existing AB3 cryptographically verified Core signed pause + Jarvis separate Ed25519 acknowledgment creates a **pending** human case. AB4 `ab4HumanCaseAcknowledgement.mjs` adds a source-only gate requiring independent AAL2 Team Leader, active current Core Staff client-success object grants, valid consent, replay-safe pending case, exact revision and injected atomic Core DB receipt. A successful result is ONLY `INTERNAL_HANDOVER_ACKNOWLEDGED`, with `takeoverAuthorized:false`, `replyAuthorized:false` and zero provider messages. It is NOT an actual customer WhatsApp takeover.
+
+Focused 5/5 tests include consent/review/grant revocation, forged receipt and 20-way same-JTI synthetic one-time acceptance. Live trusted private Core/Jarvis M2M, durable transaction, actual human acceptance and external provider sends remain disabled and require independent AppSec/DBA/Owner approval. This contract is not wired into Jarvis public gateway or live Core send path. Cursor reviewer deferred.
