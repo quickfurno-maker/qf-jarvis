@@ -19,3 +19,4 @@ jobs:
         with:
           node-version: '20.20.2'
       - run: node --test contracts/vox/riyaF1SignedDurablePause.test.mjs contracts/vox/riyaF1PauseHttpHandler.test.mjs
+      - run: pwsh -NoProfile -File contracts/vox/test-riyaF1AtomicPauseCandidate.ps1
