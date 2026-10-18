@@ -1,0 +1,5 @@
+# VOX AB7C Dual signed pending case handover — 18 October 2026
+
+AB-7C JARVIS SOURCE-ONLY / RELEASE HOLD. Adds `ab7PendingHandover.mjs`, a candidate signed Core↔Jarvis pause/consent/independent TL AAL2 gate requiring current object grant and verifiable pending transactional one-use JTI receipt. 5/5 focused tests PASS, including 32-way **synthetic** concurrent nonce contention, forged signature/consent/grant rejection. Successful output only `PENDING_HUMAN_ACCEPTANCE`, `takeoverAuthorized:false`, `replyAuthorized:false`, `providerMessagesSent:0`. Does not register a private handler with Jarvis gateway, establish actual private HTTPS/authentication, install persistent DB transactions or send providers; those real-world integrations remain held for independent AppSec/DBA/Owner authorization.
+
+**All preceding PRs remain draft/unmerged. Cursor review deferred. Independent DBA/AppSec, approved first Team Leader, Staff MFA, migration reconciliation, protected staging tests, signed artifacts and Owner GO remain P0. DO NOT DEPLOY.**
