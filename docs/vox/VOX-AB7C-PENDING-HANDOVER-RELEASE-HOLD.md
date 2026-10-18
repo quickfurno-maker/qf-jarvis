@@ -1,0 +1,4 @@
+# VOX AB-7C — Durable Signed Riya Pending Case Candidate, Release HOLD
+New `ab7PendingHandover.mjs` consumes **only after** verified Core and Jarvis Ed25519 signatures, current Staff/TL AAL2, Core exact object grant and consent proof, requiring atomic case receipt with one-use JTI. It can create only `PENDING_HUMAN_ACCEPTANCE`, never transfer provider reply authority.
+New **uninstalled** Jarvis PG17 SQL `riyaAb7PendingCaseCandidate.sql`: unique JTI and conversation/pause revision, immutable pending + independent reviewer ACK, force RLS, no Auth/anon grants; offline network-none PG17 tests pass. SQL stores SHA256 proof identifiers; it DOES NOT verify Ed25519 signatures or genuine Supabase user/TL AAL2 itself, and must not be installed without prior independent AppSec/DBA review.
+No real signed private gateway handler, durable Core→Jarvis network call, Meta send or human takeover activated. No staging/prod migration.
