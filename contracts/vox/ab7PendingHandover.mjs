@@ -10,7 +10,8 @@ export async function persistAb7SignedPendingHandover({
  environment="off",caseId,staffId,reviewerId,conversationId,jti,
  pauseRevision,consentRevision,proof,verifyCurrentAal2Staff,
  verifyCurrentIndependentAal2Tl,verifyCurrentConsent,
- verifyCurrentCoreObjectGrant,appendDurablePendingCase
+ verifyCurrentCoreObjectGrant,verifyImmutableSignedPauseEvidence,
+ appendDurablePendingCase
 }={}){
  if(environment!=="staging"||
   ![caseId,staffId,reviewerId,conversationId,jti]
@@ -22,15 +23,19 @@ export async function persistAb7SignedPendingHandover({
   proof.jarvisEd25519SignatureVerified!==true||
   proof.boundConversationId!==conversationId||
   proof.boundJti!==jti||
-  proof.signedPauseOnly===false||
+  proof.signedPauseOnly!==true||
   typeof verifyCurrentAal2Staff!=="function"||
   typeof verifyCurrentIndependentAal2Tl!=="function"||
   typeof verifyCurrentConsent!=="function"||
   typeof verifyCurrentCoreObjectGrant!=="function"||
+  typeof verifyImmutableSignedPauseEvidence!=="function"||
   typeof appendDurablePendingCase!=="function")
   return deny("CURRENT_DUAL_SIGNED_HUMAN_PROOF_REQUIRED");
  try{
-  if(await verifyCurrentAal2Staff({staffId,conversationId})!==true||
+  if(await verifyImmutableSignedPauseEvidence({
+   proof,conversationId,jti,pauseRevision,consentRevision
+  })!==true||
+   await verifyCurrentAal2Staff({staffId,conversationId})!==true||
    await verifyCurrentIndependentAal2Tl({reviewerId,staffId})!==true||
    await verifyCurrentConsent({conversationId,consentRevision})!==true||
    await verifyCurrentCoreObjectGrant({staffId,conversationId})!==true)

@@ -9,6 +9,7 @@ const base=()=>({environment:"staging",caseId:id(1),staffId:id(2),
  verifyCurrentAal2Staff:async()=>true,
  verifyCurrentIndependentAal2Tl:async()=>true,
  verifyCurrentConsent:async()=>true,verifyCurrentCoreObjectGrant:async()=>true,
+ verifyImmutableSignedPauseEvidence:async()=>true,
  appendDurablePendingCase:async x=>({persisted:true,caseId:x.caseId,
   conversationId:x.conversationId,jti:x.jti,state:x.state,
   consentRecheckedInTransaction:true,tlRecheckedInTransaction:true,
@@ -23,12 +24,14 @@ test("AB7C missing/tampered signatures and self reviewer deny",async()=>{
   {proof:{...base().proof,jarvisEd25519SignatureVerified:false}},
   {proof:{...base().proof,boundJti:id(99)}},
   {reviewerId:id(2)}, {environment:"production"},
+  {proof:{...base().proof,signedPauseOnly:false}},
   {pauseRevision:-1},{consentRevision:0}
  ]){const r=await persist({...base(),...patch});assert.equal(r.ok,false);}
 });
 test("AB7C missing current consent, grants, TL and AAL2 all deny",async()=>{
  for(const key of ["verifyCurrentAal2Staff","verifyCurrentIndependentAal2Tl",
-  "verifyCurrentConsent","verifyCurrentCoreObjectGrant"]){
+  "verifyCurrentConsent","verifyCurrentCoreObjectGrant",
+  "verifyImmutableSignedPauseEvidence"]){
   assert.equal((await persist({...base(),[key]:async()=>false})).ok,false);
  }
 });
