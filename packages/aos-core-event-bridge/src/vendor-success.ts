@@ -24,6 +24,20 @@ export interface AosVendorSuccessProjection {
   readonly complaintOpen: boolean;
 }
 
+/**
+ * Partial signals already provable by the signed Anisha Core vendor-context read.
+ * Does NOT assert inactivity, matching demand, reactivation, retention, recharge
+ * opportunity or account balance: those require independent Core evidence.
+ */
+export interface AosVerifiedVendorAccountSignals {
+  readonly source: 'QUICKFURNO_CORE_SANITIZED_VENDOR_CONTEXT';
+  readonly subjectRef: string;
+  readonly evidenceRef: string;
+  readonly observedAt: string;
+  readonly packageReadinessBand: 'UNKNOWN' | 'NOT_ACTIVE' | 'NO_PACKAGE' | 'LOW_CREDITS' | 'READY';
+  readonly pendingBadLeadReportCount: number;
+}
+
 export interface AosVendorSuccessBridgeItem {
   readonly observation: AosObservation;
   readonly behaviour: {
@@ -66,6 +80,7 @@ function makeItem(input: {
   readonly trigger: AosBehaviourTrigger;
   readonly context: AosBehaviourContext;
   readonly facts: readonly AosEvidenceFact[];
+  readonly policyRef?: string;
 }): AosVendorSuccessBridgeItem {
   const observation: AosObservation = Object.freeze({
     kind: 'BUSINESS_EVENT' as const,
@@ -99,8 +114,82 @@ function makeItem(input: {
       }),
     }),
     facts: Object.freeze(input.facts.map((one) => Object.freeze({ ...one }))),
-    policyRefs: Object.freeze(['core:vendor-success-projection:v1']),
+    policyRefs: Object.freeze([input.policyRef ?? 'core:vendor-success-projection:v1']),
   });
+}
+
+/**
+ * Reuse the vendor-success detector and case engine for the limited facts
+ * provided by Anisha's signed, identity-bound Core read. Unknown != zero.
+ */
+export function bridgeVerifiedVendorAccountSignalsToAos(
+  input: AosVerifiedVendorAccountSignals,
+): readonly AosVendorSuccessBridgeItem[] {
+  const source: unknown = Reflect.get(input, 'source');
+  if (
+    Object.keys(input).length !== 6 ||
+    source !== 'QUICKFURNO_CORE_SANITIZED_VENDOR_CONTEXT' ||
+    !REF.test(input.subjectRef) ||
+    !REF.test(input.evidenceRef) ||
+    !validInstant(input.observedAt) ||
+    !['UNKNOWN', 'NOT_ACTIVE', 'NO_PACKAGE', 'LOW_CREDITS', 'READY'].includes(
+      input.packageReadinessBand,
+    ) ||
+    !Number.isSafeInteger(input.pendingBadLeadReportCount) ||
+    input.pendingBadLeadReportCount < 0 ||
+    input.pendingBadLeadReportCount > 1_000_000
+  ) {
+    throw new TypeError('aos-vendor-account-signals-invalid');
+  }
+
+  const facts = Object.freeze([
+    fact(
+      'fact:vendor-account-package-readiness-band',
+      input.evidenceRef,
+      input.observedAt,
+      input.packageReadinessBand,
+    ),
+    fact(
+      'fact:vendor-pending-bad-lead-report-count',
+      input.evidenceRef,
+      input.observedAt,
+      input.pendingBadLeadReportCount,
+    ),
+  ]);
+  const items: AosVendorSuccessBridgeItem[] = [];
+  if (input.packageReadinessBand === 'LOW_CREDITS') {
+    items.push(
+      makeItem({
+        subjectRef: input.subjectRef,
+        evidenceRef: input.evidenceRef,
+        observedAt: input.observedAt,
+        suffix: 'account-low-credits',
+        policyRef: 'core:sanitized-vendor-context:v1',
+        priority: 'P2',
+        reasonCode: 'CORE_VENDOR_PACKAGE_READINESS_LOW',
+        trigger: 'VENDOR_PACKAGE_READINESS_LOW',
+        context: { metrics: {} },
+        facts,
+      }),
+    );
+  }
+  if (input.pendingBadLeadReportCount > 0) {
+    items.push(
+      makeItem({
+        subjectRef: input.subjectRef,
+        evidenceRef: input.evidenceRef,
+        observedAt: input.observedAt,
+        suffix: 'account-pending-bad-lead-report',
+        policyRef: 'core:sanitized-vendor-context:v1',
+        priority: 'P1',
+        reasonCode: 'CORE_VENDOR_PENDING_BAD_LEAD_REPORT',
+        trigger: 'VENDOR_COMPLAINT_RECORDED',
+        context: { metrics: {} },
+        facts,
+      }),
+    );
+  }
+  return Object.freeze(items);
 }
 
 /**

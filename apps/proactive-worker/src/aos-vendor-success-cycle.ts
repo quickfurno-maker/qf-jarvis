@@ -1,5 +1,7 @@
 import {
   bridgeVendorSuccessProjectionToAos,
+  bridgeVerifiedVendorAccountSignalsToAos,
+  type AosVerifiedVendorAccountSignals,
   type AosVendorSuccessProjection,
 } from '@qf-jarvis/aos-core-event-bridge';
 import type { AosBehaviourRuntimeBinding, AosCaseContextMemory } from '@qf-jarvis/aos-intelligence';
@@ -17,6 +19,7 @@ export interface AosVendorSuccessShadowCycleInput {
   readonly cycleId: string;
   readonly generatedAt: string;
   readonly projections: readonly AosVendorSuccessProjection[];
+  readonly accountSignals?: readonly AosVerifiedVendorAccountSignals[];
   readonly caseContextMemory?: readonly AosCaseContextMemory[];
   readonly behaviourBinding?: AosBehaviourRuntimeBinding;
   readonly aiBudget?: {
@@ -28,6 +31,7 @@ export interface AosVendorSuccessShadowCycleInput {
 export interface AosVendorSuccessShadowCycleResult {
   readonly protocol: 'qfj.aos.vendor-success-cycle.v1';
   readonly projections: number;
+  readonly accountSignals: number;
   readonly detections: number;
   readonly shadow: AosShadowCycleResult;
   readonly executionAuthority: 'NONE';
@@ -41,13 +45,16 @@ export async function runAosVendorSuccessShadowCycle(
   persistence?: AosShadowPersistencePort,
   adjudicator?: AosDecisionAdjudicator,
 ): Promise<AosVendorSuccessShadowCycleResult> {
-  if (input.projections.length > 10_000) {
+  if (input.projections.length + (input.accountSignals?.length ?? 0) > 10_000) {
     throw new TypeError('aos-vendor-success-cycle-input-invalid');
   }
 
-  const bridged = input.projections.flatMap((projection) =>
-    bridgeVendorSuccessProjectionToAos(projection),
-  );
+  const bridged = [
+    ...input.projections.flatMap((projection) => bridgeVendorSuccessProjectionToAos(projection)),
+    ...(input.accountSignals ?? []).flatMap((signal) =>
+      bridgeVerifiedVendorAccountSignalsToAos(signal),
+    ),
+  ];
   const materialByCase = new Map<
     string,
     {
@@ -120,6 +127,7 @@ export async function runAosVendorSuccessShadowCycle(
   return Object.freeze({
     protocol: 'qfj.aos.vendor-success-cycle.v1' as const,
     projections: input.projections.length,
+    accountSignals: input.accountSignals?.length ?? 0,
     detections: bridged.length,
     shadow,
     executionAuthority: 'NONE' as const,

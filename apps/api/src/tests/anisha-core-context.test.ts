@@ -7,6 +7,7 @@ import {
   CORE_VENDOR_CONTEXT_PROTOCOL,
   CORE_VENDOR_CONTEXT_SIGNING_DOMAIN,
   composeAnishaCoreVendorFacts,
+  createAnishaVerifiedAosAccountSignal,
   needsAnishaCoreVendorContext,
   parseBoundCoreVendorContextResponse,
 } from '../quickfurno-whatsapp/anisha-core-context.js';
@@ -202,6 +203,31 @@ describe('Anisha A3 signed existing QuickFurno vendor context', () => {
     await expect(reader.readForTurn(turn())).rejects.toMatchObject({ code: 'response-invalid' });
   });
 
+  it('prepares AOS evidence only from verified subject-matched Core context', () => {
+    const snap = parseBoundCoreVendorContextResponse(reply(), requestId, vendorId);
+    expect(snap).not.toBeNull();
+    if (snap === null) throw new Error('fixture-invalid');
+    const signal = createAnishaVerifiedAosAccountSignal(turn(), snap, timestamp);
+    expect(signal).toMatchObject({
+      source: 'QUICKFURNO_CORE_SANITIZED_VENDOR_CONTEXT',
+      subjectRef: 'vendor:' + vendorId,
+      packageReadinessBand: 'LOW_CREDITS',
+      pendingBadLeadReportCount: 0,
+      observedAt: timestamp,
+    });
+    expect(Object.keys(signal ?? {})).toHaveLength(6);
+    expect(
+      createAnishaVerifiedAosAccountSignal(turn({ humanTakeover: true }), snap, timestamp),
+    ).toBeNull();
+    expect(
+      createAnishaVerifiedAosAccountSignal(
+        turn(),
+        { ...snap, vendorId: '55555555-5555-4555-8555-555555555555' },
+        timestamp,
+      ),
+    ).toBeNull();
+  });
+
   it('refuses 403/503 from Core rather than inventing a context', async () => {
     for (const status of [403, 503]) {
       const { reader } = fixture({ status });
@@ -214,6 +240,8 @@ describe('Anisha A3 signed existing QuickFurno vendor context', () => {
     expect(needsAnishaCoreVendorContext('Mera wallet balance kitna hai?')).toBe(true);
     expect(needsAnishaCoreVendorContext('लीड का क्या हुआ?')).toBe(true);
     expect(needsAnishaCoreVendorContext('office verified hai?')).toBe(true);
+    expect(needsAnishaCoreVendorContext('What should I do next?')).toBe(true);
+    expect(needsAnishaCoreVendorContext('Any update on my account?')).toBe(true);
   });
 
   it('only uses bounded labels and counts, never credits, pricing, or personal strings', () => {
@@ -266,12 +294,14 @@ describe('Anisha A3 signed existing QuickFurno vendor context', () => {
         },
       };
     });
+    const observe = vi.fn();
     const runtime = createQuickFurnoWhatsAppSpecialistRuntime({
       runtimeId: 'anisha.a3.contract',
       jarvisRuntime: {
         processInboundForProposedReply: model,
       } as unknown as ProposedReplyJarvisRuntime,
       anishaCoreContextReader: reader,
+      anishaVendorAccountObserver: observe,
     });
     await expect(runtime.process(turn())).resolves.toMatchObject({ actor: 'ANISHA' });
     expect(model).toHaveBeenCalledOnce();
@@ -279,6 +309,14 @@ describe('Anisha A3 signed existing QuickFurno vendor context', () => {
     expect(input.normalizedText).toContain('Current Core vendor facts');
     expect(input.normalizedText).toContain('LOW_CREDITS');
     expect(input.normalizedText).toContain('Mere package credits ka status batao');
+    expect(observe).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'QUICKFURNO_CORE_SANITIZED_VENDOR_CONTEXT',
+        subjectRef: 'vendor:' + vendorId,
+        packageReadinessBand: 'LOW_CREDITS',
+      }),
+    );
   });
 
   it('never silently falls back to chat memory for unavailable Core truth', async () => {
