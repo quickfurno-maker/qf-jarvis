@@ -16,7 +16,7 @@ const PACKAGE =
 const EXPIRY =
   'Review package renewal information in your secure dashboard; this does not confirm a charge or a specific renewal date.';
 const LEADS =
-  'Review your active leads in the secure vendor dashboard and contact the assigned clients yourself using the authorized lead details.';
+  'Review your active leads in the secure vendor dashboard. Contact a client only when Core shows an explicit contact entitlement for that assignment; the count alone does not grant access.';
 const NOTICES =
   'Open your unread vendor notifications in the secure dashboard to see whether any action is required.';
 
@@ -62,7 +62,12 @@ export function selectAnishaVendorNextStep(
 
   // Answer in-topic first. Do not use an unrelated signal as a marketing nudge.
   if (isComplaint) return snapshot.pendingBadLeadReportCount > 0 ? REPORT : null;
-  if (isLeads) return snapshot.activeLeadCount > 0 ? LEADS : null;
+  if (isLeads) {
+    // Active-lead counts do not prove current approval or per-assignment contact rights.
+    if (accountNeedsReview || vendorStatus !== 'approved' || !snapshot.isActive) return ACCOUNT;
+    if (verificationNeedsAttention) return VERIFY;
+    return snapshot.activeLeadCount > 0 ? LEADS : null;
+  }
   if (isVerification)
     return accountNeedsReview ? ACCOUNT : verificationNeedsAttention ? VERIFY : null;
   if (isPackage) return packageNeedsAttention ? PACKAGE : expiryNeedsAttention ? EXPIRY : null;
@@ -75,7 +80,8 @@ export function selectAnishaVendorNextStep(
   if (verificationNeedsAttention) return VERIFY;
   if (packageNeedsAttention) return PACKAGE;
   if (expiryNeedsAttention) return EXPIRY;
-  if (snapshot.activeLeadCount > 0) return LEADS;
+  if (snapshot.activeLeadCount > 0)
+    return vendorStatus === 'approved' && snapshot.isActive ? LEADS : ACCOUNT;
   if (snapshot.unreadNotificationCount > 0) return NOTICES;
   return null;
 }
