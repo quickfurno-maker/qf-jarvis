@@ -1,5 +1,6 @@
 import type { AnishaCoreTurnMaterialV2 } from './contracts.js';
 import { assessAnishaCorePreflight } from './anisha-vendor-preflight.js';
+import { selectAnishaVendorNextStep } from './anisha-vendor-next-step.js';
 
 /**
  * AN-A3: only a signed, per-turn Core vendor context may support an
@@ -128,7 +129,7 @@ export function parseBoundCoreVendorContextResponse(
 
 /** Bounded intent detection avoids 5 Core DB reads on greetings/chit-chat. */
 export function needsAnishaCoreVendorContext(text: string): boolean {
-  return /\b(?:credit|credits|balance|recharge|wallet|package|plan|expiry|expire|subscription|payment|paid|onboard|onboarding|verify|verification|verified|location|address|office|approval|approved|approve|registration|account|login|lead|leads|notification|complaint|support|refund|status|vendor|profile|paisa|paise|bacha|bach[a-z]*|khatam|kab|renewal)\b|क्रेडिट|पैकेज|लीड|पेमेंट|शिकायत|रिचार्ज/iu.test(
+  return /\b(?:credit|credits|balance|recharge|wallet|package|plan|expiry|expire|subscription|payment|paid|onboard|onboarding|verify|verification|verified|location|address|office|approval|approved|approve|registration|account|login|lead|leads|notification|notifications|complaint|support|refund|status|update|updates|next|pending|issue|problem|vendor|profile|paisa|paise|bacha|bach[a-z]*|khatam|kab|renewal)\b|क्रेडिट|पैकेज|लीड|पेमेंट|शिकायत|रिचार्ज/iu.test(
     text,
   );
 }
@@ -172,6 +173,13 @@ export function composeAnishaCoreVendorFacts(
           'Unread vendor notifications: ' + String(snapshot.unreadNotificationCount),
           'These are bounded Core-reported bands/counts, not wallet balance, a guaranteed new lead, delivery receipt or permission to charge/recharge. Do not invent exact prices, wallet credits, payment status or promise a refund. Direct uncertain claims to Core/dashboard/human.',
         ];
+  // One optional, evidence-derived next step; never an action or a claim of completion.
+  const nextStep = selectAnishaVendorNextStep(conversationInput, snapshot);
+  if (nextStep !== null) {
+    lines.push(
+      'Optional verified-context next step (advisory only; use only when relevant): ' + nextStep,
+    );
+  }
   // The agent inbound-envelope contract allows a bounded message, so trim
   // older conversational context if necessary rather than reject a valid
   // Core fact read or silently drop the verified factual guidance.

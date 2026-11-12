@@ -214,6 +214,8 @@ describe('Anisha A3 signed existing QuickFurno vendor context', () => {
     expect(needsAnishaCoreVendorContext('Mera wallet balance kitna hai?')).toBe(true);
     expect(needsAnishaCoreVendorContext('लीड का क्या हुआ?')).toBe(true);
     expect(needsAnishaCoreVendorContext('office verified hai?')).toBe(true);
+    expect(needsAnishaCoreVendorContext('What should I do next?')).toBe(true);
+    expect(needsAnishaCoreVendorContext('Any update on my account?')).toBe(true);
   });
 
   it('only uses bounded labels and counts, never credits, pricing, or personal strings', () => {
