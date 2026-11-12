@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { AnishaCoreVendorSnapshot } from '../quickfurno-whatsapp/anisha-core-context.js';
-import { composeAnishaCoreVendorFacts } from '../quickfurno-whatsapp/anisha-core-context.js';
-import { selectAnishaVendorNextStep } from '../quickfurno-whatsapp/anisha-vendor-next-step.js';
+import type { AnishaCoreVendorSnapshot } from '../anisha-core-context.js';
+import { composeAnishaCoreVendorFacts } from '../anisha-core-context.js';
+import { selectAnishaVendorNextStep } from '../anisha-vendor-next-step.js';
 
 function snapshot(over: Partial<AnishaCoreVendorSnapshot> = {}): AnishaCoreVendorSnapshot {
   return {

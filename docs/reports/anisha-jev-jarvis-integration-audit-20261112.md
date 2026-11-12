@@ -44,3 +44,12 @@ Date: 2026-11-12. Scope: repository audit, read-only Staging/production host and
 - Offline 15-suite integrated test run passed **128/128**: JEV, model shadow, adaptive routing, Anisha Core reader, ephemeral account-signal buffering, WhatsApp, AOS vendor-success and worker behavior. This candidate has no prompt-v2 production export.
 - Do not regard these unit/integration tests as proof of paid OpenAI API quality, TypeSafe Jev connectivity, real vendor-data access, real WhatsApp delivery, or actual production deployment.
 - Release HOLD remains in place. No merges, managed SQL, OTP, WhatsApp messages or cloud/production changes.
+
+## PR #347 independent CI remediation (same candidate, 2026-11-12)
+
+- The original PR head `0e73b4e5` had three GitHub workflow failures. **Quality gate**: Prettier formatting in `docs/training/anisha-local-language-readiness-20261112.md`. **Red-team**: a new API test referenced the WhatsApp vocabulary outside an existing reviewed code boundary. **Container supply chain**: Trivy found HIGH/CRITICAL advisories against Jarvis OS `next@16.3.8`.
+- Fixes preserve controls: format the training note, relocate two new tests beside their source in `src/quickfurno-whatsapp/tests/` so imports are relative and no extra WhatsApp vocabulary escapes the reviewed seam. Do **not** edit historical containment tests or their allowlists.
+- Upgrade the exact Jarvis OS dependency to `next@16.4.6` and regenerate the frozen pnpm lockfile. The GitHub scanner identified three advisories requiring at least 16.4.1; the version bump must still pass a fresh image scan, without suppression. No unrelated feature dependencies or live deploy are changed.
+- After fixes, the full workspace TypeScript build, `pnpm run typecheck`, `pnpm run lint`, Jarvis OS Next.js production build, repository Prettier check, frozen-lockfile installation and 61/61 targeted security/Anisha tests passed locally.
+- The Staging worker is running its earlier image with `environment: production` and `deploymentMode: SINGLE_OWNER`. Its signed OpenAI release/source revision matches, but the optional Anisha Core context mode is forbidden unless the worker environment is `staging`; changing a live worker without resolving its actual traffic ownership would be unsafe. JEV and AOS are disabled/unconfigured in that deployed worker.
+- GitHub CI rerun, full Trivy report, exact OpenAI V1/V2 provider evaluation and a safe Staging canary remain **not certified** until verified on the new commit.

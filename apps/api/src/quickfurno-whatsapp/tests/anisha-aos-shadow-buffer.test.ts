@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { runAosSupervisorShadowCycle } from '@qf-jarvis/proactive-worker';
-import { createAnishaAosShadowBuffer } from '../quickfurno-whatsapp/anisha-aos-shadow-buffer.js';
-import type { AnishaVerifiedAosAccountSignal } from '../quickfurno-whatsapp/anisha-core-context.js';
+import { createAnishaAosShadowBuffer } from '../anisha-aos-shadow-buffer.js';
+import type { AnishaVerifiedAosAccountSignal } from '../anisha-core-context.js';
 
 const at = '2026-11-12T13:30:00.000Z';
 function signal(

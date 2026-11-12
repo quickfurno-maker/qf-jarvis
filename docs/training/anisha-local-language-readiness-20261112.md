@@ -4,7 +4,8 @@
 
 ## Owner's language decision
 
-Anisha's *generated responses* may be **English** or **Roman-script Hinglish** only.
+Anisha's _generated responses_ may be **English** or **Roman-script Hinglish** only.
+
 - English-language vendor message → concise natural English.
 - Roman-script Hinglish message → natural Roman-script Hinglish, avoiding stiff formal Hindi.
 - Any other language, including Marathi and Devanagari Hindi → default to concise English, with no unsupported translation claims.
@@ -17,14 +18,15 @@ This is a target policy for the next model/prompt candidate; the current product
 
 Existing input bundle: `D:\qf-jarvis-cloud-training-bundle\data\anisha`. Metadata provides `language: ENGLISH|HINGLISH` under `metadata`, not on the JSONL root.
 
-| Split | English | Hinglish | Total |
-|---|---:|---:|---:|
-| train | 24,622 | 24,879 | 49,501 |
-| validation | 2,775 | 2,724 | 5,499 |
-| boundary_eval | 2,548 | 2,452 | 5,000 |
-| **Total** | **29,945** | **30,055** | **60,000** |
+| Split         |    English |   Hinglish |      Total |
+| ------------- | ---------: | ---------: | ---------: |
+| train         |     24,622 |     24,879 |     49,501 |
+| validation    |      2,775 |      2,724 |      5,499 |
+| boundary_eval |      2,548 |      2,452 |      5,000 |
+| **Total**     | **29,945** | **30,055** | **60,000** |
 
 Read-only verification on the connected JARVIS PC:
+
 - All three original gzip SHA-256 and decompressed SHA-256 digests match `manifest.json`.
 - No duplicate IDs across the three splits, no non-Anisha rows, and no unknown language metadata.
 - All **439,608 assistant turns** in train/validation passed the basic Roman-script check (zero detected Devanagari turns).
