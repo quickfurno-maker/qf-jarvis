@@ -21,7 +21,9 @@ import type { ServiceBlueprintRegistry } from '@qf-jarvis/client-intelligence';
 import { buildWhatsAppClientIntelligence } from './client-intelligence-adapter.js';
 import {
   composeAnishaCoreVendorFacts,
+  createAnishaVerifiedAosAccountSignal,
   needsAnishaCoreVendorContext,
+  type AnishaVerifiedAosAccountSignal,
   type AnishaCoreVendorContextReader,
 } from './anisha-core-context.js';
 import { assessAnishaWhatsAppPreflight } from './anisha-vendor-preflight.js';
@@ -70,6 +72,8 @@ export interface QuickFurnoWhatsAppSpecialistRuntimeConfig {
   readonly anishaPreferenceRecorder?: Pick<AnishaVendorMemoryLifecycle, 'recordExplicitPreference'>;
   /** AN-A3 optional signed Core vendor facts reader (unbound in production). */
   readonly anishaCoreContextReader?: AnishaCoreVendorContextReader;
+  /** Non-executing AOS SHADOW observation, only after a successful signed Core context read. */
+  readonly anishaVendorAccountObserver?: (signal: AnishaVerifiedAosAccountSignal) => void;
 }
 
 function isQualificationMaterial(
@@ -394,6 +398,20 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
         // wallet truth or a second data store. Unknown response -> no claims.
         const core = await config.anishaCoreContextReader.readForTurn(material).catch(() => null);
         modelInput = composeAnishaCoreVendorFacts(modelInput, core);
+        if (core !== null && config.anishaVendorAccountObserver !== undefined) {
+          const signal = createAnishaVerifiedAosAccountSignal(
+            material,
+            core,
+            new Date().toISOString(),
+          );
+          if (signal !== null) {
+            try {
+              config.anishaVendorAccountObserver(signal);
+            } catch {
+              // AOS shadow observations must never block an Anisha reply.
+            }
+          }
+        }
       }
 
       const envelope = createInboundEnvelope({

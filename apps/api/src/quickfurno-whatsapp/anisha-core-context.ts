@@ -1,3 +1,4 @@
+import type { AosSupervisorCycleInput } from '@qf-jarvis/proactive-worker';
 import type { AnishaCoreTurnMaterialV2 } from './contracts.js';
 import { assessAnishaCorePreflight } from './anisha-vendor-preflight.js';
 import { selectAnishaVendorNextStep } from './anisha-vendor-next-step.js';
@@ -31,6 +32,34 @@ export interface AnishaCoreVendorSnapshot {
 }
 export interface AnishaCoreVendorContextReader {
   readForTurn(material: AnishaCoreTurnMaterialV2): Promise<AnishaCoreVendorSnapshot>;
+}
+
+export type AnishaVerifiedAosAccountSignal = NonNullable<
+  AosSupervisorCycleInput['vendorAccounts']
+>[number];
+
+/** Converts only an already-verified, identity-bound Core snapshot into AOS SHADOW evidence. */
+export function createAnishaVerifiedAosAccountSignal(
+  material: AnishaCoreTurnMaterialV2,
+  snapshot: AnishaCoreVendorSnapshot,
+  observedAt: string,
+): AnishaVerifiedAosAccountSignal | null {
+  if (
+    !isAuthorizedAnishaCoreContextTurn(material) ||
+    material.subjectRef !== snapshot.vendorId ||
+    !UUID.test(material.requestId) ||
+    !Number.isFinite(Date.parse(observedAt)) ||
+    new Date(observedAt).toISOString() !== observedAt
+  )
+    return null;
+  return Object.freeze({
+    source: 'QUICKFURNO_CORE_SANITIZED_VENDOR_CONTEXT' as const,
+    subjectRef: 'vendor:' + snapshot.vendorId,
+    evidenceRef: 'qfj:anisha-core-context-turn:' + material.requestId,
+    observedAt,
+    packageReadinessBand: snapshot.packageReadinessBand,
+    pendingBadLeadReportCount: snapshot.pendingBadLeadReportCount,
+  });
 }
 
 function record(value: unknown): value is Record<string, unknown> {

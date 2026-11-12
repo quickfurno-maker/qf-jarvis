@@ -60,6 +60,7 @@ import {
 } from '@qf-jarvis/postgres-governed-memory-store';
 import { createAnishaMemoryPurgeWorker } from './anisha-memory-purge-worker.js';
 import { createAnishaVendorMemoryReader } from './anisha-vendor-memory.js';
+import { createAnishaAosShadowBuffer } from './anisha-aos-shadow-buffer.js';
 import { createAnishaVendorMemoryLifecycle } from './anisha-memory-lifecycle.js';
 import { createJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
 import {
@@ -646,6 +647,10 @@ export async function createQuickFurnoWhatsAppProductionWorker(
           })()
         : undefined;
     const aosShadowConfig = config.aosShadow.mode === 'SHADOW' ? config.aosShadow : undefined;
+    const anishaAosShadowBuffer =
+      aosShadowConfig !== undefined && anishaCoreContextReader !== undefined
+        ? createAnishaAosShadowBuffer()
+        : undefined;
     const aosRuntime =
       aosShadowConfig === undefined
         ? undefined
@@ -663,7 +668,9 @@ export async function createQuickFurnoWhatsAppProductionWorker(
               const generatedAt = systemInstant();
               try {
                 const snapshot = await reader.read('quickfurno');
+                const vendorAccounts = anishaAosShadowBuffer?.drain(generatedAt) ?? [];
                 const cycle = await runAosSupervisorShadowCycle({
+                  vendorAccounts,
                   cycleId: 'aos.market.' + String(Date.parse(generatedAt)),
                   generatedAt,
                   marketplaceSlices: snapshot.cells.map((cell) =>
@@ -749,6 +756,7 @@ export async function createQuickFurnoWhatsAppProductionWorker(
                 }
                 emitStructuredLog('INFO', 'aos.market_capacity.cycle_completed', {
                   'aos.cells': snapshot.cells.length,
+                  'aos.vendor_account_signals': vendorAccounts.length,
                   'aos.cases': cycle.cases.length,
                   'aos.recommendations': cycle.recommendations.length,
                   'aos.model_calls': cycle.modelCalls,
@@ -853,6 +861,13 @@ export async function createQuickFurnoWhatsAppProductionWorker(
         runtimeId: config.runtimeId,
         jarvisRuntime: genericRuntime,
         ...(anishaCoreContextReader === undefined ? {} : { anishaCoreContextReader }),
+        ...(anishaAosShadowBuffer === undefined
+          ? {}
+          : {
+              anishaVendorAccountObserver: (signal) => {
+                anishaAosShadowBuffer.observe(signal);
+              },
+            }),
         ...(anishaMemoryComponents === undefined
           ? {}
           : {

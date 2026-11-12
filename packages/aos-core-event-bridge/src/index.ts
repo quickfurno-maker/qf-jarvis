@@ -213,9 +213,13 @@ export type {
   AosLeadDeliveryProjection,
   AosLeadDeliveryVendorAssignment,
 } from './lead-delivery.js';
-export { bridgeVendorSuccessProjectionToAos } from './vendor-success.js';
+export {
+  bridgeVendorSuccessProjectionToAos,
+  bridgeVerifiedVendorAccountSignalsToAos,
+} from './vendor-success.js';
 export type {
   AosVendorPackageReadinessBand,
   AosVendorSuccessBridgeItem,
   AosVendorSuccessProjection,
+  AosVerifiedVendorAccountSignals,
 } from './vendor-success.js';

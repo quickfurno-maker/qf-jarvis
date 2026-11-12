@@ -1,6 +1,6 @@
 # QuickFurno — Anisha / JEV / Jarvis integration audit
 
-Date: 2026-11-12. Scope: repository read-only architecture audit plus isolated, offline Anisha candidate. No vendor data, production API/model calls, credentials, deploys or managed changes were used.
+Date: 2026-11-12. Scope: repository audit, read-only Staging/production host and mounted worker-configuration checks, plus an isolated offline Anisha candidate. No vendor records, paid provider calls, outbound messages, credentials copied, deploys or managed changes were used.
 
 ## Verified reusable architecture
 
@@ -17,11 +17,11 @@ Date: 2026-11-12. Scope: repository read-only architecture audit plus isolated, 
 ## Integration findings
 
 1. The production-worker config declares Anisha signed Core vendor context `DISABLED | STAGING_ONLY`; memory and purge are similarly gated. The signed adapter and decoder exist and pass tests. A live production vendor account cannot be claimed to be connected merely because the adapter is implemented.
-2. The worker's configured AOS SHADOW cycle currently feeds **marketplace-capacity slices** into `runAosSupervisorShadowCycle`. The reusable supervisor accepts `vendors` and `runAosVendorSuccessShadowCycle` already exists, but the worker does **not** populate vendor-success projections from live QuickFurno Core. This is the concrete missing data bridge for proactive Anisha.
+2. The deployed worker's AOS input remains marketplace-only. This candidate now adds a **separate, optional AOS SHADOW** path from a successful signed Anisha Core vendor read: a bounded account signal (opaque vendor, one request correlation, readiness band, pending bad-lead count) enters a short-lived deduplicating buffer and then the existing AOS supervisor. This is not a complete scheduled vendor-success feed: inactivity/matching-demand/retention sources are still missing, and no outbound sends are possible.
 3. JEV's live worker binding is optional `decisionIntelligence.mode=SHADOW`; the model-reply adapter waits for its bounded advisory attempt but ignores the advisory for the current reply. It is not yet an Anisha escalation or next-action decision path.
 4. Adaptive SIMPLE/STANDARD/COMPLEX model selection already exists. No need to introduce a competing agent framework, router or provider choice.
 5. Vendor-account data delivered to the model is bounded (status, office-verification, readiness/expiry bands, active-lead count, pending report count, notices) and must remain request/identity-bound. Exact credits/prices/phone numbers and unsupported client information are excluded.
-6. Local Docker inspection found no running qf-jarvis/jev worker container on the JARVIS PC; this is **not** a production VPS status assertion. Remote host activation, keys, approvals and real messaging were not checked.
+6. Read-only SSH reached both host aliases. The **Staging** host has `qf-jarvis-whatsapp-worker` running on an image started 2026-10-17 with config revision `0b391530ffce9b28123163562de463989bb7eebf`. The mounted config provides direct OpenAI credentials via file reference (only configuration presence checked), JEV `DISABLED`, knowledge `DISABLED`, and omits AOS/Anisha Core/memory flags and AGNI escalation. Its environment field says `production` despite being on the Staging host. The separate QuickFurno production host has web and automation containers. The mounted OpenAI seal's `sourceHeadSha` matches the worker revision and declares `OPENAI_ONLY`, two runtime tiers and six evidence entries; this read-only metadata consistency check is **not** a fresh signature verification or live model certification. Live AI message quality and provider credential validity remain unverified.
 
 ## Anisha v2 candidate in this branch
 
@@ -32,8 +32,8 @@ Date: 2026-11-12. Scope: repository read-only architecture audit plus isolated, 
 
 ## Next implementation order (reuse, not rebuild)
 
-1. Audit the actual deployed worker config and exact release evidence _read-only_ for OpenAI, JEV, Anisha context, AGNI and AOS. Do not infer live status from example files.
-2. Connect a strictly sanitized, signed, vendor-specific **Core success projection** to the existing AOS supervisor. First implement source-coverage checks and shadow-only recommendations, with consent, cooldown and suppression; no unsolicited WhatsApp sends.
+1. Verify the Staging worker environment mismatch, source SHA, OpenAI exact-release seal and live canary **read-only** before any changes. The read-only config inspection is complete; live provider certification is not.
+2. Complete full vendor-success data coverage for inactivity/matching demand/retention with a separately certified Core source. The candidate **partial account-signal SHADOW path** is implemented and tested; no unsolicited WhatsApp sends, active AOS mode or new approvals are granted.
 3. Extend deterministic intent coverage and approved policy knowledge for vendor onboarding, assigned-lead initial contact, complaint intake and package readiness. Do not expand to project fulfillment or lead-quality decisions.
 4. Benchmark the current production prompt versus candidate v2 using representative English/Hinglish tests, account context, missing data, safety, latency, JEV cost and escalation. Preserve historical tests; do not relabel evidence.
 5. Obtain exact provider/prompt/knowledge approval, owner-reviewed Staging tests and WhatsApp canary before production activation. Enable JEV/AOS capabilities independently after passing their specific gates.
@@ -41,6 +41,6 @@ Date: 2026-11-12. Scope: repository read-only architecture audit plus isolated, 
 ## Quality and operational boundary
 
 - The full dependency build for `@qf-jarvis/api...` passed in the isolated worktree (73 workspace projects).
-- Targeted integration checks covered JEV, model shadow, adaptive routing, Anisha Core reader, WhatsApp, AOS vendor-success and worker behavior.
+- Offline 15-suite integrated test run passed **128/128**: JEV, model shadow, adaptive routing, Anisha Core reader, ephemeral account-signal buffering, WhatsApp, AOS vendor-success and worker behavior. This candidate has no prompt-v2 production export.
 - Do not regard these unit/integration tests as proof of paid OpenAI API quality, TypeSafe Jev connectivity, real vendor-data access, real WhatsApp delivery, or actual production deployment.
 - Release HOLD remains in place. No merges, managed SQL, OTP, WhatsApp messages or cloud/production changes.

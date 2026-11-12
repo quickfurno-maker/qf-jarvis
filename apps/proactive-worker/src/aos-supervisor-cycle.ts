@@ -15,6 +15,7 @@ import type {
 import type {
   AosLeadDeliveryProjection,
   AosVendorSuccessProjection,
+  AosVerifiedVendorAccountSignals,
 } from '@qf-jarvis/aos-core-event-bridge';
 
 import {
@@ -61,6 +62,7 @@ export interface AosSupervisorCycleInput {
   readonly leadDeliveries?: readonly AosLeadDeliveryProjection[];
   readonly clients?: readonly AosSupervisorClientInput[];
   readonly vendors?: readonly AosVendorSuccessProjection[];
+  readonly vendorAccounts?: readonly AosVerifiedVendorAccountSignals[];
   readonly marketplaceSlices?: readonly AosMarketplaceSliceSnapshot[];
   readonly caseContextMemory?: readonly AosCaseContextMemory[];
   readonly behaviourBinding?: AosBehaviourRuntimeBinding;
@@ -80,6 +82,7 @@ export interface AosSupervisorCycleResult {
     readonly leadDeliveryProjections: number;
     readonly clientSnapshots: number;
     readonly vendorProjections: number;
+    readonly vendorAccountSignals?: number;
     readonly marketplaceSlices: number;
   };
   readonly canonical?: AosCanonicalEventCycleResult;
@@ -112,7 +115,7 @@ function validateInput(input: AosSupervisorCycleInput): void {
     (input.canonicalEvents?.length ?? 0) > 10_000 ||
     (input.leadDeliveries?.length ?? 0) > 10_000 ||
     (input.clients?.length ?? 0) > 2_000 ||
-    (input.vendors?.length ?? 0) > 10_000 ||
+    (input.vendors?.length ?? 0) + (input.vendorAccounts?.length ?? 0) > 10_000 ||
     (input.marketplaceSlices?.length ?? 0) > 10_000 ||
     (input.caseContextMemory?.length ?? 0) > 10_000
   ) {
@@ -146,6 +149,13 @@ function validateInput(input: AosSupervisorCycleInput): void {
       throw new TypeError('aos-supervisor-vendor-input-duplicate');
     }
     vendorKeys.add(vendor.subjectRef);
+  }
+  const accountKeys = new Set<string>();
+  for (const account of input.vendorAccounts ?? []) {
+    if (accountKeys.has(account.subjectRef)) {
+      throw new TypeError('aos-supervisor-vendor-account-duplicate');
+    }
+    accountKeys.add(account.subjectRef);
   }
   if (
     input.aiBudget !== undefined &&
@@ -313,12 +323,14 @@ export async function runAosSupervisorShadowCycle(
 
   let vendors: AosVendorSuccessShadowCycleResult | undefined;
   const vendorProjections = input.vendors ?? [];
-  if (vendorProjections.length > 0) {
+  const vendorAccounts = input.vendorAccounts ?? [];
+  if (vendorProjections.length > 0 || vendorAccounts.length > 0) {
     vendors = await runAosVendorSuccessShadowCycle(
       {
         cycleId: input.cycleId + '.vendors',
         generatedAt: input.generatedAt,
         projections: vendorProjections,
+        accountSignals: vendorAccounts,
         caseContextMemory: memory,
         ...(input.behaviourBinding === undefined
           ? {}
@@ -394,6 +406,7 @@ export async function runAosSupervisorShadowCycle(
       leadDeliveryProjections: leadDeliveries.length,
       clientSnapshots: input.clients?.length ?? 0,
       vendorProjections: vendorProjections.length,
+      ...(vendorAccounts.length === 0 ? {} : { vendorAccountSignals: vendorAccounts.length }),
       marketplaceSlices: marketplaceSlices.length,
     }),
     ...(canonical === undefined ? {} : { canonical }),
