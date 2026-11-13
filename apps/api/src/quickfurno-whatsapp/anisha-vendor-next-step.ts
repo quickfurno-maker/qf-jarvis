@@ -45,14 +45,20 @@ export function selectAnishaVendorNextStep(
 
   const vendorStatus = snapshot.vendorStatus?.toLowerCase();
   const locationStatus = snapshot.locationVerificationStatus?.toLowerCase();
-  const accountNeedsReview = vendorStatus === 'suspended' || vendorStatus === 'rejected';
+  const accountNeedsReview =
+    vendorStatus === 'suspended' ||
+    vendorStatus === 'rejected' ||
+    vendorStatus === 'inactive' ||
+    vendorStatus === undefined ||
+    (vendorStatus === 'approved' && !snapshot.isActive) ||
+    (vendorStatus !== 'approved' &&
+      vendorStatus !== 'pending' &&
+      vendorStatus !== 'pending_approval');
+  // Unknown is not verified: fail closed when Core does not prove office readiness.
   const verificationNeedsAttention =
     vendorStatus === 'pending' ||
     vendorStatus === 'pending_approval' ||
-    locationStatus === 'pending' ||
-    locationStatus === 'unverified' ||
-    locationStatus === 'rejected' ||
-    locationStatus === 'failed';
+    locationStatus !== 'verified';
   const packageNeedsAttention =
     snapshot.packageReadinessBand === 'NOT_ACTIVE' ||
     snapshot.packageReadinessBand === 'NO_PACKAGE' ||
@@ -70,18 +76,23 @@ export function selectAnishaVendorNextStep(
   }
   if (isVerification)
     return accountNeedsReview ? ACCOUNT : verificationNeedsAttention ? VERIFY : null;
-  if (isPackage) return packageNeedsAttention ? PACKAGE : expiryNeedsAttention ? EXPIRY : null;
+  if (isPackage) {
+    // Don't upsell/recharge vendors whose approval and office status are unverified.
+    if (accountNeedsReview || vendorStatus !== 'approved' || !snapshot.isActive) return ACCOUNT;
+    if (verificationNeedsAttention) return VERIFY;
+    return packageNeedsAttention ? PACKAGE : expiryNeedsAttention ? EXPIRY : null;
+  }
   if (isNotices) return snapshot.unreadNotificationCount > 0 ? NOTICES : null;
   if (!isGeneral) return null;
 
   // For open-ended status requests, select the single highest-priority useful next step.
   if (accountNeedsReview) return ACCOUNT;
-  if (snapshot.pendingBadLeadReportCount > 0) return REPORT;
+  if (vendorStatus !== 'approved' || !snapshot.isActive) return VERIFY;
   if (verificationNeedsAttention) return VERIFY;
+  if (snapshot.pendingBadLeadReportCount > 0) return REPORT;
   if (packageNeedsAttention) return PACKAGE;
   if (expiryNeedsAttention) return EXPIRY;
-  if (snapshot.activeLeadCount > 0)
-    return vendorStatus === 'approved' && snapshot.isActive ? LEADS : ACCOUNT;
+  if (snapshot.activeLeadCount > 0) return LEADS;
   if (snapshot.unreadNotificationCount > 0) return NOTICES;
   return null;
 }
