@@ -1,0 +1,54 @@
+name: QF Jarvis Anisha D4 Vendor Status Authority (NO DEPLOY)
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+jobs:
+  anisha-d4-current-source-and-tests:
+    if: github.event.pull_request.head.ref == 'feat/qfj-vendor-status-gating-d4-20261113' && github.event.pull_request.base.ref == 'feat/qfj-vendor-funnel-signals-20261112'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout exact D4 source using pinned read-only action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install pinned pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+      - name: Set up pinned Node 24
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+      - name: Review current exact D4 source and preserved history
+        env:
+          GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: node scripts/ci/certify-anisha-vendor-d4-source.mjs
+      - name: Install frozen lockfile without package scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Compile full workspace
+        run: pnpm -r run build
+      - name: API TypeScript
+        run: pnpm --filter @qf-jarvis/api run typecheck:tests
+      - name: Existing Core + AOS + historical shadow containment plus new D4 cases
+        run: |
+          pnpm exec vitest run \
+            apps/api/src/quickfurno-whatsapp/tests/anisha-vendor-status-gating-d4.test.ts \
+            apps/api/src/quickfurno-whatsapp/tests/anisha-verified-contact-guidance.test.ts \
+            apps/api/src/quickfurno-whatsapp/tests/anisha-vendor-next-step.test.ts \
+            apps/api/src/tests/anisha-core-context.test.ts \
+            apps/api/src/tests/shadow-containment.test.ts \
+            packages/aos-core-event-bridge/src/tests/vendor-account-signals.test.ts
+      - name: Lint and format exact changed files
+        run: |
+          pnpm exec eslint apps/api/src/quickfurno-whatsapp/anisha-vendor-next-step.ts apps/api/src/quickfurno-whatsapp/tests/anisha-vendor-status-gating-d4.test.ts
+          pnpm exec prettier --check apps/api/src/quickfurno-whatsapp/anisha-vendor-next-step.ts apps/api/src/quickfurno-whatsapp/tests/anisha-vendor-status-gating-d4.test.ts docs/reports/anisha-d4-vendor-guided-status-20261113.md
+      - name: Final D4 exact clean source check
+        env:
+          GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GITHUB_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: node scripts/ci/certify-anisha-vendor-d4-source.mjs
